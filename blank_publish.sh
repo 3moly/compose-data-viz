@@ -1,0 +1,10 @@
+#!/bin/bash
+
+export ORG_GRADLE_PROJECT_mavenCentralUsername=USERNAME_HERE
+export ORG_GRADLE_PROJECT_mavenCentralPassword=PASSWORD_HERE
+export ORG_GRADLE_PROJECT_signingInMemoryKey="$(cat ASC_PATH_HERE)"
+
+export ORG_GRADLE_PROJECT_signingInMemoryKeyId=KEY_ID_HERE
+export ORG_GRADLE_PROJECT_signingInMemoryKeyPassword=PASSWORD_HERE
+
+./gradlew publishAndReleaseToMavenCentral
