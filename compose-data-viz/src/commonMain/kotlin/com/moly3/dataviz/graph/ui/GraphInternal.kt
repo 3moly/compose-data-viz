@@ -20,14 +20,12 @@ import com.moly3.dataviz.graph.func.getNodeConnections
 import com.moly3.dataviz.graph.func.getNodeOffset
 import com.moly3.dataviz.func.half
 import com.moly3.dataviz.graph.model.GraphNode
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.ImmutableMap
 
 @Composable
 internal fun <Id, Data> GraphInternal(
-    nodes: ImmutableList<GraphNode<Id, Data>>,
-    connections: ImmutableMap<Id, ImmutableList<Id>>,
-    coordinates: ImmutableMap<Id, Offset>,
+    nodes: List<GraphNode<Id, Data>>,
+    connections: Map<Id, List<Id>>,
+    coordinates: Map<Id, Offset>,
     draggedNodeId: Id?,
     cursorNodeId: Id?,
     watchNodeId: Id?,

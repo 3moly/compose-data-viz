@@ -1,4 +1,7 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -7,31 +10,29 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-val copyJsResources = tasks.create("copyJsResourcesWorkaround", Copy::class.java) {
-//    from(project(":compose-input-mask").file("src/commonMain/resources"))
-//    into("build/processedResources/js/main")
-}
-
-afterEvaluate {
-    project.tasks.getByName("jsProcessResources").finalizedBy(copyJsResources)
-//    project.tasks.getByName("wasmJsProcessResources").finalizedBy(copyWasmResources)
-}
-
-
 kotlin {
     applyDefaultHierarchyTemplate()
-    js(IR) {
-        //moduleName = "imageviewer"
-        browser{
+    js {
+        browser {
             commonWebpackConfig {
-                outputFileName = "imageviewer.js"
+                outputFileName = "composeApp.js"
             }
         }
         binaries.executable()
     }
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "composeApp.js"
+            }
+        }
+//        nodejs()
+//        d8()
+        binaries.executable()
+    }
     jvm()
     androidTarget()
-    
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -52,6 +53,9 @@ kotlin {
             implementation(compose.material)
             implementation(compose.material3)
             implementation(libs.hypnoticcanvas)
+            implementation(libs.haze)
+
+            implementation(libs.kotlinx.immutable.list)
             //put your multiplatform dependencies here
         }
         commonTest.dependencies {
@@ -66,17 +70,6 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(libs.shared.core.coroutines.swing)
         }
-        jsMain.dependencies {
-            implementation(compose.runtime)
-            implementation(compose.ui)
-            implementation(compose.foundation)
-            implementation(compose.material)
-            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-            implementation(compose.components.resources)
-            implementation(compose.html.core)
-            //implementation(compose.runtime)
-            implementation(devNpm("copy-webpack-plugin", "9.1.0"))
-        }
     }
 }
 
@@ -85,7 +78,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     namespace = "com.threemoly.sample"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         minSdk = 21
     }
@@ -110,15 +103,5 @@ compose.desktop {
             packageName = "org.company.app.desktopApp"
             packageVersion = "1.0.1"
         }
-    }
-}
-
-compose.experimental {
-    web.application {}
-}
-
-afterEvaluate {
-    rootProject.extensions.configure<org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension> {
-        versions.webpackCli.version = "4.10.0"
     }
 }

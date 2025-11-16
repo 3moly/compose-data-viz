@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,7 @@ import com.threemoly.sample.uikit.ObsSlider
 import com.threemoly.sample.uikit.ObsText
 import com.threemoly.sample.uikit.SettingsFuture
 import com.threemoly.sample.uikit.SwitchOption
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
@@ -106,10 +108,11 @@ fun GraphSample() {
                 )
             },
             onCoordinatesUpdate = {
-                state = state.copy(coordinates = it)
+
+                state = state.copy(coordinates = it.toPersistentMap())
             },
             onVelocitiesUpdate = {
-                state = state.copy(velocities = it)
+                state = state.copy(velocities = it.toPersistentMap())
             },
             primaryColor = Color.Red,
             fontColor = Color.White,

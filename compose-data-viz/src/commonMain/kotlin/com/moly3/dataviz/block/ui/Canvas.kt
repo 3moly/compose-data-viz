@@ -44,9 +44,6 @@ import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
 import com.moly3.dataviz.block.model.StylusPoint
 import com.moly3.dataviz.block.model.WorldPosition
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toPersistentList
 import kotlin.math.abs
 
 @Composable
@@ -68,7 +65,7 @@ fun Canvas(
     settingsPanel: @Composable (position: Offset, action: Action, onDoneAction: () -> Unit) -> Unit,
     onDrawBlock: @Composable (DrawShapeState) -> Unit,
 ) {
-    var currentPath by remember { mutableStateOf<ImmutableList<StylusPoint>>(persistentListOf()) }
+    var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
     val scaleMovementModifier = 5f
     val sizeRound = 25
     val actualDensity = LocalDensity.current
@@ -233,13 +230,13 @@ fun Canvas(
                             onDrawStart = { point ->
                                 val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
                                 val pointWithStroke = point.copy(strokeWidth = strokeWidth)
-                                currentPath = (currentPath + pointWithStroke).toPersistentList()
+                                currentPath = (currentPath + pointWithStroke)
                             },
                             onDrawChange = { point ->
                                 val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
                                 val pointWithStroke = point.copy(strokeWidth = strokeWidth)
                                 currentPath =
-                                    (currentPath.toMutableList() + pointWithStroke).toPersistentList()
+                                    (currentPath.toMutableList() + pointWithStroke)
                             },
                             onDrawEnd = {
                                 if (currentPath.isNotEmpty()) {
@@ -249,7 +246,7 @@ fun Canvas(
                                             color = Color.Red
                                         )
                                     )
-                                    currentPath = persistentListOf()
+                                    currentPath = listOf()
                                 }
                             },
                             dragActionState = dragActionState,

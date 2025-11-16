@@ -12,3 +12,4 @@ xcuserdata
 /kotlin-js-store/yarn.lock
 *.gpg
 publish.sh
+/kotlin-js-store/wasm/yarn.lock

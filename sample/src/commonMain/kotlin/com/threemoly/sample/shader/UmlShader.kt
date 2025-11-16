@@ -1,4 +1,4 @@
-package com.moly3.dataviz.block.ui.shader
+package com.threemoly.sample.shader
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color

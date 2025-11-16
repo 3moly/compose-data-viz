@@ -21,12 +21,11 @@ import com.moly3.dataviz.block.model.StylusPath
 import com.moly3.dataviz.block.model.StylusPoint
 import com.moly3.dataviz.block.model.reverse
 import com.moly3.dataviz.func.drawSmoothArrow
-import kotlinx.collections.immutable.ImmutableList
 
 @Composable
 fun DrawConnections(
     modifier: Modifier,
-    stylusPoint: ImmutableList<StylusPoint>,
+    stylusPoint: List<StylusPoint>,
     paths: List<StylusPath>,
     userCoordinate: Offset,
     dragActionState: MutableState<DragAction?>,

@@ -24,9 +24,6 @@ import com.moly3.dataviz.graph.model.GraphNode
 import com.moly3.dataviz.graph.model.GraphViewSettings
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.ImmutableMap
-import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
@@ -42,10 +39,10 @@ fun <Id, Data> Graph(
     userPosition: Offset,
     zoom: Float,
 
-    stateNodes: ImmutableList<GraphNode<Id, Data>>,
-    coordinates: ImmutableMap<Id, Offset>,
-    velocities: ImmutableMap<Id, Offset>,
-    connections: ImmutableMap<Id, ImmutableList<Id>>,
+    stateNodes: List<GraphNode<Id, Data>>,
+    coordinates: Map<Id, Offset>,
+    velocities: Map<Id, Offset>,
+    connections: Map<Id, List<Id>>,
 
     viewSettings: GraphViewSettings,
     onCentralGlobalPosition: (Offset) -> Unit,
@@ -53,8 +50,8 @@ fun <Id, Data> Graph(
     watchNodeId: Id? = null,
     io: CoroutineContext,
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
-    onCoordinatesUpdate: (ImmutableMap<Id, Offset>) -> Unit = {},
-    onVelocitiesUpdate: (ImmutableMap<Id, Offset>) -> Unit = {},
+    onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
+    onVelocitiesUpdate: (Map<Id, Offset>) -> Unit = {},
     primaryColor: Color,
     fontColor: Color,
     circleColor: Color,
@@ -102,8 +99,8 @@ fun <Id, Data> Graph(
                         velocities,
                         draggedNodeState
                     )
-                    onCoordinatesUpdate(coordinates.toPersistentMap())
-                    onVelocitiesUpdate(velocities.toPersistentMap())
+                    onCoordinatesUpdate(coordinates)
+                    onVelocitiesUpdate(velocities)
 
                     delay(1L)
                 }

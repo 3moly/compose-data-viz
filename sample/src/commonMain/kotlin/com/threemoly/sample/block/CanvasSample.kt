@@ -1,6 +1,5 @@
 package com.threemoly.sample.block
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,7 +37,7 @@ import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
 import com.moly3.dataviz.block.model.WorldPosition
 import com.moly3.dataviz.block.ui.Canvas
-import com.moly3.dataviz.block.ui.shader.UmlShader
+import com.threemoly.sample.shader.UmlShader
 import com.moly3.dataviz.func.darker
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeStyle
