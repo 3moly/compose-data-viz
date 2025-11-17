@@ -42,56 +42,56 @@ private fun isPointNearLineSegment(p: Offset, a: Offset, b: Offset, threshold: F
     return (p - projection).getDistance() <= threshold
 }
 
-fun isCursorNearArrow(
-    cursor: Offset,
-    startPoint: Offset,
-    endPoint: Offset,
-    fromSide: BoxSide,
-    toSide: BoxSide,
-    config: ConnectionConfig,
-    zoom: Float,
-    density: Density,
-): Boolean {
-    val stubLength = config.stubLength
-    val maxArcHeight = config.maxArcHeight
-    val hitThreshold = config.hitThreshold
-    val controlPointFactor = config.controlPointFactor
-
-    val hitThresholdInPx = density.run { hitThreshold.toPx() }
-    val scaledStubLength = stubLength * zoom
-    val scaledMaxArcHeight = maxArcHeight * zoom
-    val scaledThreshold = hitThresholdInPx * zoom
-
-    val (stubStartPoint, curveStartPoint) = calculateStubAndCurvePoints(
-        startPoint,
-        fromSide,
-        scaledStubLength
-    )
-    val (stubEndPoint, curveEndPoint) = calculateStubAndCurvePoints(
-        endPoint,
-        toSide,
-        scaledStubLength
-    )
-
-    val controlPoints = calculateControlPoints(
-        curveStartPoint,
-        curveEndPoint,
-        fromSide,
-        toSide,
-        controlPointFactor,
-        startPoint,
-        endPoint,
-        scaledMaxArcHeight
-    )
-
-    return isPointNearLineSegment(cursor, stubStartPoint, curveStartPoint, scaledThreshold) ||
-            isPointNearCubicBezier(
-                cursor,
-                curveStartPoint,
-                controlPoints.first,
-                controlPoints.second,
-                curveEndPoint,
-                scaledThreshold
-            ) ||
-            isPointNearLineSegment(cursor, curveEndPoint, stubEndPoint, scaledThreshold)
-}
+//fun isCursorNearArrow(
+//    cursor: Offset,
+//    startPoint: Offset,
+//    endPoint: Offset,
+//    fromSide: BoxSide,
+//    toSide: BoxSide,
+//    config: ConnectionConfig,
+//    zoom: Float,
+//    density: Density,
+//): Boolean {
+//    val stubLength = config.stubLength
+//    val maxArcHeight = config.maxArcHeight
+//    val hitThreshold = config.hitThreshold
+//    val controlPointFactor = config.controlPointFactor
+//
+//    val hitThresholdInPx = density.run { hitThreshold.toPx() }
+//    val scaledStubLength = stubLength * zoom
+//    val scaledMaxArcHeight = maxArcHeight * zoom
+//    val scaledThreshold = hitThresholdInPx * zoom
+//
+//    val (stubStartPoint, curveStartPoint) = calculateStubAndCurvePoints(
+//        startPoint,
+//        fromSide,
+//        scaledStubLength
+//    )
+//    val (stubEndPoint, curveEndPoint) = calculateStubAndCurvePoints(
+//        endPoint,
+//        toSide,
+//        scaledStubLength
+//    )
+//
+//    val controlPoints = calculateControlPoints(
+//        curveStartPoint,
+//        curveEndPoint,
+//        fromSide,
+//        toSide,
+//        controlPointFactor,
+//        startPoint,
+//        endPoint,
+//        scaledMaxArcHeight
+//    )
+//
+//    return isPointNearLineSegment(cursor, stubStartPoint, curveStartPoint, scaledThreshold) ||
+//            isPointNearCubicBezier(
+//                cursor,
+//                curveStartPoint,
+//                controlPoints.first,
+//                controlPoints.second,
+//                curveEndPoint,
+//                scaledThreshold
+//            ) ||
+//            isPointNearLineSegment(cursor, curveEndPoint, stubEndPoint, scaledThreshold)
+//}

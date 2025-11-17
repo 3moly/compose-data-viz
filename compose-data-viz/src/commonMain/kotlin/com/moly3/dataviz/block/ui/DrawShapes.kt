@@ -26,19 +26,21 @@ import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.DrawShapeState
 import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.block.model.allSides
+import com.moly3.dataviz.block.model.getValue
 
 @Composable
 fun BoxScope.DrawShapes(
-    mousePosition: WorldPosition,
+    mousePosition: SaveableOffset,
     shapes: List<Shape>,
     dragActionState: MutableState<DragAction?>,
-    userCoordinate: Offset,
+    userCoordinate: SaveableOffset,
     zoom: Float,
     density: Float,
     action: Action?,
     sideCircleColor: Color,
+    roundToNearest: Int?,
     onDrawBlock: @Composable (DrawShapeState) -> Unit,
 ) {
     for (item in shapes) {
@@ -47,7 +49,8 @@ fun BoxScope.DrawShapes(
             zoom = zoom,
             density = density,
             userCoordinate = userCoordinate,
-            dragAction = dragActionState.value
+            dragAction = dragActionState.value,
+            roundToNearest = roundToNearest
         )
         val isSelected = remember(item.id, dragActionState.value, action) {
             val dragAction = dragActionState.value
@@ -92,7 +95,7 @@ fun BoxScope.DrawShapes(
             if (isInSide) {
                 Box(
                     modifier = Modifier
-                        .absoluteOffset(sideOffset / density)
+                        .absoluteOffset(sideOffset.getValue() / density)
                         .size((sizeRound * zoom).dp / density)
                         .align(Alignment.Center)
                         .background(

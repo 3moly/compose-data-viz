@@ -1,13 +1,12 @@
 package com.moly3.dataviz.block.func
 
-import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.block.model.getValue
 
 fun isInShape(
-    mousePosition: WorldPosition,
-    shapePosition: WorldPosition,
-    shapeSize: Offset
+    mousePosition: SaveableOffset,
+    shapePosition: SaveableOffset,
+    shapeSize: SaveableOffset
 ): Boolean {
     val left = shapePosition.x
     val top = shapePosition.y

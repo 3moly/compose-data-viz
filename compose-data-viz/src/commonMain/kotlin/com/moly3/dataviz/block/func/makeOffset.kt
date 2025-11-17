@@ -6,17 +6,17 @@ import com.moly3.dataviz.block.model.BoxSide
 import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.block.model.getValue
 import com.moly3.dataviz.block.model.getWorldPosition
 
 fun makeSideOffset(
     dragAction: DragAction?,
-    userCoordinate: Offset,
+    userCoordinate: SaveableOffset,
     boxSide: Shape,
     zoom: Float,
-    side: BoxSide
-): Offset {
+    side: BoxSide,
+): SaveableOffset {
 
     val itemPosition =
         if (dragAction != null
@@ -28,10 +28,10 @@ fun makeSideOffset(
             } else if (dragAction.dragType is DragType.Resize &&
                 dragAction.dragType.shapeId == boxSide.id
             ) {
-                (boxSide.position.getValue() + resizePosition(
-                    dragAction.accelerate.getValue(),
+                (boxSide.position + resizePosition(
+                    dragAction.accelerate,
                     dragAction.dragType.type
-                )).getWorldPosition()
+                ))
             } else boxSide.position
         } else
             boxSide.position
@@ -46,8 +46,9 @@ fun makeSideOffset(
                 dragAction.dragType.shapeId == boxSide.id
             ) {
                 (boxSide.size + resizeSize(
-                    dragAction.accelerate.getValue(),
-                    dragAction.dragType.type
+                    dragAction.accelerate,
+                    dragAction.dragType.type,
+                    roundToNearest = null
                 )).keepCurrentOrMin(minShapeSize)
             } else boxSide.size
         } else
@@ -63,26 +64,26 @@ fun makeSideOffset(
 }
 
 fun makeSideOffset(
-    itemPosition: WorldPosition,
-    userCoordinate: Offset,
-    boxSize: Offset,
+    itemPosition: SaveableOffset,
+    userCoordinate: SaveableOffset,
+    boxSize: SaveableOffset,
     zoom: Float,
     side: BoxSide
-): Offset {
+): SaveableOffset {
     val base = when (side) {
-        BoxSide.LEFT -> Offset(-boxSize.x / 2, 0f)
-        BoxSide.TOP -> Offset(0f, -boxSize.y / 2)
-        BoxSide.RIGHT -> Offset(boxSize.x / 2, 0f)
-        BoxSide.BOTTOM -> Offset(0f, boxSize.y / 2)
+        BoxSide.LEFT -> SaveableOffset(-boxSize.x / 2, 0f)
+        BoxSide.TOP -> SaveableOffset(0f, -boxSize.y / 2)
+        BoxSide.RIGHT -> SaveableOffset(boxSize.x / 2, 0f)
+        BoxSide.BOTTOM -> SaveableOffset(0f, boxSize.y / 2)
     }
-    return ((userCoordinate + (-(itemPosition.getValue() + base) - boxSize / 2f)) * -1f * zoom)
+    return ((userCoordinate + (-(itemPosition + base) - boxSize / 2f)) * -1f * zoom)
 }
 
 fun makeSideWorldOffset(
-    itemPosition: WorldPosition,
-    boxSize: Offset,
+    itemPosition: SaveableOffset,
+    boxSize: SaveableOffset,
     side: BoxSide
-): WorldPosition {
+): SaveableOffset {
     val base = when (side) {
         BoxSide.LEFT -> Offset(0f, boxSize.y / 2f)
         BoxSide.TOP -> Offset(boxSize.x / 2, 0f)

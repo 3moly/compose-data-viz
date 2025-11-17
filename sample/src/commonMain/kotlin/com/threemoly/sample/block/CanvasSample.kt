@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -35,7 +38,8 @@ import com.moly3.dataviz.block.model.ArcConnection
 import com.moly3.dataviz.block.model.CanvasSettings
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
+import com.moly3.dataviz.block.model.getValue
 import com.moly3.dataviz.block.ui.Canvas
 import com.threemoly.sample.shader.UmlShader
 import com.moly3.dataviz.func.darker
@@ -52,9 +56,9 @@ import kotlin.time.ExperimentalTime
 data class MyShape(
     override val id: Long,
     val color: Color?,
-    override val position: WorldPosition,
-    override val size: Offset
-) : Shape(id, position, size)
+    override val position: SaveableOffset,
+    override val size: SaveableOffset
+) : Shape
 
 @OptIn(ExperimentalTime::class)
 @Composable
@@ -67,7 +71,7 @@ fun CanvasSample() {
 //            noiseFactor = HazeDefaults.noiseFactor
 //        )
 //    }
-    val shapes = remember<SnapshotStateList<MyShape>> {
+    val shapes = remember<SnapshotStateList<Shape>> {
         mutableStateListOf()
     }
     val connections = remember<SnapshotStateList<ArcConnection>> {
@@ -87,8 +91,13 @@ fun CanvasSample() {
             noiseFactor = HazeDefaults.noiseFactor
         )
     }
+    val actionState = remember { mutableStateOf<Action?>(value = null) }
+
+
     val zoomState = remember { mutableStateOf(1f) }
-    val userCoordinateState = remember { mutableStateOf(Offset(0f, 0f)) }
+    val strokeWidthState = remember { mutableStateOf(1f) }
+    val roundToNearest = remember { mutableStateOf(0) }
+    val userCoordinateState = remember { mutableStateOf(SaveableOffset(0f, 0f)) }
     val selectedShader: UmlShader by remember { mutableStateOf(UmlShader) }
     LaunchedEffect(backgroundSecondary) {
         selectedShader.setColor(backgroundSecondary)
@@ -98,6 +107,13 @@ fun CanvasSample() {
         selectedShader.zoom = zoomState.value
         selectedShader.dotSpacing = 50f
     }
+    val canvasSettings = remember(strokeWidthState.value){
+        CanvasSettings(
+            strokeWidth = strokeWidthState.value,
+            defaultLineColor = Color.Cyan,
+            sideCircleColor = Color.Blue
+        )
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -106,24 +122,28 @@ fun CanvasSample() {
                 .shaderBackground(shader = selectedShader)
         )
         Canvas(
-            modifier = Modifier
-                .fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
+            action = actionState.value,
+            roundToNearest = roundToNearest.value,
             backgroundModifier = Modifier,
             connectionsModifier = Modifier.hazeSource(hazeState, zIndex = 1f),
-            settings = CanvasSettings(
-                defaultLineColor = Color.Cyan,
-                sideCircleColor = Color.Blue
-            ),
-            zoomState = zoomState,
-            userCoordinateState = userCoordinateState,
-
+            settings = canvasSettings,
+            zoom = zoomState.value,
+            onZoomChange = {
+                zoomState.value = it
+            },
+            userCoordinate = userCoordinateState.value,
+            onUserCoordinateChange = {
+                userCoordinateState.value = it
+            },
             shapes = shapes,
             connections = connections,
             onMoveShape = { index, position ->
-                shapes[index] = shapes[index].copy(position = position)
+
+                shapes[index] = (shapes[index] as MyShape).copy(position = position)
             },
             onResizeShape = { index, position, size ->
-                shapes[index] = shapes[index].copy(position = position, size = size)
+                shapes[index] = (shapes[index] as MyShape).copy(position = position, size = size)
             },
             onAddConnection = { connection ->
                 connections.add(connection)
@@ -142,22 +162,12 @@ fun CanvasSample() {
                 Box(
                     Modifier
                         .fillMaxSize()
+                        .hazeSource(hazeState, zIndex = 2f + shapeState.shape.id)
                         .hazeEffect(hazeState, hazeStyle) // Apply blur first
                         .background(bgColor) // Then semi-transparent overlay
                         .border((1f * zoomState.value * borderCoef).dp, Color.White)
                 )
             },
-//            onDrawBlock = { shapeState ->
-//                val colorCoef by animateColorAsState(if (shapeState.isDoubleClicked) Color.Yellow else Color.Gray)
-//                val borderCoef by animateFloatAsState(if (shapeState.isSelected) 3f else 1f)
-//                Box(
-//                    Modifier
-//                        .fillMaxSize()
-//                        .hazeEffect(hazeState, hazeStyle)
-////                        .background(colorCoef)
-//                        .border((1f * zoomState.value * borderCoef).dp, Color.White)
-//                )
-//            },
             settingsPanel = { offset, action, onDoneAction ->
                 var centerWidth by remember { mutableStateOf(0f) }
                 val actualDensity = LocalDensity.current
@@ -169,10 +179,10 @@ fun CanvasSample() {
                         Row(
                             Modifier
                                 .absoluteOffset(
-                                    (offset / LocalDensity.current.density - Offset(
+                                    ((offset / LocalDensity.current.density - SaveableOffset(
                                         centerWidth / 2f,
                                         50f
-                                    ) - Offset(0f, 8f))
+                                    ) - SaveableOffset(0f, 8f)).getValue())
                                 )
                                 .onGloballyPositioned {
                                     centerWidth = it.size.width.toFloat() / actualDensity.density
@@ -196,17 +206,44 @@ fun CanvasSample() {
                 }
             },
             drawingPaths = paths,
+            onActionSet = {
+                actionState.value = it
+            },
             onAddPath = { path ->
                 paths.add(path.copy(color = Color.Cyan))
             }
         )
-        Column(modifier = Modifier.padding(32.dp).align(Alignment.TopEnd).width(70.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .align(Alignment.TopEnd)
+                .width(170.dp)
+                .background(Color.White)
+                .padding(8.dp)
+                .clip(RoundedCornerShape(8.dp))
+        ) {
             Slider(
                 modifier = Modifier,
                 value = zoomState.value,
                 valueRange = 0.1f..5f,
                 onValueChange = {
                     zoomState.value = it
+                })
+            Text(text = "round to nearest (${roundToNearest.value}):")
+            Slider(
+                modifier = Modifier,
+                value = roundToNearest.value.toFloat(),
+                valueRange = 0f..100f,
+                onValueChange = {
+                    roundToNearest.value = it.toInt()
+                })
+            Text(text = "stroke width (${strokeWidthState.value}):")
+            Slider(
+                modifier = Modifier,
+                value = strokeWidthState.value,
+                valueRange = 0.5f..20f,
+                onValueChange = {
+                    strokeWidthState.value = it
                 })
         }
         Row(
@@ -217,8 +254,8 @@ fun CanvasSample() {
                 shapes.add(
                     MyShape(
                         Clock.System.now().toEpochMilliseconds(),
-                        position = WorldPosition(0f, 0f),
-                        size = Offset(50f, 50f),
+                        position = SaveableOffset(0f, 0f),
+                        size = SaveableOffset(50f, 50f),
                         color = Color.Red
                     )
                 )

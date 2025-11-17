@@ -16,7 +16,7 @@ import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.ResizeType
 import com.moly3.dataviz.block.model.StylusPoint
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.block.model.allSides
 import com.moly3.dataviz.block.model.getValue
 import com.moly3.dataviz.block.model.getWorldPosition
@@ -30,25 +30,31 @@ import kotlin.time.ExperimentalTime
 fun Modifier.dashboard(
     scope: CoroutineScope,
     sizeRound: Int,
-
-    zoomState: MutableState<Float>,
-    cursorPositionState: MutableState<Offset>,
-    centerOfScreenState: MutableState<Offset>,
-    userCoordinateState: MutableState<Offset>,
+    roundToNearest: State<Int?>,
+    zoomState: State<Float>,
+    userCoordinateState: State<SaveableOffset>,
     isDrawingState: State<Boolean>,
+
+    cursorPositionState: MutableState<SaveableOffset>,
+    centerOfScreenState: MutableState<SaveableOffset>,
+
     connectionConfig: ConnectionConfig,
 
     shapes: State<List<Shape>>,
     connections: State<List<ArcConnection>>,
     dragActionState: MutableState<DragAction?>,
-    actionState: MutableState<Action?>,
+    actionState: State<Action?>,
+
+    onZoomChange: (Float) -> Unit,
+    onUserCoordinateChange: (SaveableOffset) -> Unit,
 
     horizontalChange: (Float) -> Unit,
     verticalChange: (Float) -> Unit,
 
+    onActionSet: (Action?) -> Unit,
     onAddConnection: (ArcConnection) -> Unit,
-    onMoveShape: (Int, WorldPosition) -> Unit,
-    onResizeShape: (Int, WorldPosition, Offset) -> Unit,
+    onMoveShape: (Int, SaveableOffset) -> Unit,
+    onResizeShape: (Int, SaveableOffset, SaveableOffset) -> Unit,
 
     onDrawStart: (StylusPoint) -> Unit,
     onDrawChange: (StylusPoint) -> Unit,
@@ -60,7 +66,7 @@ fun Modifier.dashboard(
             scope = scope,
             numberOfPointers = 0,
             requisite = PointerRequisite.GreaterThan,
-            onClick = {
+            onClick = { offset ->
                 val shapes = shapes.value
                 val connections = connections.value
                 println("onClick: shapes: ${shapes.size}")
@@ -70,7 +76,7 @@ fun Modifier.dashboard(
                 //actionState.value = null
 
                 val mousePosition = getMapPosition(
-                    it,
+                    offset.getWorldPosition(),
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -89,10 +95,10 @@ fun Modifier.dashboard(
                         if ((actionState.value as Action.DoubleClicked).shape.id == foundShape.id) {
 
                         } else {
-                            actionState.value = Action.Shape(foundShape)
+                            onActionSet(Action.Shape(foundShape))
                         }
                     } else {
-                        actionState.value = Action.Shape(foundShape)
+                        onActionSet(Action.Shape(foundShape))
                     }
 
                 } else {
@@ -107,7 +113,7 @@ fun Modifier.dashboard(
                         config = connectionConfig
                     )
                     if (foundConnection != null) {
-                        actionState.value = Action.Connection(foundConnection)
+                        onActionSet(Action.Connection(foundConnection))
                     }
                 }
             },
@@ -115,7 +121,7 @@ fun Modifier.dashboard(
                 val shapes = shapes.value
                 val connections = connections.value
                 val mousePosition = getMapPosition(
-                    it,
+                    it.getWorldPosition(),
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -128,13 +134,14 @@ fun Modifier.dashboard(
                             x.size
                         )
                     }
-                if (foundShape != null)
-                    actionState.value = Action.DoubleClicked(foundShape)
-                else
-                    actionState.value = null
+                if (foundShape != null) {
+                    onActionSet(Action.DoubleClicked(foundShape))
+                } else {
+                    onActionSet(null)
+                }
             },
             onCursorMove = { cursorOffset ->
-                cursorPositionState.value = cursorOffset
+                cursorPositionState.value = cursorOffset.getWorldPosition()
             },
             onHorizontalScrollChange = horizontalChange,
             onVerticalScrollChange = verticalChange,
@@ -143,7 +150,7 @@ fun Modifier.dashboard(
                 val connections = connections.value
 
                 val mousePosition = getMapPosition(
-                    pointerChange.position,
+                    pointerChange.position.getWorldPosition(),
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -198,7 +205,7 @@ fun Modifier.dashboard(
                         val foundShape = foundSideShape.first
                         dragActionState.value = DragAction(
                             startMapPosition = foundShape.position,
-                            accelerate = WorldPosition(0f, 0f),
+                            accelerate = SaveableOffset(0f, 0f),
                             dragType = DragType.Connection(
                                 startShapeId = foundShape.id,
                                 startShapeType = foundSideShape.second,
@@ -209,7 +216,7 @@ fun Modifier.dashboard(
                         val foundShape = foundResize.first
                         dragActionState.value = DragAction(
                             startMapPosition = mousePosition,
-                            accelerate = WorldPosition(0f, 0f),
+                            accelerate = SaveableOffset(0f, 0f),
                             dragType = DragType.Resize(
                                 shapeId = foundShape.id,
                                 type = foundResize.second,
@@ -234,7 +241,7 @@ fun Modifier.dashboard(
                           mainPointerInputChange: PointerInputChange,
                           pointerList: List<PointerInputChange> ->
                 val mousePosition = getMapPosition(
-                    mainPointerInputChange.position,
+                    mainPointerInputChange.position.getWorldPosition(),
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -264,12 +271,12 @@ fun Modifier.dashboard(
                                 accelerate = ((dragAction.accelerate.getValue() + off)).getWorldPosition()
                             )
                         } else {
-                            userCoordinateState.value -= off
+                            onUserCoordinateChange(userCoordinateState.value - off.getWorldPosition())
                         }
                     }
                 } else if (pointerList.size == 2) {
                     val newScale = zoomState.value * gestureZoom
-                    zoomState.value = newScale
+                    onZoomChange(newScale)
                 }
             },
             onGestureEnd = { pointerChange ->
@@ -277,9 +284,8 @@ fun Modifier.dashboard(
                     onDrawEnd()
                 } else {
                     val shapes = shapes.value
-                    val connections = connections.value
                     val mousePosition = getMapPosition(
-                        position = pointerChange.position,
+                        position = pointerChange.position.getWorldPosition(),
                         centerOfScreen = centerOfScreenState.value,
                         zoom = zoomState.value,
                         userCoordinate = userCoordinateState.value
@@ -338,16 +344,19 @@ fun Modifier.dashboard(
                                     val shapePosition = shape.position
                                     val shapeSize = shape.size
 
-                                    val accelerate =
-                                        dragAction.accelerate.getValue()
+                                    val accelerate = dragAction.accelerate
                                     val resizePosition =
                                         resizePosition(accelerate, resizeType)
                                     val shapeSizeApp =
-                                        resizeSize(accelerate, resizeType)
+                                        resizeSize(
+                                            accelerate,
+                                            resizeType,
+                                            roundToNearest = roundToNearest.value
+                                        )
 
                                     onResizeShape(
                                         foundIndex,
-                                        (shapePosition.getValue() + resizePosition).getWorldPosition(),
+                                        (shapePosition + resizePosition),
                                         (shapeSize + shapeSizeApp).keepCurrentOrMin(
                                             minShapeSize
                                         )

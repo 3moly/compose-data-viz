@@ -1,7 +1,6 @@
 package com.moly3.dataviz.block.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -9,13 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -34,35 +34,42 @@ import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.block.func.calculatePointer
 import com.moly3.dataviz.block.func.dashboard
 import com.moly3.dataviz.block.func.getMapPosition
+import com.moly3.dataviz.block.func.roundToNearest
 import com.moly3.dataviz.block.model.Action
 import com.moly3.dataviz.block.model.ArcConnection
 import com.moly3.dataviz.block.model.CanvasSettings
 import com.moly3.dataviz.block.model.ConnectionConfig
 import com.moly3.dataviz.block.model.DragAction
+import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.DrawShapeState
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
 import com.moly3.dataviz.block.model.StylusPoint
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
 import kotlin.math.abs
 
 @Composable
 fun Canvas(
     modifier: Modifier,
+    action: Action?,
     backgroundModifier: Modifier,
     connectionsModifier: Modifier,
     settings: CanvasSettings,
-    zoomState: MutableState<Float>,
-    userCoordinateState: MutableState<Offset>,
+    zoom: Float,
+    roundToNearest: Int?,
+    userCoordinate: SaveableOffset,
     isDrawing: Boolean,
     shapes: List<Shape>,
     connections: List<ArcConnection>,
     drawingPaths: List<StylusPath>,
+    onActionSet: (Action?) -> Unit,
     onAddPath: (StylusPath) -> Unit,
-    onMoveShape: (Int, WorldPosition) -> Unit,
-    onResizeShape: (Int, WorldPosition, Offset) -> Unit,
+    onMoveShape: (Int, SaveableOffset) -> Unit,
+    onResizeShape: (Int, SaveableOffset, SaveableOffset) -> Unit,
     onAddConnection: (ArcConnection) -> Unit,
-    settingsPanel: @Composable (position: Offset, action: Action, onDoneAction: () -> Unit) -> Unit,
+    onZoomChange: (Float) -> Unit,
+    onUserCoordinateChange: (SaveableOffset) -> Unit,
+    settingsPanel: @Composable (position: SaveableOffset, action: Action, onDoneAction: () -> Unit) -> Unit,
     onDrawBlock: @Composable (DrawShapeState) -> Unit,
 ) {
     var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
@@ -75,14 +82,13 @@ fun Canvas(
     val strokeWidth = remember { Animatable(1f) }
 
     val isHomeHoldState = remember { mutableStateOf(false) }
-    val cursorPositionState = remember { mutableStateOf(Offset(0.0F, 0.0F)) }
-    val centerOfScreenState = remember { mutableStateOf(Offset(0.0F, 0.0F)) }
-    val actionState = remember { mutableStateOf<Action?>(value = null) }
+    val cursorPositionState = remember { mutableStateOf(SaveableOffset(0.0F, 0.0F)) }
+    val centerOfScreenState = remember { mutableStateOf(SaveableOffset(0.0F, 0.0F)) }
+
 
     val centerOfScreen = remember(centerOfScreenState.value) { centerOfScreenState.value }
 
     val cursorPosition = remember(cursorPositionState.value) { cursorPositionState.value }
-    val action = remember(actionState.value) { actionState.value }
 
     LaunchedEffect(action) {
         strokeWidth.snapTo(1f)
@@ -101,12 +107,12 @@ fun Canvas(
     }
 
     val mapCursor =
-        remember(cursorPosition, centerOfScreen, zoomState.value, userCoordinateState.value) {
+        remember(cursorPosition, centerOfScreen, zoom, userCoordinate) {
             getMapPosition(
                 cursorPosition,
                 centerOfScreen,
-                zoomState.value,
-                userCoordinateState.value
+                zoom,
+                userCoordinate
             )
         }
     val dragActionState = remember { mutableStateOf<DragAction?>(null) }
@@ -116,19 +122,19 @@ fun Canvas(
             mapCursor,
             shapes,
             connections,
-            zoomState.value,
+            zoom,
             centerOfScreen,
             connectionConfig,
-            userCoordinateState.value,
+            userCoordinate,
             cursorPosition
         ) {
             calculatePointer(
                 shapes = shapes,
                 mapCursor = mapCursor,
                 connections = connections,
-                zoom = zoomState.value,
+                zoom = zoom,
                 connectionConfig = connectionConfig,
-                userCoordinate = userCoordinateState.value,
+                userCoordinate = userCoordinate,
                 centerOfScreen = centerOfScreen,
                 cursorPosition = cursorPosition,
                 dragAction = dragActionState.value,
@@ -163,15 +169,15 @@ fun Canvas(
         ) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 DrawConnections(
-                    modifier=connectionsModifier,
+                    modifier = connectionsModifier,
                     paths = drawingPaths,
                     stylusPoint = currentPath,
                     shapes = shapes,
                     connections = connections,
                     dragActionState = dragActionState,
-                    userCoordinate = userCoordinateState.value,
+                    userCoordinate = userCoordinate,
                     config = connectionConfig,
-                    zoom = zoomState.value,
+                    zoom = zoom,
                     centerOfScreen = centerOfScreen,
                     cursorPosition = cursorPosition,
                     action = action,
@@ -183,26 +189,34 @@ fun Canvas(
                     mousePosition = mapCursor,
                     shapes = shapes,
                     dragActionState = dragActionState,
-                    userCoordinate = userCoordinateState.value,
-                    zoom = zoomState.value,
+                    userCoordinate = userCoordinate,
+                    zoom = zoom,
                     density = actualDensity.density,
                     action = action,
                     onDrawBlock = onDrawBlock,
                     sideCircleColor = settings.sideCircleColor,
+                    roundToNearest = roundToNearest
                 )
+                val actionState = rememberUpdatedState(action)
                 val updatedShapes = rememberUpdatedState(shapes)
                 val updatedConnections = rememberUpdatedState(connections)
                 val isDrawingState = rememberUpdatedState(isDrawing)
+                val zoomState = rememberUpdatedState(zoom)
+                val userCoordinateState = rememberUpdatedState(userCoordinate)
+                val roundToNearestState = rememberUpdatedState(roundToNearest)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .onGloballyPositioned {
                             centerOfScreenState.value =
-                                Offset(it.size.width.toFloat(), it.size.height.toFloat()) / 2f
+                                SaveableOffset(
+                                    it.size.width.toFloat(),
+                                    it.size.height.toFloat()
+                                ) / 2f
                         }
                         .dashboard(
                             scope = scope,
-
+                            roundToNearest = roundToNearestState,
                             zoomState = zoomState,
                             sizeRound = sizeRound,
                             cursorPositionState = cursorPositionState,
@@ -211,20 +225,19 @@ fun Canvas(
                             connectionConfig = connectionConfig,
                             isDrawingState = isDrawingState,
                             actionState = actionState,
+                            onActionSet = onActionSet,
 
                             shapes = updatedShapes,
                             connections = updatedConnections,
 
                             horizontalChange = {
-                                userCoordinateState.value =
-                                    userCoordinateState.value.copy(x = userCoordinateState.value.x - it * scaleMovementModifier)
+                                onUserCoordinateChange(userCoordinate.copy(x = userCoordinate.x - it * scaleMovementModifier))
                             },
                             verticalChange = {
                                 if (isHomeHoldState.value) {
-                                    zoomState.value = abs(zoomState.value + it / 100f)
+                                    onZoomChange(abs(zoomState.value + it / 100f))
                                 } else {
-                                    userCoordinateState.value =
-                                        userCoordinateState.value.copy(y = userCoordinateState.value.y - it * scaleMovementModifier)
+                                    onUserCoordinateChange(userCoordinate.copy(y = userCoordinate.y - it * scaleMovementModifier))
                                 }
                             },
                             onDrawStart = { point ->
@@ -253,24 +266,67 @@ fun Canvas(
                             onClick = { focusRequester.requestFocus() },
                             onMoveShape = onMoveShape,
                             onResizeShape = onResizeShape,
-                            onAddConnection = onAddConnection
+                            onAddConnection = onAddConnection,
+                            onZoomChange = onZoomChange,
+                            onUserCoordinateChange = onUserCoordinateChange
                         )
                         .pointerHoverIcon(pointer.pointerIcon)
                 ) {}
             }
         }
         Box(Modifier.fillMaxSize()) {
-            val center: Offset? =
-                remember(action, zoomState.value, userCoordinateState.value, centerOfScreen) {
+            val center: SaveableOffset? =
+                remember(
+                    action,
+                    zoom,
+                    userCoordinate,
+                    centerOfScreen,
+                    shapes.map { x -> x.position },
+                    dragActionState.value,
+                    roundToNearest
+                ) {
                     if (action == null)
                         null
                     else {
-                        (action.getOffsetMenu() - userCoordinateState.value) * zoomState.value + centerOfScreen
+                        val dragAction = dragActionState.value
+                        val addOffset = if (dragAction != null) {
+                            when (dragAction.dragType) {
+                                is DragType.Connection -> SaveableOffset.Zero
+                                is DragType.Resize -> {
+                                    when (action) {
+                                        is Action.Connection -> SaveableOffset.Zero
+                                        is Action.DoubleClicked -> SaveableOffset.Zero
+                                        is Action.Shape -> {
+                                            if (action.shape.id == dragAction.dragType.shapeId) {
+                                                dragAction.accelerate.copy(y = 0f) / 2f
+                                            } else {
+                                                SaveableOffset.Zero
+                                            }
+                                        }
+                                    }
+                                }
+                                is DragType.Shape -> {
+                                    when (action) {
+                                        is Action.Connection -> SaveableOffset.Zero
+                                        is Action.DoubleClicked -> SaveableOffset.Zero
+                                        is Action.Shape -> {
+                                            if (action.shape.id == dragAction.dragType.shapeId) {
+                                                dragAction.accelerate - dragAction.startMapPosition
+                                            } else {
+                                                SaveableOffset.Zero
+                                            }
+                                        }
+                                    }
+
+                                }
+                            }
+                        } else SaveableOffset.Zero
+                        (action.getOffsetMenu(shapes = shapes) - userCoordinate + addOffset.roundToNearest(roundToNearest)) * zoom + centerOfScreen
                     }
                 }
             if (center != null && action != null) {
                 settingsPanel(center, action, {
-                    actionState.value = null
+                    onActionSet(null)
                 })
             }
         }

@@ -1,13 +1,12 @@
 package com.moly3.dataviz.block.func
 
-import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.WorldPosition
+import com.moly3.dataviz.block.model.SaveableOffset
 
 fun isInSidePosition(
-    mousePosition: WorldPosition,
-    itemPosition: WorldPosition,
-    boxSize: Offset,
+    mousePosition: SaveableOffset,
+    itemPosition: SaveableOffset,
+    boxSize: SaveableOffset,
     side: BoxSide,
     radius: Float
 ): Boolean {

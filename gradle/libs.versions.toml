@@ -5,12 +5,14 @@ androidLibrary = { id = "com.android.library", version.ref = "agp" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 compose = { id = "org.jetbrains.compose", version.ref = "plugin-compose" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
 [versions]
 
 agp = "8.13.1"
 kotlin = "2.2.21"
 plugin-compose = "1.9.3"
+serialization = "1.9.0"
 
 kotlinx-immutable-list = "0.4.0"
 
@@ -34,3 +36,4 @@ coroutines = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core"
 shared-core-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "coroutines" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 hypnoticcanvas = { module = "com.mikepenz.hypnoticcanvas:hypnoticcanvas", version.ref = "hypnoticcanvas" }
+serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }

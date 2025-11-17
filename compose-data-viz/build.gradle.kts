@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.serialization)
     id("com.vanniktech.maven.publish") version "0.35.0"
 }
 
@@ -33,6 +34,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(compose.foundation)
+            implementation(libs.serialization)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

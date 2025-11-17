@@ -2,7 +2,7 @@ package com.moly3.dataviz.block.model
 
 
 data class DragAction(
-    val startMapPosition: WorldPosition,
-    val accelerate: WorldPosition,
+    val startMapPosition: SaveableOffset,
+    val accelerate: SaveableOffset,
     val dragType: DragType
 )

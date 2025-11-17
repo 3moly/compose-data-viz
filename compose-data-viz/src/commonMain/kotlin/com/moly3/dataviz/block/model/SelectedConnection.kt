@@ -3,17 +3,17 @@ package com.moly3.dataviz.block.model
 import androidx.compose.ui.geometry.Offset
 
 data class SelectedConnection(
-    val startPoint: WorldPosition,
-    val endPoint: WorldPosition,
+    val startPoint: SaveableOffset,
+    val endPoint: SaveableOffset,
     val connection: ArcConnection
 ) {
 
-    fun getMenuCenter(): Offset {
+    fun getMenuCenter(): SaveableOffset {
         val offset1 = startPoint
         val offset2 = endPoint
         val centerX = (offset1.x + offset2.x) / 2f
         val highestY = minOf(offset1.y, offset2.y)
-        return Offset(centerX, highestY)
+        return SaveableOffset(centerX, highestY)
     }
 }
 
