@@ -1,8 +1,5 @@
 package com.threemoly.sample.graph
 
-import kotlinx.serialization.Serializable
-
-@Serializable
 data class GraphSettingsConfig(
     val maxNodes: Int,
     val isShowDirectories: Boolean,

@@ -6,20 +6,20 @@ import com.moly3.dataviz.block.model.ConnectionConfig
 import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.SelectedConnection
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 
 internal fun findConnection(
     shapes: List<Shape>,
     connections: List<ArcConnection>,
     dragAction: DragAction?,
-    cursorPosition: SaveableOffset,
-    centerOfScreen: SaveableOffset,
-    userCoordinate: SaveableOffset,
+    cursorPosition: Offset,
+    centerOfScreen: Offset,
+    userCoordinate: Offset,
     zoom: Float,
     config: ConnectionConfig
 ): SelectedConnection? {
-    var startPointW: SaveableOffset? = null
-    var endPointW: SaveableOffset? = null
+    var startPointW: Offset? = null
+    var endPointW: Offset? = null
     val foundConnection = connections.firstOrNull { connection ->
         val fromBox =
             shapes.firstOrNull { d -> d.id == connection.fromBox } ?: return@firstOrNull false

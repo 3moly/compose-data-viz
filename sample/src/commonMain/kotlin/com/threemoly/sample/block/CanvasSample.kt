@@ -26,7 +26,6 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -38,8 +37,8 @@ import com.moly3.dataviz.block.model.ArcConnection
 import com.moly3.dataviz.block.model.CanvasSettings
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
-import com.moly3.dataviz.block.model.SaveableOffset
-import com.moly3.dataviz.block.model.getValue
+import androidx.compose.ui.geometry.Offset
+
 import com.moly3.dataviz.block.ui.Canvas
 import com.threemoly.sample.shader.UmlShader
 import com.moly3.dataviz.func.darker
@@ -56,8 +55,8 @@ import kotlin.time.ExperimentalTime
 data class MyShape(
     override val id: Long,
     val color: Color?,
-    override val position: SaveableOffset,
-    override val size: SaveableOffset
+    override val position: Offset,
+    override val size: Offset
 ) : Shape
 
 @OptIn(ExperimentalTime::class)
@@ -97,7 +96,7 @@ fun CanvasSample() {
     val zoomState = remember { mutableStateOf(1f) }
     val strokeWidthState = remember { mutableStateOf(1f) }
     val roundToNearest = remember { mutableStateOf(0) }
-    val userCoordinateState = remember { mutableStateOf(SaveableOffset(0f, 0f)) }
+    val userCoordinateState = remember { mutableStateOf(Offset(0f, 0f)) }
     val selectedShader: UmlShader by remember { mutableStateOf(UmlShader) }
     LaunchedEffect(backgroundSecondary) {
         selectedShader.setColor(backgroundSecondary)
@@ -179,10 +178,10 @@ fun CanvasSample() {
                         Row(
                             Modifier
                                 .absoluteOffset(
-                                    ((offset / LocalDensity.current.density - SaveableOffset(
+                                    ((offset / LocalDensity.current.density - Offset(
                                         centerWidth / 2f,
                                         50f
-                                    ) - SaveableOffset(0f, 8f)).getValue())
+                                    ) - Offset(0f, 8f)))
                                 )
                                 .onGloballyPositioned {
                                     centerWidth = it.size.width.toFloat() / actualDensity.density
@@ -254,8 +253,8 @@ fun CanvasSample() {
                 shapes.add(
                     MyShape(
                         Clock.System.now().toEpochMilliseconds(),
-                        position = SaveableOffset(0f, 0f),
-                        size = SaveableOffset(50f, 50f),
+                        position = Offset(0f, 0f),
+                        size = Offset(50f, 50f),
                         color = Color.Red
                     )
                 )

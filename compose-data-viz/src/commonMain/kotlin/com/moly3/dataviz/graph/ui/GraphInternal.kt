@@ -38,10 +38,6 @@ internal fun <Id, Data> GraphInternal(
     fontColor: Color,
     circleColor: Color,
     circleLineColor: Color
-//    val primaryColor = LocalAppTheme.current.primaryColor
-//    val fontColor = LocalAppTheme.current.colors.primaryFont
-//    val circleColor = LocalAppTheme.current.colors.circle
-//    val circleLineColor = LocalAppTheme.current.colors.circleLine
 ) {
     val darkerOthers = 0.4f
     val zoom by animateFloatAsState(zoom)
@@ -77,7 +73,6 @@ internal fun <Id, Data> GraphInternal(
     }
 
     val alphaText by animateFloatAsState(if (zoom >= 1f) 1f else 0f)
-
 
     Canvas(modifier = modifier) {
         withTransform({

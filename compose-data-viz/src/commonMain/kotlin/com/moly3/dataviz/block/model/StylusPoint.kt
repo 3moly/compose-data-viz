@@ -1,9 +1,8 @@
 package com.moly3.dataviz.block.model
 
 import androidx.compose.ui.graphics.Color
-import kotlin.time.ExperimentalTime
 
-data class StylusPoint @OptIn(ExperimentalTime::class) constructor(
+data class StylusPoint(
     val x: Float,
     val y: Float,
     val pressure: Float = 1f,

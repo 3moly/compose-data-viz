@@ -5,7 +5,7 @@ import com.moly3.dataviz.block.minShapeSize
 import com.moly3.dataviz.block.model.Coords
 import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.DragType
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.ShapeParams
 
@@ -13,7 +13,7 @@ fun calculateShapeParams(
     item: Shape,
     zoom: Float,
     density: Float,
-    userCoordinate: SaveableOffset,
+    userCoordinate: Offset,
     dragAction: DragAction?,
     roundToNearest: Int?
 ): ShapeParams {
@@ -45,7 +45,7 @@ fun calculateShapeParams(
 
         resizeSize(accelerate, resizeType, roundToNearest = roundToNearest)
     } else {
-        SaveableOffset.Zero
+        Offset.Zero
     }
     val itemSize = (item.size + addOffset).keepCurrentOrMin(minShapeSize)
     val offset2 =

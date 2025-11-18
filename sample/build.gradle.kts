@@ -26,8 +26,6 @@ kotlin {
                 outputFileName = "composeApp.js"
             }
         }
-//        nodejs()
-//        d8()
         binaries.executable()
     }
     jvm()
@@ -44,6 +42,8 @@ kotlin {
         }
     }
 
+    //noinspection UseTomlInstead
+    //keeping clean libs.versions.toml from other libs
     sourceSets {
         commonMain.dependencies {
             implementation(project(":compose-data-viz"))
@@ -52,23 +52,23 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material)
             implementation(compose.material3)
-            implementation(libs.hypnoticcanvas)
-            implementation(libs.haze)
 
-            implementation(libs.kotlinx.immutable.list)
-            //put your multiplatform dependencies here
+            implementation("com.mikepenz.hypnoticcanvas:hypnoticcanvas:0.4.1")
+            implementation("dev.chrisbanes.haze:haze:1.7.0")
+            implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.4.0")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
-            implementation(libs.android.compose.activity)
-            implementation(libs.android.ui.appcompat)
-            implementation(libs.android.core.ktx)
+            implementation("androidx.activity:activity-compose:1.11.0")
+            implementation("androidx.appcompat:appcompat:1.7.1")
+            implementation("androidx.core:core-ktx:1.17.0")
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
-            implementation(libs.shared.core.coroutines.swing)
+
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
         }
     }
 }

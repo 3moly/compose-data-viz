@@ -1,9 +1,9 @@
 package com.moly3.dataviz.block.func
 
 import com.moly3.dataviz.block.model.ResizeType
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 
-fun resizePosition(accelerate: SaveableOffset, resizeType: ResizeType): SaveableOffset {
+fun resizePosition(accelerate: Offset, resizeType: ResizeType): Offset {
     return when (resizeType) {
         ResizeType.TopLeft -> accelerate
 
@@ -19,6 +19,6 @@ fun resizePosition(accelerate: SaveableOffset, resizeType: ResizeType): Saveable
         ResizeType.Left -> accelerate.copy(y = 0f)
         ResizeType.BottomRight,
         ResizeType.Bottom,
-        ResizeType.Right -> SaveableOffset(0f, 0f)
+        ResizeType.Right -> Offset(0f, 0f)
     }.roundToNearest(25)
 }

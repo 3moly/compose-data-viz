@@ -11,18 +11,17 @@ import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.PointerDetection
 import com.moly3.dataviz.block.model.PointerIconType
 import com.moly3.dataviz.block.model.ResizeType
-import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.block.model.allSides
 
 fun calculatePointer(
     shapes: List<Shape>,
-    mapCursor: SaveableOffset,
+    mapCursor: Offset,
     connections: List<ArcConnection>,
     zoom: Float,
     connectionConfig: ConnectionConfig,
-    userCoordinate: SaveableOffset,
-    centerOfScreen: SaveableOffset,
-    cursorPosition: SaveableOffset,
+    userCoordinate: Offset,
+    centerOfScreen: Offset,
+    cursorPosition: Offset,
     dragAction: DragAction?,
     sizeRound: Int
 ): PointerDetection {

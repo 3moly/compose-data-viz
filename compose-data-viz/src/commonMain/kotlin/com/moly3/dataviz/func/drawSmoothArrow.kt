@@ -8,8 +8,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import com.moly3.dataviz.block.model.Action
 import com.moly3.dataviz.block.model.BoxSide
 import com.moly3.dataviz.block.model.ConnectionConfig
-import com.moly3.dataviz.block.model.SaveableOffset
-import com.moly3.dataviz.block.model.getValue
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -19,8 +17,8 @@ import kotlin.math.sqrt
 
 fun DrawScope.drawSmoothArrow(
     id: Long,
-    startPoint: SaveableOffset,
-    endPoint: SaveableOffset,
+    startPoint: Offset,
+    endPoint: Offset,
     fromSide: BoxSide,
     toSide: BoxSide,
     color: Color,
@@ -59,7 +57,7 @@ fun DrawScope.drawSmoothArrow(
     )
 
     // Avoid drawing if points are identical or too close after stub calculation
-    if (((curveStartPoint - curveEndPoint).getValue()).getDistanceSquared() < 0.1f) return
+    if (((curveStartPoint - curveEndPoint)).getDistanceSquared() < 0.1f) return
 
     // 3. Create the path
     val path = Path().apply {
@@ -119,10 +117,10 @@ fun DrawScope.drawSmoothArrow(
 // Helper to calculate points based on side and stub length
 // Revised to ensure arrows always point outward from shapes
 fun calculateStubAndCurvePoints(
-    point: SaveableOffset,
+    point: Offset,
     side: BoxSide,
     stubLength: Float
-): Pair<SaveableOffset, SaveableOffset> {
+): Pair<Offset, Offset> {
     val stubPoint = point // The point on the "box" edge
 
     // Always direct stubs outward from the shape
@@ -138,16 +136,16 @@ fun calculateStubAndCurvePoints(
 
 // Helper to calculate Bézier control points
 fun calculateControlPoints(
-    curveStart: SaveableOffset,
-    curveEnd: SaveableOffset,
+    curveStart: Offset,
+    curveEnd: Offset,
     fromSide: BoxSide,
     toSide: BoxSide,
     factor: Float,
     // Add original points for symmetric distance calculation
-    originalStartPoint: SaveableOffset,
-    originalEndPoint: SaveableOffset,
+    originalStartPoint: Offset,
+    originalEndPoint: Offset,
     maxArcHeight: Float = 100f // Maximum arc height in pixels
-): Pair<SaveableOffset, SaveableOffset> {
+): Pair<Offset, Offset> {
     // --- SYMMETRY FIX ---
     // Calculate distance based on the *original* points for consistency
     val dxOriginal = originalEndPoint.x - originalStartPoint.x
@@ -178,8 +176,8 @@ fun calculateControlPoints(
 
 // Helper function to draw the arrowhead
 private fun DrawScope.drawArrowHead(
-    tip: SaveableOffset,
-    from: SaveableOffset,
+    tip: Offset,
+    from: Offset,
     color: Color,
     strokeWidth: Float,
     arrowHeadSize: Float
@@ -201,6 +199,6 @@ private fun DrawScope.drawArrowHead(
     val point2Y = tip.y - arrowHeadSize * sin(angleRad - arrowAngle)
 
     // Draw the arrowhead lines
-    drawLine(color = color, start = Offset(point1X, point1Y), end = tip.getValue(), strokeWidth = strokeWidth)
-    drawLine(color = color, start = Offset(point2X, point2Y), end = tip.getValue(), strokeWidth = strokeWidth)
+    drawLine(color = color, start = Offset(point1X, point1Y), end = tip, strokeWidth = strokeWidth)
+    drawLine(color = color, start = Offset(point2X, point2Y), end = tip, strokeWidth = strokeWidth)
 }

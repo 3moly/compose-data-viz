@@ -4,7 +4,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.mikepenz.hypnoticcanvas.RuntimeEffect
 import com.mikepenz.hypnoticcanvas.shaders.Shader
-import com.moly3.dataviz.block.model.SaveableOffset
 
 object UmlShader : Shader {
     override val name: String
@@ -28,7 +27,7 @@ object UmlShader : Shader {
     override val speedModifier: Float
         get() = 0.1f
 
-    var userCoordinates: SaveableOffset = SaveableOffset(0f, 0f)
+    var userCoordinates: Offset = Offset(0f, 0f)
     var zoom: Float = 1f
     var dotSpacing: Float = 50f
     private var _color: Color = Color.Unspecified

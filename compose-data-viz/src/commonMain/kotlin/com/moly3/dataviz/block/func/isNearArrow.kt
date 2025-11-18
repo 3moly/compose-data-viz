@@ -5,7 +5,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.block.model.BoxSide
 import com.moly3.dataviz.block.model.ConnectionConfig
-import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.func.calculateControlPoints
 import com.moly3.dataviz.func.calculateStubAndCurvePoints
 import kotlin.math.sqrt
@@ -25,9 +24,9 @@ import kotlin.math.sqrt
  * @return True if cursor is within hitThreshold distance of any part of the arrow path
  */
 fun isNearArrow(
-    cursor: SaveableOffset,
-    startPoint: SaveableOffset,
-    endPoint: SaveableOffset,
+    cursor: Offset,
+    startPoint: Offset,
+    endPoint: Offset,
     fromSide: BoxSide,
     toSide: BoxSide,
     density: Density,
@@ -89,9 +88,9 @@ fun isNearArrow(
  * Checks if a point is near a line segment.
  */
 private fun isPointNearLineSegment(
-    point: SaveableOffset,
-    lineStart: SaveableOffset,
-    lineEnd: SaveableOffset,
+    point: Offset,
+    lineStart: Offset,
+    lineEnd: Offset,
     threshold: Float
 ): Boolean {
     // Vector from lineStart to lineEnd
@@ -112,10 +111,10 @@ private fun isPointNearLineSegment(
     val projection = pointVec.x * lineUnitVec.x + pointVec.y * lineUnitVec.y
 
     // Calculate closest point on line segment
-    val closestPoint: SaveableOffset = when {
+    val closestPoint: Offset = when {
         projection < 0 -> lineStart // Before start of line segment
         projection > lineLength -> lineEnd // After end of line segment
-        else -> SaveableOffset(
+        else -> Offset(
             lineStart.x + projection * lineUnitVec.x,
             lineStart.y + projection * lineUnitVec.y
         ) // On the line segment
@@ -128,7 +127,7 @@ private fun isPointNearLineSegment(
 /**
  * Calculates the distance between two points.
  */
-private fun distanceBetween(p1: SaveableOffset, p2: SaveableOffset): Float {
+private fun distanceBetween(p1: Offset, p2: Offset): Float {
     val dx = p1.x - p2.x
     val dy = p1.y - p2.y
     return sqrt(dx * dx + dy * dy)
@@ -139,11 +138,11 @@ private fun distanceBetween(p1: SaveableOffset, p2: SaveableOffset): Float {
  * Uses an approximation by sampling multiple points along the curve.
  */
 private fun isPointNearCubicBezier(
-    point: SaveableOffset,
-    p0: SaveableOffset,
-    p1: SaveableOffset,
-    p2: SaveableOffset,
-    p3: SaveableOffset,
+    point: Offset,
+    p0: Offset,
+    p1: Offset,
+    p2: Offset,
+    p3: Offset,
     threshold: Float,
     numSamples: Int = 30
 ): Boolean {
@@ -161,7 +160,7 @@ private fun isPointNearCubicBezier(
         val x = mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x
         val y = mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y
 
-        val currPoint = SaveableOffset(x, y)
+        val currPoint = Offset(x, y)
 
         // Check if point is near the line segment between consecutive sample points
         if (isPointNearLineSegment(point, prevPoint, currPoint, threshold)) {

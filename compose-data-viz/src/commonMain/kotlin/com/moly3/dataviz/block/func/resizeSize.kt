@@ -1,13 +1,13 @@
 package com.moly3.dataviz.block.func
 
 import com.moly3.dataviz.block.model.ResizeType
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 
 fun resizeSize(
-    accelerate: SaveableOffset,
+    accelerate: Offset,
     resizeType: ResizeType,
     roundToNearest: Int?
-): SaveableOffset {
+): Offset {
     return when (resizeType) {
         ResizeType.TopLeft -> accelerate.copy(
             x = -accelerate.x,

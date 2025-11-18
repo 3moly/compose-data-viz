@@ -3,7 +3,6 @@ package com.moly3.dataviz.block.func
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import com.moly3.dataviz.block.minShapeSize
@@ -16,10 +15,8 @@ import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.ResizeType
 import com.moly3.dataviz.block.model.StylusPoint
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.block.model.allSides
-import com.moly3.dataviz.block.model.getValue
-import com.moly3.dataviz.block.model.getWorldPosition
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
 import kotlinx.coroutines.CoroutineScope
@@ -32,11 +29,11 @@ fun Modifier.dashboard(
     sizeRound: Int,
     roundToNearest: State<Int?>,
     zoomState: State<Float>,
-    userCoordinateState: State<SaveableOffset>,
+    userCoordinateState: State<Offset>,
     isDrawingState: State<Boolean>,
 
-    cursorPositionState: MutableState<SaveableOffset>,
-    centerOfScreenState: MutableState<SaveableOffset>,
+    cursorPositionState: MutableState<Offset>,
+    centerOfScreenState: MutableState<Offset>,
 
     connectionConfig: ConnectionConfig,
 
@@ -46,15 +43,15 @@ fun Modifier.dashboard(
     actionState: State<Action?>,
 
     onZoomChange: (Float) -> Unit,
-    onUserCoordinateChange: (SaveableOffset) -> Unit,
+    onUserCoordinateChange: (Offset) -> Unit,
 
     horizontalChange: (Float) -> Unit,
     verticalChange: (Float) -> Unit,
 
     onActionSet: (Action?) -> Unit,
     onAddConnection: (ArcConnection) -> Unit,
-    onMoveShape: (Int, SaveableOffset) -> Unit,
-    onResizeShape: (Int, SaveableOffset, SaveableOffset) -> Unit,
+    onMoveShape: (Int, Offset) -> Unit,
+    onResizeShape: (Int, Offset, Offset) -> Unit,
 
     onDrawStart: (StylusPoint) -> Unit,
     onDrawChange: (StylusPoint) -> Unit,
@@ -76,7 +73,7 @@ fun Modifier.dashboard(
                 //actionState.value = null
 
                 val mousePosition = getMapPosition(
-                    offset.getWorldPosition(),
+                    offset,
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -121,7 +118,7 @@ fun Modifier.dashboard(
                 val shapes = shapes.value
                 val connections = connections.value
                 val mousePosition = getMapPosition(
-                    it.getWorldPosition(),
+                    it,
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -141,16 +138,14 @@ fun Modifier.dashboard(
                 }
             },
             onCursorMove = { cursorOffset ->
-                cursorPositionState.value = cursorOffset.getWorldPosition()
+                cursorPositionState.value = cursorOffset
             },
             onHorizontalScrollChange = horizontalChange,
             onVerticalScrollChange = verticalChange,
             onGestureStart = { pointerChange ->
                 val shapes = shapes.value
-                val connections = connections.value
-
                 val mousePosition = getMapPosition(
-                    pointerChange.position.getWorldPosition(),
+                    pointerChange.position,
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -205,7 +200,7 @@ fun Modifier.dashboard(
                         val foundShape = foundSideShape.first
                         dragActionState.value = DragAction(
                             startMapPosition = foundShape.position,
-                            accelerate = SaveableOffset(0f, 0f),
+                            accelerate = Offset(0f, 0f),
                             dragType = DragType.Connection(
                                 startShapeId = foundShape.id,
                                 startShapeType = foundSideShape.second,
@@ -216,7 +211,7 @@ fun Modifier.dashboard(
                         val foundShape = foundResize.first
                         dragActionState.value = DragAction(
                             startMapPosition = mousePosition,
-                            accelerate = SaveableOffset(0f, 0f),
+                            accelerate = Offset(0f, 0f),
                             dragType = DragType.Resize(
                                 shapeId = foundShape.id,
                                 type = foundResize.second,
@@ -241,7 +236,7 @@ fun Modifier.dashboard(
                           mainPointerInputChange: PointerInputChange,
                           pointerList: List<PointerInputChange> ->
                 val mousePosition = getMapPosition(
-                    mainPointerInputChange.position.getWorldPosition(),
+                    mainPointerInputChange.position,
                     centerOfScreenState.value,
                     zoomState.value,
                     userCoordinateState.value
@@ -268,10 +263,10 @@ fun Modifier.dashboard(
                         val dragAction = dragActionState.value
                         if (dragAction != null) {
                             dragActionState.value = dragAction.copy(
-                                accelerate = ((dragAction.accelerate.getValue() + off)).getWorldPosition()
+                                accelerate = ((dragAction.accelerate + off))
                             )
                         } else {
-                            onUserCoordinateChange(userCoordinateState.value - off.getWorldPosition())
+                            onUserCoordinateChange(userCoordinateState.value - off)
                         }
                     }
                 } else if (pointerList.size == 2) {
@@ -285,7 +280,7 @@ fun Modifier.dashboard(
                 } else {
                     val shapes = shapes.value
                     val mousePosition = getMapPosition(
-                        position = pointerChange.position.getWorldPosition(),
+                        position = pointerChange.position,
                         centerOfScreen = centerOfScreenState.value,
                         zoom = zoomState.value,
                         userCoordinate = userCoordinateState.value

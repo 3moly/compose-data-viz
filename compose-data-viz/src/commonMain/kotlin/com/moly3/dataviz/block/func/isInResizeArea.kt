@@ -1,8 +1,7 @@
 package com.moly3.dataviz.block.func
 
-import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.block.model.ResizeType
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 
 fun isInResizeArea(
     mousePositionX: Float,
@@ -47,9 +46,9 @@ fun isInResizeArea(
 }
 
 fun isInResizeArea(
-    mousePosition: SaveableOffset,
-    shapePosition: SaveableOffset,
-    shapeSize: SaveableOffset,
+    mousePosition: Offset,
+    shapePosition: Offset,
+    shapeSize: Offset,
     detectionPercent: Float
 ): ResizeType? {
     return isInResizeArea(

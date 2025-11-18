@@ -45,7 +45,6 @@ import com.moly3.dataviz.block.model.DrawShapeState
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
 import com.moly3.dataviz.block.model.StylusPoint
-import com.moly3.dataviz.block.model.SaveableOffset
 import kotlin.math.abs
 
 @Composable
@@ -57,19 +56,19 @@ fun Canvas(
     settings: CanvasSettings,
     zoom: Float,
     roundToNearest: Int?,
-    userCoordinate: SaveableOffset,
+    userCoordinate: Offset,
     isDrawing: Boolean,
     shapes: List<Shape>,
     connections: List<ArcConnection>,
     drawingPaths: List<StylusPath>,
     onActionSet: (Action?) -> Unit,
     onAddPath: (StylusPath) -> Unit,
-    onMoveShape: (Int, SaveableOffset) -> Unit,
-    onResizeShape: (Int, SaveableOffset, SaveableOffset) -> Unit,
+    onMoveShape: (Int, Offset) -> Unit,
+    onResizeShape: (Int, Offset, Offset) -> Unit,
     onAddConnection: (ArcConnection) -> Unit,
     onZoomChange: (Float) -> Unit,
-    onUserCoordinateChange: (SaveableOffset) -> Unit,
-    settingsPanel: @Composable (position: SaveableOffset, action: Action, onDoneAction: () -> Unit) -> Unit,
+    onUserCoordinateChange: (Offset) -> Unit,
+    settingsPanel: @Composable (position: Offset, action: Action, onDoneAction: () -> Unit) -> Unit,
     onDrawBlock: @Composable (DrawShapeState) -> Unit,
 ) {
     var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
@@ -82,8 +81,8 @@ fun Canvas(
     val strokeWidth = remember { Animatable(1f) }
 
     val isHomeHoldState = remember { mutableStateOf(false) }
-    val cursorPositionState = remember { mutableStateOf(SaveableOffset(0.0F, 0.0F)) }
-    val centerOfScreenState = remember { mutableStateOf(SaveableOffset(0.0F, 0.0F)) }
+    val cursorPositionState = remember { mutableStateOf(Offset(0.0F, 0.0F)) }
+    val centerOfScreenState = remember { mutableStateOf(Offset(0.0F, 0.0F)) }
 
 
     val centerOfScreen = remember(centerOfScreenState.value) { centerOfScreenState.value }
@@ -209,7 +208,7 @@ fun Canvas(
                         .fillMaxSize()
                         .onGloballyPositioned {
                             centerOfScreenState.value =
-                                SaveableOffset(
+                                Offset(
                                     it.size.width.toFloat(),
                                     it.size.height.toFloat()
                                 ) / 2f
@@ -275,7 +274,7 @@ fun Canvas(
             }
         }
         Box(Modifier.fillMaxSize()) {
-            val center: SaveableOffset? =
+            val center: Offset? =
                 remember(
                     action,
                     zoom,
@@ -291,36 +290,36 @@ fun Canvas(
                         val dragAction = dragActionState.value
                         val addOffset = if (dragAction != null) {
                             when (dragAction.dragType) {
-                                is DragType.Connection -> SaveableOffset.Zero
+                                is DragType.Connection -> Offset.Zero
                                 is DragType.Resize -> {
                                     when (action) {
-                                        is Action.Connection -> SaveableOffset.Zero
-                                        is Action.DoubleClicked -> SaveableOffset.Zero
+                                        is Action.Connection -> Offset.Zero
+                                        is Action.DoubleClicked -> Offset.Zero
                                         is Action.Shape -> {
                                             if (action.shape.id == dragAction.dragType.shapeId) {
                                                 dragAction.accelerate.copy(y = 0f) / 2f
                                             } else {
-                                                SaveableOffset.Zero
+                                                Offset.Zero
                                             }
                                         }
                                     }
                                 }
                                 is DragType.Shape -> {
                                     when (action) {
-                                        is Action.Connection -> SaveableOffset.Zero
-                                        is Action.DoubleClicked -> SaveableOffset.Zero
+                                        is Action.Connection -> Offset.Zero
+                                        is Action.DoubleClicked -> Offset.Zero
                                         is Action.Shape -> {
                                             if (action.shape.id == dragAction.dragType.shapeId) {
                                                 dragAction.accelerate - dragAction.startMapPosition
                                             } else {
-                                                SaveableOffset.Zero
+                                                Offset.Zero
                                             }
                                         }
                                     }
 
                                 }
                             }
-                        } else SaveableOffset.Zero
+                        } else Offset.Zero
                         (action.getOffsetMenu(shapes = shapes) - userCoordinate + addOffset.roundToNearest(roundToNearest)) * zoom + centerOfScreen
                     }
                 }

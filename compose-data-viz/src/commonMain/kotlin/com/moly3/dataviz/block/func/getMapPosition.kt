@@ -1,15 +1,13 @@
 package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.block.model.SaveableOffset
-import com.moly3.dataviz.block.model.getWorldPosition
 
 fun getMapPosition(
-    position: SaveableOffset,
-    centerOfScreen: SaveableOffset,
+    position: Offset,
+    centerOfScreen: Offset,
     zoom: Float,
-    userCoordinate: SaveableOffset
-): SaveableOffset {
+    userCoordinate: Offset
+): Offset {
     val position = (position - centerOfScreen) / zoom + userCoordinate
     return position
 }

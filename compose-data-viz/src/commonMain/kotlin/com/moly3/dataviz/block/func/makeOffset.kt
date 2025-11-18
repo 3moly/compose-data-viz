@@ -6,17 +6,14 @@ import com.moly3.dataviz.block.model.BoxSide
 import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.SaveableOffset
-import com.moly3.dataviz.block.model.getValue
-import com.moly3.dataviz.block.model.getWorldPosition
 
 fun makeSideOffset(
     dragAction: DragAction?,
-    userCoordinate: SaveableOffset,
+    userCoordinate: Offset,
     boxSide: Shape,
     zoom: Float,
     side: BoxSide,
-): SaveableOffset {
+): Offset {
 
     val itemPosition =
         if (dragAction != null
@@ -64,31 +61,31 @@ fun makeSideOffset(
 }
 
 fun makeSideOffset(
-    itemPosition: SaveableOffset,
-    userCoordinate: SaveableOffset,
-    boxSize: SaveableOffset,
+    itemPosition: Offset,
+    userCoordinate: Offset,
+    boxSize: Offset,
     zoom: Float,
     side: BoxSide
-): SaveableOffset {
+): Offset {
     val base = when (side) {
-        BoxSide.LEFT -> SaveableOffset(-boxSize.x / 2, 0f)
-        BoxSide.TOP -> SaveableOffset(0f, -boxSize.y / 2)
-        BoxSide.RIGHT -> SaveableOffset(boxSize.x / 2, 0f)
-        BoxSide.BOTTOM -> SaveableOffset(0f, boxSize.y / 2)
+        BoxSide.LEFT -> Offset(-boxSize.x / 2, 0f)
+        BoxSide.TOP -> Offset(0f, -boxSize.y / 2)
+        BoxSide.RIGHT -> Offset(boxSize.x / 2, 0f)
+        BoxSide.BOTTOM -> Offset(0f, boxSize.y / 2)
     }
     return ((userCoordinate + (-(itemPosition + base) - boxSize / 2f)) * -1f * zoom)
 }
 
 fun makeSideWorldOffset(
-    itemPosition: SaveableOffset,
-    boxSize: SaveableOffset,
+    itemPosition: Offset,
+    boxSize: Offset,
     side: BoxSide
-): SaveableOffset {
+): Offset {
     val base = when (side) {
         BoxSide.LEFT -> Offset(0f, boxSize.y / 2f)
         BoxSide.TOP -> Offset(boxSize.x / 2, 0f)
         BoxSide.RIGHT -> Offset(boxSize.x, boxSize.y / 2f)
         BoxSide.BOTTOM -> Offset(boxSize.x / 2, boxSize.y)
     }
-    return (itemPosition.getValue() + base).getWorldPosition()
+    return (itemPosition + base)
 }

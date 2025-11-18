@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.block.func.absoluteOffset
@@ -26,16 +25,15 @@ import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.DragType
 import com.moly3.dataviz.block.model.DrawShapeState
 import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.SaveableOffset
+import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.block.model.allSides
-import com.moly3.dataviz.block.model.getValue
 
 @Composable
 fun BoxScope.DrawShapes(
-    mousePosition: SaveableOffset,
+    mousePosition: Offset,
     shapes: List<Shape>,
     dragActionState: MutableState<DragAction?>,
-    userCoordinate: SaveableOffset,
+    userCoordinate: Offset,
     zoom: Float,
     density: Float,
     action: Action?,
@@ -95,7 +93,7 @@ fun BoxScope.DrawShapes(
             if (isInSide) {
                 Box(
                     modifier = Modifier
-                        .absoluteOffset(sideOffset.getValue() / density)
+                        .absoluteOffset(sideOffset / density)
                         .size((sizeRound * zoom).dp / density)
                         .align(Alignment.Center)
                         .background(

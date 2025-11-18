@@ -16,7 +16,6 @@ import com.moly3.dataviz.block.model.ArcConnection
 import com.moly3.dataviz.block.model.ConnectionConfig
 import com.moly3.dataviz.block.model.DragAction
 import com.moly3.dataviz.block.model.DragType
-import com.moly3.dataviz.block.model.SaveableOffset
 import com.moly3.dataviz.block.model.Shape
 import com.moly3.dataviz.block.model.StylusPath
 import com.moly3.dataviz.block.model.StylusPoint
@@ -28,14 +27,14 @@ fun DrawConnections(
     modifier: Modifier,
     stylusPoint: List<StylusPoint>,
     paths: List<StylusPath>,
-    userCoordinate: SaveableOffset,
+    userCoordinate: Offset,
     dragActionState: MutableState<DragAction?>,
     shapes: List<Shape>,
     connections: List<ArcConnection>,
     config: ConnectionConfig,
     zoom: Float,
-    centerOfScreen: SaveableOffset,
-    cursorPosition: SaveableOffset,
+    centerOfScreen: Offset,
+    cursorPosition: Offset,
     action: Action?,
     selectedConnectionStrokeWidth: Float,
     lineColor: Color,
@@ -120,7 +119,7 @@ fun DrawConnections(
 
 fun DrawScope.drawCompletedPath(
     zoom: Float,
-    movementOffset: SaveableOffset,
+    movementOffset: Offset,
     path: StylusPath
 ) {
     withTransform({
