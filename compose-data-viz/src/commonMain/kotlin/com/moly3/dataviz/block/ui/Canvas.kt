@@ -135,7 +135,9 @@ fun Canvas(
                 centerOfScreen = centerOfScreen,
                 cursorPosition = cursorPosition,
                 dragAction = dragActionState.value,
-                sizeRound = sizeRound
+                sizeRound = sizeRound,
+                detectionPercent = 0.1f,
+                circleRadius = 12f
             )
         }
     val focusRequester = remember { FocusRequester() }
@@ -192,7 +194,8 @@ fun Canvas(
                     action = action,
                     onDrawBlock = onDrawBlock,
                     sideCircleColor = settings.sideCircleColor,
-                    roundToNearest = roundToNearest
+                    roundToNearest = roundToNearest,
+                    selectedShapeBorderColor = settings.selectedShapeBorderColor
                 )
                 val actionState = rememberUpdatedState(action)
                 val updatedShapes = rememberUpdatedState(shapes)
@@ -227,14 +230,12 @@ fun Canvas(
                             shapes = updatedShapes,
                             connections = updatedConnections,
 
-                            horizontalChange = {
-                                onUserCoordinateChange(userCoordinate.copy(x = userCoordinate.x - it * scaleMovementModifier))
-                            },
-                            verticalChange = {
-                                if (isHomeHoldState.value) {
-                                    onZoomChange(abs(zoomState.value + it / 100f))
+                            onScrollChange = {
+                                if (isHomeHoldState.value && it.y != 0f) {
+                                    onZoomChange(abs(zoomState.value + it.y / 100f))
                                 } else {
-                                    onUserCoordinateChange(userCoordinate.copy(y = userCoordinate.y - it * scaleMovementModifier))
+                                    val userCoordinate = userCoordinateState.value
+                                    onUserCoordinateChange(userCoordinate - it * scaleMovementModifier)
                                 }
                             },
                             onDrawStart = { point ->
@@ -302,6 +303,7 @@ fun Canvas(
                                         }
                                     }
                                 }
+
                                 is DragType.ShapeDrag -> {
                                     when (action) {
                                         is Action.Connection -> Offset.Zero
@@ -318,7 +320,9 @@ fun Canvas(
                                 }
                             }
                         } else Offset.Zero
-                        (action.getOffsetMenu(shapes = shapes) - userCoordinate + addOffset.roundToNearest(roundToNearest)) * zoom + centerOfScreen
+                        (action.getOffsetMenu(shapes = shapes) - userCoordinate + addOffset.roundToNearest(
+                            roundToNearest
+                        )) * zoom + centerOfScreen
                     }
                 }
             if (center != null && action != null) {

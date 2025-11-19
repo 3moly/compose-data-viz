@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+
 @OptIn(ExperimentalTime::class)
 fun Modifier.dashboard(
     scope: CoroutineScope,
@@ -45,8 +46,7 @@ fun Modifier.dashboard(
     onZoomChange: (Float) -> Unit,
     onUserCoordinateChange: (Offset) -> Unit,
 
-    horizontalChange: (Float) -> Unit,
-    verticalChange: (Float) -> Unit,
+    onScrollChange: (delta: Offset) -> Unit = {},
 
     onActionSet: (Action?) -> Unit,
     onAddConnection: (ArcConnection) -> Unit,
@@ -67,10 +67,8 @@ fun Modifier.dashboard(
                 val shapes = shapes.value
                 val connections = connections.value
                 println("onClick: shapes: ${shapes.size}")
-//                if (actionState.value is Action.DoubleClicked)
-//                    return@detectPointerTransformGestures
+
                 onClick()
-                //actionState.value = null
 
                 val mousePosition = getMapPosition(
                     offset,
@@ -140,8 +138,7 @@ fun Modifier.dashboard(
             onCursorMove = { cursorOffset ->
                 cursorPositionState.value = cursorOffset
             },
-            onHorizontalScrollChange = horizontalChange,
-            onVerticalScrollChange = verticalChange,
+            onScrollChange = onScrollChange,
             onGestureStart = { pointerChange ->
                 val shapes = shapes.value
                 val mousePosition = getMapPosition(
@@ -160,72 +157,97 @@ fun Modifier.dashboard(
                         )
                     )
                 } else {
-                    val foundShape =
-                        shapes.firstOrNull { x ->
-                            isInShape(
-                                mousePosition,
-                                x.position,
-                                x.size
-                            )
-                        }
-                    var foundResize: Pair<Shape, ResizeType>? = null
-                    for (shape in shapes) {
-                        val resizeType = isInResizeArea(
-                            mousePosition = mousePosition,
-                            shapePosition = shape.position,
-                            shapeSize = shape.size,
-                            detectionPercent = 0.1f
+                    val foundShape = shapes.firstNotNullOfOrNull { x ->
+                        val inShape = isInShapeComplex(
+                            mousePosition,
+                            x.position,
+                            x.size,
+                            circleRadius = 12f
                         )
-                        if (resizeType != null) {
-                            foundResize = Pair(shape, resizeType)
-                        }
+                        if (inShape != null) {
+                            Pair(x, inShape)
+                        } else
+                            null
                     }
-                    var foundSideShape: Pair<Shape, BoxSide>? = null
-                    for (shape in shapes) {
-                        for (side in allSides) {
-                            val isInSide = isInSidePosition(
-                                mousePosition = mousePosition,
-                                itemPosition = shape.position,
-                                boxSize = shape.size,
-                                side = side,
-                                radius = sizeRound / 2f
-                            )
-                            if (isInSide) {
-                                foundSideShape = Pair(shape, side)
-                                break
+                    if (foundShape != null) {
+                        val shape = foundShape.first
+                        when (val sh = foundShape.second) {
+                            InShape.Body -> {
+                                dragActionState.value = DragAction(
+                                    startMapPosition = shape.position,
+                                    accelerate = shape.position,
+                                    dragType = DragType.ShapeDrag(
+                                        shapeId = shape.id
+                                    )
+                                )
+                            }
+
+                            is InShape.Resize -> {
+                                dragActionState.value = DragAction(
+                                    startMapPosition = mousePosition,
+                                    accelerate = Offset(0f, 0f),
+                                    dragType = DragType.Resize(
+                                        shapeId = shape.id,
+                                        type = sh.resizeType,
+                                        boxSide = shape
+                                    )
+                                )
                             }
                         }
-                    }
-                    if (foundSideShape != null) {
-                        val foundShape = foundSideShape.first
-                        dragActionState.value = DragAction(
-                            startMapPosition = foundShape.position,
-                            accelerate = Offset(0f, 0f),
-                            dragType = DragType.Connection(
-                                startShapeId = foundShape.id,
-                                startShapeType = foundSideShape.second,
-                                boxSide = foundShape
+                    } else {
+                        var foundResize: Pair<Shape, ResizeType>? = null
+                        for (shape in shapes) {
+                            val resizeType = isInResizeArea(
+                                mousePosition = mousePosition,
+                                shapePosition = shape.position,
+                                shapeSize = shape.size,
+                                detectionPercent = 0.1f
                             )
-                        )
-                    } else if (foundResize != null) {
-                        val foundShape = foundResize.first
-                        dragActionState.value = DragAction(
-                            startMapPosition = mousePosition,
-                            accelerate = Offset(0f, 0f),
-                            dragType = DragType.Resize(
-                                shapeId = foundShape.id,
-                                type = foundResize.second,
-                                boxSide = foundShape
+                            if (resizeType != null) {
+                                foundResize = Pair(shape, resizeType)
+                            }
+                        }
+                        var foundSideShape: Pair<Shape, BoxSide>? = null
+                        for (shape in shapes) {
+                            for (side in allSides) {
+                                val isInSide = isInSidePosition(
+                                    mousePosition = mousePosition,
+                                    itemPosition = shape.position,
+                                    boxSize = shape.size,
+                                    side = side,
+                                    radius = sizeRound / 2f
+                                )
+                                if (isInSide) {
+                                    foundSideShape = Pair(shape, side)
+                                    break
+                                }
+                            }
+                        }
+                        if (foundSideShape != null) {
+                            val foundShape = foundSideShape.first
+                            dragActionState.value = DragAction(
+                                startMapPosition = foundShape.position,
+                                accelerate = Offset(0f, 0f),
+                                dragType = DragType.Connection(
+                                    startShapeId = foundShape.id,
+                                    startShapeType = foundSideShape.second,
+                                    boxSide = foundShape
+                                )
                             )
-                        )
-                    } else if (foundShape != null) {
-                        dragActionState.value = DragAction(
-                            startMapPosition = foundShape.position,
-                            accelerate = foundShape.position,
-                            dragType = DragType.ShapeDrag(
-                                shapeId = foundShape.id
+                        } else if (foundResize != null) {
+                            val foundShape = foundResize.first
+                            dragActionState.value = DragAction(
+                                startMapPosition = mousePosition,
+                                accelerate = Offset(0f, 0f),
+                                dragType = DragType.Resize(
+                                    shapeId = foundShape.id,
+                                    type = foundResize.second,
+                                    boxSide = foundShape
+                                )
                             )
-                        )
+                        } else if (foundShape != null) {
+
+                        }
                     }
                 }
             },

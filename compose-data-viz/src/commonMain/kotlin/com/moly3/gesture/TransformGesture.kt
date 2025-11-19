@@ -197,8 +197,7 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
     onClick: (Offset) -> Unit = {},
     onDoubleClick: (Offset) -> Unit = {}, // Add double-click callback
     onCursorMove: (Offset) -> Unit = {},
-    onHorizontalScrollChange: (delta: Float) -> Unit = {},
-    onVerticalScrollChange: (delta: Float) -> Unit = {},
+    onScrollChange: (delta: Offset) -> Unit = {},
     onGestureStart: (PointerInputChange) -> Unit = {},
     onGesture:
         (
@@ -230,11 +229,8 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                 event.changes.forEach { pointerInputChange ->
                     onCursorMove(pointerInputChange.position)
                     pointerInputChange.scrollDelta.let {
-                        if (it.x != 0f) {
-                            onHorizontalScrollChange(-it.x)
-                        }
-                        if (it.y != 0f) {
-                            onVerticalScrollChange(-it.y)
+                        if (it.x != 0f || it.y != 0f) {
+                            onScrollChange(Offset(-it.x, -it.y))
                         }
                     }
                 }

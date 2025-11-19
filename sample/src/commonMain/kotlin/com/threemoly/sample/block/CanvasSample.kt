@@ -1,18 +1,16 @@
 package com.threemoly.sample.block
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,29 +23,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.mikepenz.hypnoticcanvas.shaderBackground
 import com.moly3.dataviz.block.func.absoluteOffset
+import com.moly3.dataviz.block.ui.Canvas
 import com.moly3.dataviz.core.block.model.Action
 import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.BoxSide
 import com.moly3.dataviz.core.block.model.CanvasSettings
 import com.moly3.dataviz.core.block.model.Shape
 import com.moly3.dataviz.core.block.model.StylusPath
 import com.moly3.dataviz.func.darker
-import com.moly3.dataviz.block.ui.Canvas
-import androidx.compose.ui.geometry.Offset
 import com.threemoly.sample.shader.UmlShader
+import com.threemoly.sample.uikit.SettingsPanel
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import kotlin.collections.listOf
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -61,19 +59,41 @@ data class MyShape(
 @OptIn(ExperimentalTime::class)
 @Composable
 fun CanvasSample() {
-//    val hazeStyle = remember(back) {
-//        HazeStyle(
-//            backgroundColor = backgroundSecondary,
-//            tints = listOf(HazeTint(back.copy(0.1f))),
-//            blurRadius = 4.dp,
-//            noiseFactor = HazeDefaults.noiseFactor
-//        )
-//    }
-    val shapes = remember<SnapshotStateList<Shape>> {
-        mutableStateListOf()
+    val shapes = remember {
+        mutableStateListOf(
+            MyShape(
+                id = 1L,
+                color = Color.Red,
+                position = Offset(-200f, 0f),
+                size = Offset(100f, 50f)
+            ),
+            MyShape(
+                id = 2L,
+                color = Color.Cyan,
+                position = Offset(200f, -100f),
+                size = Offset(100f, 150f)
+            ),
+        )
     }
-    val connections = remember<SnapshotStateList<ArcConnection>> {
-        mutableStateListOf()
+    val connections = remember {
+        mutableStateListOf(
+            ArcConnection(
+                id = 0L,
+                fromSide = BoxSide.RIGHT,
+                toSide = BoxSide.LEFT,
+                fromBox = 1L,
+                toBox = 2L,
+                color = Color.Magenta
+            ),
+            ArcConnection(
+                id = 1L,
+                fromSide = BoxSide.TOP,
+                toSide = BoxSide.BOTTOM,
+                fromBox = 2L,
+                toBox = 1L,
+                color = Color.Green
+            )
+        )
     }
     val paths = remember<SnapshotStateList<StylusPath>> {
         mutableStateListOf()
@@ -91,7 +111,8 @@ fun CanvasSample() {
     }
     val actionState = remember { mutableStateOf<Action?>(value = null) }
 
-
+    val isShowSettings = remember { mutableStateOf(false) }
+    val settingsWidth by animateDpAsState(if (isShowSettings.value) 130.dp else 48.dp)
     val zoomState = remember { mutableStateOf(1f) }
     val strokeWidthState = remember { mutableStateOf(1f) }
     val roundToNearest = remember { mutableStateOf(0) }
@@ -105,11 +126,12 @@ fun CanvasSample() {
         selectedShader.zoom = zoomState.value
         selectedShader.dotSpacing = 50f
     }
-    val canvasSettings = remember(strokeWidthState.value){
+    val canvasSettings = remember(strokeWidthState.value) {
         CanvasSettings(
             strokeWidth = strokeWidthState.value,
             defaultLineColor = Color.Cyan,
-            sideCircleColor = Color.Blue
+            sideCircleColor = Color.Blue,
+            selectedShapeBorderColor = Color.Blue
         )
     }
     Box(modifier = Modifier.fillMaxSize()) {
@@ -138,10 +160,10 @@ fun CanvasSample() {
             connections = connections,
             onMoveShape = { index, position ->
 
-                shapes[index] = (shapes[index] as MyShape).copy(position = position)
+                shapes[index] = shapes[index].copy(position = position)
             },
             onResizeShape = { index, position, size ->
-                shapes[index] = (shapes[index] as MyShape).copy(position = position, size = size)
+                shapes[index] = shapes[index].copy(position = position, size = size)
             },
             onAddConnection = { connection ->
                 connections.add(connection)
@@ -211,15 +233,12 @@ fun CanvasSample() {
                 paths.add(path.copy(color = Color.Cyan))
             }
         )
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .align(Alignment.TopEnd)
-                .width(170.dp)
-                .background(Color.White)
-                .padding(8.dp)
-                .clip(RoundedCornerShape(8.dp))
-        ) {
+        SettingsPanel(
+            backgroundColor = Color.White,
+            isShowSettings = isShowSettings.value,
+            onSetSettings = {
+                isShowSettings.value = !isShowSettings.value
+            }) {
             Slider(
                 modifier = Modifier,
                 value = zoomState.value,

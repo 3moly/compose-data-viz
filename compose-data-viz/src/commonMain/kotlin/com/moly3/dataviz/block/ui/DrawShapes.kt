@@ -1,10 +1,12 @@
 package com.moly3.dataviz.block.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,9 @@ import com.moly3.dataviz.core.block.model.Shape
 import com.moly3.dataviz.core.block.model.allSides
 import androidx.compose.ui.geometry.Offset
 
+
+val borderPadding = 1.dp
+
 @Composable
 fun BoxScope.DrawShapes(
     mousePosition: Offset,
@@ -38,6 +43,7 @@ fun BoxScope.DrawShapes(
     density: Float,
     action: Action?,
     sideCircleColor: Color,
+    selectedShapeBorderColor: Color,
     roundToNearest: Int?,
     onDrawBlock: @Composable (DrawShapeState) -> Unit,
 ) {
@@ -58,12 +64,21 @@ fun BoxScope.DrawShapes(
                     action is Action.ShapeAction &&
                     action.shape.id == item.id
         }
+
         Box(
             modifier = Modifier
                 .absoluteOffset(shapeParams.offset.x, shapeParams.offset.y)
-                .width(shapeParams.itemWidth)
-                .height(shapeParams.itemHeight)
+                .width(shapeParams.itemWidth + borderPadding)
+                .height(shapeParams.itemHeight + borderPadding)
                 .align(Alignment.Center)
+                .let {
+                    if (isSelected) {
+                        it.border(borderPadding, selectedShapeBorderColor)
+                    } else {
+                        it
+                    }
+                }.padding(borderPadding)
+
         ) {
             onDrawBlock(
                 DrawShapeState(
@@ -72,6 +87,40 @@ fun BoxScope.DrawShapes(
                     isDoubleClicked = action is Action.DoubleClicked && item.id == action.shape.id
                 )
             )
+        }
+
+        // Draw corner circles
+        if (isSelected) {
+            val cornerCircleSize = 12
+            val corners = listOf(
+                Offset(-0f, -0f), // Top-left
+                Offset(1f, -0f),  // Top-right
+                Offset(0f, 1f),  // Bottom-left
+                Offset(1f, 1f)    // Bottom-right
+            )
+            for (corner in corners) {
+                val cornerOffset = Offset(
+                    x = shapeParams.itemPosition.x + (item.size.x * corner.x),
+                    y = shapeParams.itemPosition.y + (item.size.y * corner.y)
+                ) - userCoordinate
+
+                Box(
+                    modifier = Modifier
+                        .absoluteOffset(cornerOffset * zoom / density)
+                        .size((cornerCircleSize * zoom).dp / density)
+                        .align(Alignment.Center)
+                        .background(
+                            color = Color.White,
+                            RoundedCornerShape((cornerCircleSize * zoom).dp)
+                        )
+                        .border(
+                            width = (1.5f * zoom).dp / density,
+                            color = Color.Gray,
+                            shape = RoundedCornerShape((cornerCircleSize * zoom).dp)
+                        )
+                        .clip(RoundedCornerShape((cornerCircleSize * zoom).dp)),
+                ) {}
+            }
         }
 
         val sizeRound = 25

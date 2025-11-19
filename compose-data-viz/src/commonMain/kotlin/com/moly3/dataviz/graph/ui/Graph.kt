@@ -119,9 +119,11 @@ fun <Id, Data> Graph(
                     scope = scope,
                     numberOfPointers = 0,
                     requisite = PointerRequisite.GreaterThan,
-                    onVerticalScrollChange = {
-                        val newZoom = latestZoom * if (it > 0) 1.1f else 0.9f
-                        onZoomChange(newZoom)
+                    onScrollChange = {
+                        if (it.y != 0f) {
+                            val newZoom = latestZoom * if (it.y > 0) 1.1f else 0.9f
+                            onZoomChange(newZoom)
+                        }
                     },
                     onClick = { position ->
                         scope.launch(io) {
@@ -246,7 +248,7 @@ fun <Id, Data> Graph(
         zoom = zoom,
         circleRadius = viewSettings.circleSize,
         watchNodeId = watchNodeId,
-        primaryColor =primaryColor,
+        primaryColor = primaryColor,
         circleColor = circleColor,
         circleLineColor = circleLineColor,
         fontColor = fontColor

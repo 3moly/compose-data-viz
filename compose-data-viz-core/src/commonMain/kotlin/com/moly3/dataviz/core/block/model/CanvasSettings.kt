@@ -6,6 +6,7 @@ data class CanvasSettings(
     val strokeWidth: Float = 1f,
     val defaultLineColor: Color,
     val sideCircleColor: Color,
+    val selectedShapeBorderColor: Color,
     val hitThreshold: Float = 15f,
     val stubLength: Float = 1f,
     val controlPointer: Float = 1f,
