@@ -19,7 +19,7 @@ import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.graph.func.getNodeConnections
 import com.moly3.dataviz.graph.func.getNodeOffset
 import com.moly3.dataviz.func.half
-import com.moly3.dataviz.graph.model.GraphNode
+import com.moly3.dataviz.core.graph.model.GraphNode
 
 @Composable
 internal fun <Id, Data> GraphInternal(

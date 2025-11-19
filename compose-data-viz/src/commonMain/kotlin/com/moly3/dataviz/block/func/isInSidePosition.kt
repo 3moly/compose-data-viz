@@ -1,7 +1,7 @@
 package com.moly3.dataviz.block.func
 
-import com.moly3.dataviz.block.model.BoxSide
 import androidx.compose.ui.geometry.Offset
+import com.moly3.dataviz.core.block.model.BoxSide
 
 fun isInSidePosition(
     mousePosition: Offset,

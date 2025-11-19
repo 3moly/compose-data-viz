@@ -12,6 +12,17 @@ plugins {
 
 kotlin {
     applyDefaultHierarchyTemplate()
+
+    jvm()
+    androidTarget()
+
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+
+    macosX64()
+    macosArm64()
+
     js {
         browser {
             commonWebpackConfig {
@@ -27,19 +38,6 @@ kotlin {
             }
         }
         binaries.executable()
-    }
-    jvm()
-    androidTarget()
-
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach {
-        it.binaries.framework {
-            baseName = "sample"
-            isStatic = true
-        }
     }
 
     //noinspection UseTomlInstead

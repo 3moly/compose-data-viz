@@ -1,11 +1,11 @@
 package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.unit.Density
-import com.moly3.dataviz.block.model.ArcConnection
-import com.moly3.dataviz.block.model.ConnectionConfig
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.SelectedConnection
+import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.ConnectionConfig
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.SelectedConnection
 import androidx.compose.ui.geometry.Offset
 
 internal fun findConnection(

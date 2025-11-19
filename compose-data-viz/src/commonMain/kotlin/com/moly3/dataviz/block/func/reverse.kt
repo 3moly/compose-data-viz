@@ -1,13 +1,6 @@
-package com.moly3.dataviz.block.model
+package com.moly3.dataviz.block.func
 
-enum class BoxSide { LEFT, TOP, RIGHT, BOTTOM }
-
-val allSides = listOf(
-    BoxSide.TOP,
-    BoxSide.LEFT,
-    BoxSide.RIGHT,
-    BoxSide.BOTTOM,
-)
+import com.moly3.dataviz.core.block.model.BoxSide
 
 fun BoxSide.reverse(): BoxSide {
     return when (this) {

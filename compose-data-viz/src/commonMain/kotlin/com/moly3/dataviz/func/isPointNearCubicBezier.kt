@@ -1,9 +1,6 @@
 package com.moly3.dataviz.func
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.Density
-import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.ConnectionConfig
 
 private fun isPointNearCubicBezier(
     p: Offset,

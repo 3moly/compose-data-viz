@@ -1,7 +1,7 @@
 package com.moly3.dataviz.block.func
 
-import com.moly3.dataviz.block.model.ResizeType
 import androidx.compose.ui.geometry.Offset
+import com.moly3.dataviz.core.block.model.ResizeType
 
 fun isInResizeArea(
     mousePositionX: Float,

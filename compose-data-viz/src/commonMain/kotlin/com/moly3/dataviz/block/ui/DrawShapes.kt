@@ -20,13 +20,13 @@ import com.moly3.dataviz.block.func.absoluteOffset
 import com.moly3.dataviz.block.func.calculateShapeParams
 import com.moly3.dataviz.block.func.isInSidePosition
 import com.moly3.dataviz.block.func.makeSideOffset
-import com.moly3.dataviz.block.model.Action
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.DragType
-import com.moly3.dataviz.block.model.DrawShapeState
-import com.moly3.dataviz.block.model.Shape
+import com.moly3.dataviz.core.block.model.Action
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.DragType
+import com.moly3.dataviz.core.block.model.DrawShapeState
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.allSides
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.block.model.allSides
 
 @Composable
 fun BoxScope.DrawShapes(
@@ -53,9 +53,9 @@ fun BoxScope.DrawShapes(
         val isSelected = remember(item.id, dragActionState.value, action) {
             val dragAction = dragActionState.value
             dragAction != null &&
-                    dragAction.dragType is DragType.Shape &&
-                    dragAction.dragType.shapeId == item.id ||
-                    action is Action.Shape &&
+                    dragAction.dragType is DragType.ShapeDrag &&
+                    (dragAction.dragType as DragType.ShapeDrag).shapeId == item.id ||
+                    action is Action.ShapeAction &&
                     action.shape.id == item.id
         }
         Box(

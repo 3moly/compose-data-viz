@@ -3,8 +3,8 @@ package com.moly3.dataviz.block.func
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.ConnectionConfig
+import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.ConnectionConfig
 import com.moly3.dataviz.func.calculateControlPoints
 import com.moly3.dataviz.func.calculateStubAndCurvePoints
 import kotlin.math.sqrt

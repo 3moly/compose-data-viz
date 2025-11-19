@@ -6,17 +6,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import com.moly3.dataviz.block.minShapeSize
-import com.moly3.dataviz.block.model.Action
-import com.moly3.dataviz.block.model.ArcConnection
-import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.ConnectionConfig
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.DragType
-import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.ResizeType
-import com.moly3.dataviz.block.model.StylusPoint
+import com.moly3.dataviz.core.block.model.Action
+import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.ConnectionConfig
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.DragType
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.ResizeType
+import com.moly3.dataviz.core.block.model.StylusPoint
+import com.moly3.dataviz.core.block.model.allSides
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.block.model.allSides
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
 import kotlinx.coroutines.CoroutineScope
@@ -92,10 +92,10 @@ fun Modifier.dashboard(
                         if ((actionState.value as Action.DoubleClicked).shape.id == foundShape.id) {
 
                         } else {
-                            onActionSet(Action.Shape(foundShape))
+                            onActionSet(Action.ShapeAction(foundShape))
                         }
                     } else {
-                        onActionSet(Action.Shape(foundShape))
+                        onActionSet(Action.ShapeAction(foundShape))
                     }
 
                 } else {
@@ -222,7 +222,7 @@ fun Modifier.dashboard(
                         dragActionState.value = DragAction(
                             startMapPosition = foundShape.position,
                             accelerate = foundShape.position,
-                            dragType = DragType.Shape(
+                            dragType = DragType.ShapeDrag(
                                 shapeId = foundShape.id
                             )
                         )
@@ -321,7 +321,7 @@ fun Modifier.dashboard(
                                 }
                             }
 
-                            is DragType.Shape -> {
+                            is DragType.ShapeDrag -> {
                                 val foundIndex =
                                     shapes.indexOfFirst { x -> x.id == action.shapeId }
                                 if (foundIndex != -1) {

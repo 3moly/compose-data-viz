@@ -32,16 +32,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.mikepenz.hypnoticcanvas.shaderBackground
 import com.moly3.dataviz.block.func.absoluteOffset
-import com.moly3.dataviz.block.model.Action
-import com.moly3.dataviz.block.model.ArcConnection
-import com.moly3.dataviz.block.model.CanvasSettings
-import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.StylusPath
-import androidx.compose.ui.geometry.Offset
-
-import com.moly3.dataviz.block.ui.Canvas
-import com.threemoly.sample.shader.UmlShader
+import com.moly3.dataviz.core.block.model.Action
+import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.CanvasSettings
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.StylusPath
 import com.moly3.dataviz.func.darker
+import com.moly3.dataviz.block.ui.Canvas
+import androidx.compose.ui.geometry.Offset
+import com.threemoly.sample.shader.UmlShader
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -174,7 +173,7 @@ fun CanvasSample() {
                     is Action.DoubleClicked -> {}
 
                     is Action.Connection,
-                    is Action.Shape -> {
+                    is Action.ShapeAction -> {
                         Row(
                             Modifier
                                 .absoluteOffset(
@@ -194,7 +193,7 @@ fun CanvasSample() {
                                     }
 
                                     is Action.DoubleClicked -> TODO()
-                                    is Action.Shape -> {
+                                    is Action.ShapeAction -> {
                                         shapes.remove(action.shape)
                                     }
                                 }

@@ -5,9 +5,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import com.moly3.dataviz.block.model.Action
-import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.ConnectionConfig
+import com.moly3.dataviz.core.block.model.Action
+import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.ConnectionConfig
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos

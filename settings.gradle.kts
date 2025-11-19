@@ -12,8 +12,9 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "compose-data-viz-library"
+rootProject.name = "compose-data-viz-lib"
 include(
     ":compose-data-viz",
+    ":compose-data-viz-core",
     ":sample"
 )

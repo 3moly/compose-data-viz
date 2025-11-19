@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -35,16 +33,16 @@ import com.moly3.dataviz.block.func.calculatePointer
 import com.moly3.dataviz.block.func.dashboard
 import com.moly3.dataviz.block.func.getMapPosition
 import com.moly3.dataviz.block.func.roundToNearest
-import com.moly3.dataviz.block.model.Action
-import com.moly3.dataviz.block.model.ArcConnection
-import com.moly3.dataviz.block.model.CanvasSettings
-import com.moly3.dataviz.block.model.ConnectionConfig
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.DragType
-import com.moly3.dataviz.block.model.DrawShapeState
-import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.StylusPath
-import com.moly3.dataviz.block.model.StylusPoint
+import com.moly3.dataviz.core.block.model.Action
+import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.CanvasSettings
+import com.moly3.dataviz.core.block.model.ConnectionConfig
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.DragType
+import com.moly3.dataviz.core.block.model.DrawShapeState
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.StylusPath
+import com.moly3.dataviz.core.block.model.StylusPoint
 import kotlin.math.abs
 
 @Composable
@@ -295,8 +293,8 @@ fun Canvas(
                                     when (action) {
                                         is Action.Connection -> Offset.Zero
                                         is Action.DoubleClicked -> Offset.Zero
-                                        is Action.Shape -> {
-                                            if (action.shape.id == dragAction.dragType.shapeId) {
+                                        is Action.ShapeAction -> {
+                                            if (action.shape.id == (dragAction.dragType as DragType.Resize).shapeId) {
                                                 dragAction.accelerate.copy(y = 0f) / 2f
                                             } else {
                                                 Offset.Zero
@@ -304,12 +302,12 @@ fun Canvas(
                                         }
                                     }
                                 }
-                                is DragType.Shape -> {
+                                is DragType.ShapeDrag -> {
                                     when (action) {
                                         is Action.Connection -> Offset.Zero
                                         is Action.DoubleClicked -> Offset.Zero
-                                        is Action.Shape -> {
-                                            if (action.shape.id == dragAction.dragType.shapeId) {
+                                        is Action.ShapeAction -> {
+                                            if (action.shape.id == (dragAction.dragType as DragType.ShapeDrag).shapeId) {
                                                 dragAction.accelerate - dragAction.startMapPosition
                                             } else {
                                                 Offset.Zero

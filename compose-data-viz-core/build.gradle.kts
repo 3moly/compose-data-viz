@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.maven.publish)
+    alias(libs.plugins.serialization)
 }
 
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
@@ -36,7 +37,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(compose.foundation)
-            api(projects.composeDataVizCore)
+            implementation(libs.serialization)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -45,7 +46,7 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.moly3.composedataviz"
+    namespace = "io.github.moly3.composedatavizcore"
     compileSdk = 36
     defaultConfig {
         minSdk = 21
@@ -62,7 +63,7 @@ mavenPublishing {
 
     coordinates(
         "io.github.3moly",
-        "compose-data-viz",
-        libs.versions.composedataviz.get()
+        "compose-data-viz-core",
+        libs.versions.composedatavizcore.get()
     )
 }

@@ -2,10 +2,10 @@ package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.block.minShapeSize
-import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.DragType
-import com.moly3.dataviz.block.model.Shape
+import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.DragType
+import com.moly3.dataviz.core.block.model.Shape
 
 fun makeSideOffset(
     dragAction: DragAction?,
@@ -18,16 +18,16 @@ fun makeSideOffset(
     val itemPosition =
         if (dragAction != null
         ) {
-            if (dragAction.dragType is DragType.Shape &&
-                dragAction.dragType.shapeId == boxSide.id
+            if (dragAction.dragType is DragType.ShapeDrag &&
+                (dragAction.dragType as DragType.ShapeDrag).shapeId == boxSide.id
             ) {
                 dragAction.accelerate
             } else if (dragAction.dragType is DragType.Resize &&
-                dragAction.dragType.shapeId == boxSide.id
+                (dragAction.dragType as DragType.Resize).shapeId == boxSide.id
             ) {
                 (boxSide.position + resizePosition(
                     dragAction.accelerate,
-                    dragAction.dragType.type
+                    (dragAction.dragType as DragType.Resize).type
                 ))
             } else boxSide.position
         } else
@@ -35,16 +35,16 @@ fun makeSideOffset(
 
     val itemSize =
         if (dragAction != null) {
-            if (dragAction.dragType is DragType.Shape &&
-                dragAction.dragType.shapeId == boxSide.id
+            if (dragAction.dragType is DragType.ShapeDrag &&
+                (dragAction.dragType as DragType.ShapeDrag).shapeId == boxSide.id
             ) {
                 boxSide.size
             } else if (dragAction.dragType is DragType.Resize &&
-                dragAction.dragType.shapeId == boxSide.id
+                (dragAction.dragType as DragType.Resize).shapeId == boxSide.id
             ) {
                 (boxSide.size + resizeSize(
                     dragAction.accelerate,
-                    dragAction.dragType.type,
+                    (dragAction.dragType as DragType.Resize).type,
                     roundToNearest = null
                 )).keepCurrentOrMin(minShapeSize)
             } else boxSide.size

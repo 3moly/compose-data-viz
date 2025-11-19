@@ -1,4 +1,4 @@
-package com.moly3.dataviz.block.model
+package com.moly3.dataviz.core.block.model
 
 enum class DetectionType {
     Box,

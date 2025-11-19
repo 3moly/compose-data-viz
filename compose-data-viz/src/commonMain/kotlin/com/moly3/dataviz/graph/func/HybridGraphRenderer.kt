@@ -1,8 +1,8 @@
 package com.moly3.dataviz.graph.func
 
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.graph.model.GraphNode
-import com.moly3.dataviz.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GraphNode
+import com.moly3.dataviz.core.graph.model.GraphViewSettings
 import com.moly3.dataviz.graph.ui.DragNodeData
 import kotlin.math.*
 import kotlinx.coroutines.*

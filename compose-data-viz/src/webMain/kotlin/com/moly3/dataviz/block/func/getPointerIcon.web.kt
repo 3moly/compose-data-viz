@@ -3,7 +3,7 @@ package com.moly3.dataviz.block.func
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.fromKeyword
-import com.moly3.dataviz.block.model.PointerIconType
+import com.moly3.dataviz.core.block.model.PointerIconType
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual fun getPointerIcon(type: PointerIconType): PointerIcon {

@@ -1,7 +1,7 @@
 package com.threemoly.sample.graph
 
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GraphViewSettings
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf

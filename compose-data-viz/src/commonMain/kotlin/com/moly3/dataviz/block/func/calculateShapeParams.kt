@@ -2,12 +2,12 @@ package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.block.minShapeSize
-import com.moly3.dataviz.block.model.Coords
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.DragType
+import com.moly3.dataviz.core.block.model.Coords
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.DragType
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.ShapeParams
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.ShapeParams
 
 fun calculateShapeParams(
     item: Shape,
@@ -19,15 +19,15 @@ fun calculateShapeParams(
 ): ShapeParams {
     val itemPosition = if (dragAction != null
     ) {
-        if (dragAction.dragType is DragType.Shape &&
-            dragAction.dragType.shapeId == item.id
+        if (dragAction.dragType is DragType.ShapeDrag &&
+            (dragAction.dragType as DragType.ShapeDrag).shapeId == item.id
         ) {
             dragAction.accelerate
         } else if (
             dragAction.dragType is DragType.Resize &&
-            dragAction.dragType.shapeId == item.id
+            (dragAction.dragType as DragType.Resize).shapeId == item.id
         ) {
-            val resizeType = dragAction.dragType.type
+            val resizeType = (dragAction.dragType as DragType.Resize).type
             val accelerate = dragAction.accelerate
             val resizePosition = resizePosition(accelerate, resizeType)
             (item.position + resizePosition)
@@ -38,9 +38,9 @@ fun calculateShapeParams(
 
     val addOffset = if (dragAction != null &&
         dragAction.dragType is DragType.Resize &&
-        dragAction.dragType.shapeId == item.id
+        (dragAction.dragType as DragType.Resize).shapeId == item.id
     ) {
-        val resizeType = dragAction.dragType.type
+        val resizeType = (dragAction.dragType as DragType.Resize).type
         val accelerate = dragAction.accelerate
 
         resizeSize(accelerate, resizeType, roundToNearest = roundToNearest)

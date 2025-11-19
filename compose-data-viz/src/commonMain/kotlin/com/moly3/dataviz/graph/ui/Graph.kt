@@ -20,8 +20,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.graph.func.HybridGraphRenderer
 import com.moly3.dataviz.graph.func.isNodeTapped
-import com.moly3.dataviz.graph.model.GraphNode
-import com.moly3.dataviz.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GraphNode
+import com.moly3.dataviz.core.graph.model.GraphViewSettings
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
 import kotlinx.coroutines.delay

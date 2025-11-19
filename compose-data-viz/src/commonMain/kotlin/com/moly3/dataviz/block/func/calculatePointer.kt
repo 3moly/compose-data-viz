@@ -2,16 +2,16 @@ package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerIcon
-import com.moly3.dataviz.block.model.ArcConnection
-import com.moly3.dataviz.block.model.BoxSide
-import com.moly3.dataviz.block.model.ConnectionConfig
-import com.moly3.dataviz.block.model.DetectionType
-import com.moly3.dataviz.block.model.DragAction
-import com.moly3.dataviz.block.model.Shape
-import com.moly3.dataviz.block.model.PointerDetection
-import com.moly3.dataviz.block.model.PointerIconType
-import com.moly3.dataviz.block.model.ResizeType
-import com.moly3.dataviz.block.model.allSides
+import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.ConnectionConfig
+import com.moly3.dataviz.core.block.model.DetectionType
+import com.moly3.dataviz.core.block.model.DragAction
+import com.moly3.dataviz.core.block.model.Shape
+import com.moly3.dataviz.core.block.model.PointerDetection
+import com.moly3.dataviz.core.block.model.PointerIconType
+import com.moly3.dataviz.core.block.model.ResizeType
+import com.moly3.dataviz.core.block.model.allSides
 
 fun calculatePointer(
     shapes: List<Shape>,

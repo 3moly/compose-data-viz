@@ -1,7 +1,7 @@
 package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.input.pointer.PointerIcon
-import com.moly3.dataviz.block.model.PointerIconType
+import com.moly3.dataviz.core.block.model.PointerIconType
 import java.awt.Cursor
 
 actual fun getPointerIcon(type: PointerIconType): PointerIcon {

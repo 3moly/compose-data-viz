@@ -1,7 +1,7 @@
 package com.moly3.dataviz.graph.func
 
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.graph.model.GraphNode
+import com.moly3.dataviz.core.graph.model.GraphNode
 
 fun <Id, Data> GraphNode<Id, Data>.getNodeOffset(
     node: GraphNode<Id, Data> = this,
