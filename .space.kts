@@ -1,3 +1,4 @@
+
 job("publish wasm") {
     startOn {
         gitPush {
@@ -7,12 +8,12 @@ job("publish wasm") {
         }
     }
     container(image = "gradle:9.0-jdk17"){
-            env["SSH_HOST"] = "{{ project:SSH_HOST }}"
-            env["SSH_PRIVATE_KEY"] = "{{ project:SSH_PRIVATE_KEY }}"
-            env["BOT_TG_TOKEN"] = "{{ project:BOT_TG_TOKEN }}"
-            shellScript {
-                interpreter = "/bin/bash"
-                content = """
+        env["SSH_HOST"] = "{{ project:SSH_HOST }}"
+        env["SSH_PRIVATE_KEY"] = "{{ project:SSH_PRIVATE_KEY }}"
+        env["BOT_TG_TOKEN"] = "{{ project:BOT_TG_TOKEN }}"
+        shellScript {
+            interpreter = "/bin/bash"
+            content = """
                     apt-get update
                     apt-get install -y rsync openssh-client python3 python3-pip
                     
@@ -25,7 +26,7 @@ job("publish wasm") {
                     eval $(ssh-agent -s)
                     ssh-add ~/.ssh/id_ed25519
                     
-                    echo "Host ${'$'}{SSH_HOST" >> ~/.ssh/config
+                    echo "Host ${'$'}SSH_HOST" >> ~/.ssh/config
                     echo "    StrictHostKeyChecking no" >> ~/.ssh/config
                     echo "    UserKnownHostsFile=/dev/null" >> ~/.ssh/config
                     
@@ -36,6 +37,6 @@ job("publish wasm") {
                     
                     curl -F chat_id=253870633 -F text="compose-data-viz build {{ run:number }}" https://api.telegram.org/bot${'$'}BOT_TG_TOKEN/sendMessage
                 """
-            }
+        }
     }
 }
