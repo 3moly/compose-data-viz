@@ -70,7 +70,7 @@ const val sharkUrl =
     "https://i.redd.it/dqm6bph5mqxb1.jpg"
 
 const val anotherCatUrl =
-    "https://github.com/3moly/compose-data-viz/blob/main/docs/media/cat4.jpg?raw=true"
+    "https://composedataviz.3moly.com/images/cat4.jpg"
 
 @OptIn(ExperimentalTime::class)
 @Composable
