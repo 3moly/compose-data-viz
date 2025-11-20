@@ -11,10 +11,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,10 +29,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil3.compose.rememberAsyncImagePainter
@@ -58,6 +68,9 @@ const val dogUrl =
     "https://t3.ftcdn.net/jpg/08/28/49/30/360_F_828493018_Ntaia2HBMK7UHVFyP8jv0UrTcD7Fk7pw.jpg"
 const val sharkUrl =
     "https://i.redd.it/dqm6bph5mqxb1.jpg"
+
+const val anotherCatUrl =
+    "https://github.com/3moly/compose-data-viz/blob/main/docs/media/cat4.jpg?raw=true"
 
 @OptIn(ExperimentalTime::class)
 @Composable
@@ -108,6 +121,11 @@ fun CanvasSample(
         val index = shapes.indexOf(shape)
         shapes[index] = shapes[index].copy(data = ShapeData.ImageUrl(newPictureUrl))
     }
+
+    fun changeText(shape: CustomShape, newText: String) {
+        val index = shapes.indexOf(shape)
+        shapes[index] = shapes[index].copy(data = ShapeData.Text(newText))
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -150,7 +168,8 @@ fun CanvasSample(
                 val bgColor = if (shapeState.isDoubleClicked) {
                     Color.Yellow.copy(alpha = 0.2f)
                 } else {
-                    Color.Black.copy(alpha = 0.3f) // Dark semi-transparent
+                    (shapeState.shape.color
+                        ?: Color.Black).copy(alpha = 0.3f) // Dark semi-transparent
                 }
                 Box(
                     shapeState.modifier
@@ -196,6 +215,13 @@ fun CanvasSample(
                                         )
                                         actionState.value = null
                                     }
+                                    BButton(text = "cat2", fontColor = Color.White) {
+                                        changePicture(
+                                            shapeState.shape,
+                                            anotherCatUrl
+                                        )
+                                        actionState.value = null
+                                    }
                                 }
                             } else {
                                 Image(
@@ -208,11 +234,43 @@ fun CanvasSample(
                         }
 
                         is ShapeData.Text -> {
-                            ObsText(
-                                modifier = Modifier.align(Alignment.Center),
-                                text = data.text,
-                                color = Color.White
-                            )
+                            if (shapeState.isDoubleClicked) {
+                                val textState =
+                                    remember {
+                                        mutableStateOf(
+                                            TextFieldValue(
+                                                data.text,
+                                                selection = TextRange(data.text.length)
+                                            )
+                                        )
+                                    }
+                                val focusRequest = remember { FocusRequester() }
+                                OutlinedTextField(
+                                    modifier = Modifier.padding(4.dp).fillMaxWidth()
+                                        .focusRequester(focusRequest),
+                                    value = textState.value,
+                                    singleLine = true,
+                                    onValueChange = {
+                                        textState.value = it
+                                    },
+                                    keyboardActions = KeyboardActions {
+                                        changeText(shapeState.shape, newText = textState.value.text)
+                                        actionState.value = null
+                                    },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    colors = TextFieldDefaults.colors(unfocusedContainerColor = Color.White)
+                                )
+                                LaunchedEffect(Unit) {
+                                    focusRequest.requestFocus()
+                                }
+                            } else {
+                                ObsText(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    text = data.text,
+                                    color = Color.White
+                                )
+                            }
+
                         }
                     }
                 }
@@ -297,12 +355,13 @@ fun CanvasSample(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(Modifier.size(30.dp).background(Color.Gray).clickable {
+
                 shapes.add(
                     CustomShape(
                         Clock.System.now().toEpochMilliseconds(),
-                        position = Offset(0f, 0f),
-                        size = Offset(50f, 50f),
-                        color = Color.Red,
+                        position = userCoordinateState.value,
+                        size = Offset(100f, 50f),
+                        color = Color.Gray,
                         data = ShapeData.Text("change me")
                     )
                 )

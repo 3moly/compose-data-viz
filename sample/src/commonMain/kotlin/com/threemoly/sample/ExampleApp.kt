@@ -66,16 +66,23 @@ fun ExampleApp() {
             CustomShape(
                 id = 1L,
                 color = Color.Red,
-                position = Offset(-200f, 0f),
-                size = Offset(100f, 50f),
+                position = Offset(-200f, -100f),
+                size = Offset(250f, 100f),
                 data = ShapeData.Text("3moly/compose-data-viz")
             ),
             CustomShape(
                 id = 2L,
                 color = Color.Cyan,
-                position = Offset(200f, -100f),
-                size = Offset(100f, 150f),
+                position = Offset(150f, -200f),
+                size = Offset(150f, 250f),
                 data = ShapeData.ImageUrl(catUrl)
+            ),
+            CustomShape(
+                id = 3L,
+                color = Color.Black,
+                position = Offset(0f, 100f),
+                size = Offset(250f, 70f),
+                data = ShapeData.Text("double click on the picture")
             ),
         )
     }
@@ -96,6 +103,14 @@ fun ExampleApp() {
                 fromBox = 2L,
                 toBox = 1L,
                 color = Color.Green
+            ),
+            ShapeConnection(
+                id = 2L,
+                fromSide = BoxSide.LEFT,
+                toSide = BoxSide.RIGHT,
+                fromBox = 3L,
+                toBox = 2L,
+                color = Color.Yellow
             )
         )
     }
