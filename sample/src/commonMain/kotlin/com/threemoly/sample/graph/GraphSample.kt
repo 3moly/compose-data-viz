@@ -1,50 +1,32 @@
 package com.threemoly.sample.graph
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.graph.ui.Graph
 import com.threemoly.sample.io
-import com.threemoly.sample.uikit.BIcon
 import com.threemoly.sample.uikit.ObsSlider
 import com.threemoly.sample.uikit.ObsText
-import com.threemoly.sample.uikit.SettingsFuture
 import com.threemoly.sample.uikit.SettingsPanel
-import com.threemoly.sample.uikit.SwitchOption
-import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.random.Random
-import kotlin.text.toFloat
 
 val random = Random(124)
 
@@ -67,7 +49,7 @@ fun randomColor(): Color {
 fun generateRandomGraphState(
     nodeCount: Int,
     connectionsPercentPerNode: Float
-): State {
+): GraphState {
 
     val nodes = (1..nodeCount).map { index ->
         ObsidianGraphNode(
@@ -92,35 +74,28 @@ fun generateRandomGraphState(
         connections[nodeId] = persistentListOf(*connectedNodes.toTypedArray())
     }
 
-    return State(
+    return GraphState(
         graphNodes = persistentListOf(*nodes.toTypedArray()),
-        connections = persistentMapOf(*connections.toList().toTypedArray())
+        connections = persistentMapOf(*makeBidirectional(connections).toList().toTypedArray())
     )
 }
 
-@Composable
-fun GraphSample() {
-    var nodeCountState by remember { mutableStateOf(1f) }
-    var state by remember {
-        mutableStateOf(
-            generateRandomGraphState(
-                nodeCount = nodeCountState.toInt(),
-                connectionsPercentPerNode = 10f // 30% of possible connections per node
-            )
-        )
-    }
-    LaunchedEffect(nodeCountState) {
-        launch(io){
-            val newState = generateRandomGraphState(
-                nodeCount = nodeCountState.toInt(),
-                connectionsPercentPerNode = 10f // 30% of possible connections per node
-            )
-            state = state.copy(
-                graphNodes = newState.graphNodes,
-                connections = newState.connections
-            )
+private fun makeBidirectional(connections: Map<String, List<String>>): Map<String, ImmutableList<String>> {
+    val mutableGraph = connections.mapValues { it.value.toMutableList() }.toMutableMap()
+
+    for ((node, connections) in connections) {
+        for (target in connections) {
+            mutableGraph.getOrPut(target) { mutableListOf() }.add(node)
         }
     }
+
+    return mutableGraph.map { x -> x.key to x.value.toPersistentList() }.toMap()
+}
+
+@Composable
+fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Float>) {
+
+
     Box(
         Modifier
             .fillMaxSize()
@@ -128,22 +103,22 @@ fun GraphSample() {
         //todo .background(LocalAppTheme.current.colors.backgroundPrimary)
     ) {
         Graph(
-            connections = state.connections,
-            stateNodes = state.graphNodes,
-            viewSettings = state.graphViewSettings,
-            coordinates = state.coordinates,
-            velocities = state.velocities,
-            zoom = state.zoom,
+            connections = state.value.connections,
+            stateNodes = state.value.graphNodes,
+            viewSettings = state.value.graphViewSettings,
+            coordinates = state.value.coordinates,
+            velocities = state.value.velocities,
+            zoom = state.value.zoom,
             onZoomChange = {
-                state = state.copy(zoom = it)
+                state.value = state.value.copy(zoom = it)
             },
-            userPosition = state.graphUserPosition,
+            userPosition = state.value.graphUserPosition,
             onCentralGlobalPosition = {
-                state = state.copy(graphUserPosition = state.graphUserPosition + it)
+                state.value = state.value.copy(graphUserPosition = state.value.graphUserPosition + it)
             },
             onNodeClick = { node ->
-                val graphNodes = state.graphNodes.toMutableList()
-                val connections = state.connections.toMutableMap()
+                val graphNodes = state.value.graphNodes.toMutableList()
+                val connections = state.value.connections.toMutableMap()
                 val newId = "node ${random.nextInt()}"
                 graphNodes.add(
                     ObsidianGraphNode(
@@ -156,17 +131,17 @@ fun GraphSample() {
                 connections[newId] = persistentListOf(node.id)
                 connections[node.id] =
                     ((connections[node.id] ?: listOf()) + newId).toPersistentList()
-                state = state.copy(
+                state.value = state.value.copy(
                     graphNodes = graphNodes.toPersistentList(),
                     connections = connections.toPersistentMap()
                 )
             },
             onCoordinatesUpdate = {
 
-                state = state.copy(coordinates = it.toPersistentMap())
+                state.value = state.value.copy(coordinates = it.toPersistentMap())
             },
             onVelocitiesUpdate = {
-                state = state.copy(velocities = it.toPersistentMap())
+                state.value = state.value.copy(velocities = it.toPersistentMap())
             },
             primaryColor = Color.Red,
             fontColor = Color.White,
@@ -176,21 +151,21 @@ fun GraphSample() {
         )
         SettingsPanel(
             backgroundColor = Color.White,
-            isShowSettings = state.isShowSettings,
+            isShowSettings = state.value.isShowSettings,
             onSetSettings = {
-                state = state.copy(isShowSettings = !state.isShowSettings)
+                state.value = state.value.copy(isShowSettings = !state.value.isShowSettings)
             }) {
-            ObsText("zoom: ${state.zoom}")
+            ObsText("zoom: ${state.value.zoom}")
             ObsText(
-                "center force: ${state.graphViewSettings.centerForce}"
+                "center force: ${state.value.graphViewSettings.centerForce}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.centerForce,
+                value = state.value.graphViewSettings.centerForce,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 centerForce = it
                             )
                         )
@@ -198,15 +173,15 @@ fun GraphSample() {
                 valueRange = 0.001f..1f
             )
             ObsText(
-                "link force: ${state.graphViewSettings.linkForce}"
+                "link force: ${state.value.graphViewSettings.linkForce}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.linkForce,
+                value = state.value.graphViewSettings.linkForce,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 linkForce = it
                             )
                         )
@@ -214,15 +189,15 @@ fun GraphSample() {
                 valueRange = 0.00001f..10f
             )
             ObsText(
-                "link distance: ${state.graphViewSettings.linkDistance}"
+                "link distance: ${state.value.graphViewSettings.linkDistance}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.linkDistance,
+                value = state.value.graphViewSettings.linkDistance,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 linkDistance = it
                             )
                         )
@@ -230,15 +205,15 @@ fun GraphSample() {
                 valueRange = 1f..500f
             )
             ObsText(
-                "circle size: ${state.graphViewSettings.circleSize}"
+                "circle size: ${state.value.graphViewSettings.circleSize}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.circleSize,
+                value = state.value.graphViewSettings.circleSize,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 circleSize = it
                             )
                         )
@@ -246,15 +221,15 @@ fun GraphSample() {
                 valueRange = 0.1f..50f
             )
             ObsText(
-                "repel force: ${state.graphViewSettings.repelForce}"
+                "repel force: ${state.value.graphViewSettings.repelForce}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.repelForce,
+                value = state.value.graphViewSettings.repelForce,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 repelForce = it
                             )
                         )
@@ -262,15 +237,15 @@ fun GraphSample() {
                 valueRange = 0.1f..100000f
             )
             ObsText(
-                "unconnectedRepulsionMultiplier: ${state.graphViewSettings.unconnectedRepulsionMultiplier}"
+                "unconnectedRepulsionMultiplier: ${state.value.graphViewSettings.unconnectedRepulsionMultiplier}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.unconnectedRepulsionMultiplier,
+                value = state.value.graphViewSettings.unconnectedRepulsionMultiplier,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 unconnectedRepulsionMultiplier = it
                             )
                         )
@@ -278,15 +253,15 @@ fun GraphSample() {
                 valueRange = 1f..10f
             )
             ObsText(
-                "minMutualConnectionsForClustering: ${state.graphViewSettings.minMutualConnectionsForClustering}"
+                "minMutualConnectionsForClustering: ${state.value.graphViewSettings.minMutualConnectionsForClustering}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.minMutualConnectionsForClustering.toFloat(),
+                value = state.value.graphViewSettings.minMutualConnectionsForClustering.toFloat(),
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 minMutualConnectionsForClustering = it.toInt()
                             )
                         )
@@ -294,15 +269,15 @@ fun GraphSample() {
                 valueRange = 1f..10f
             )
             ObsText(
-                "clusteringForce: ${state.graphViewSettings.clusteringForce}"
+                "clusteringForce: ${state.value.graphViewSettings.clusteringForce}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.clusteringForce,
+                value = state.value.graphViewSettings.clusteringForce,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 clusteringForce = it
                             )
                         )
@@ -310,15 +285,15 @@ fun GraphSample() {
                 valueRange = 1f..50f
             )
             ObsText(
-                "longDistanceLinkMultiplier: ${state.graphViewSettings.longDistanceLinkMultiplier}"
+                "longDistanceLinkMultiplier: ${state.value.graphViewSettings.longDistanceLinkMultiplier}"
             )
             ObsSlider(
                 modifier = Modifier.width(150.dp),
-                value = state.graphViewSettings.longDistanceLinkMultiplier,
+                value = state.value.graphViewSettings.longDistanceLinkMultiplier,
                 onValueChange = {
-                    state =
-                        state.copy(
-                            graphViewSettings = state.graphViewSettings.copy(
+                    state.value =
+                        state.value.copy(
+                            graphViewSettings = state.value.graphViewSettings.copy(
                                 longDistanceLinkMultiplier = it
                             )
                         )
@@ -328,9 +303,9 @@ fun GraphSample() {
         }
         ObsSlider(
             modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 8.dp),
-            value = nodeCountState,
+            value = nodeCountState.value,
             onValueChange = {
-                nodeCountState = it
+                nodeCountState.value = it
             },
             valueRange = 1f..200f
         )

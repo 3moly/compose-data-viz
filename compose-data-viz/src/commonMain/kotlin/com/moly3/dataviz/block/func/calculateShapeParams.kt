@@ -29,7 +29,7 @@ fun calculateShapeParams(
         ) {
             val resizeType = (dragAction.dragType as DragType.Resize).type
             val accelerate = dragAction.accelerate
-            val resizePosition = resizePosition(accelerate, resizeType)
+            val resizePosition = resizePosition(accelerate, resizeType, roundToNearest)
             (item.position + resizePosition)
         } else
             item.position

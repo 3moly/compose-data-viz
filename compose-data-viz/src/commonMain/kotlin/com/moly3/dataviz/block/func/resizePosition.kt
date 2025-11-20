@@ -3,7 +3,7 @@ package com.moly3.dataviz.block.func
 import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.block.model.ResizeType
 
-fun resizePosition(accelerate: Offset, resizeType: ResizeType): Offset {
+fun resizePosition(accelerate: Offset, resizeType: ResizeType, roundToNearest: Int?): Offset {
     return when (resizeType) {
         ResizeType.TopLeft -> accelerate
 
@@ -20,5 +20,5 @@ fun resizePosition(accelerate: Offset, resizeType: ResizeType): Offset {
         ResizeType.BottomRight,
         ResizeType.Bottom,
         ResizeType.Right -> Offset(0f, 0f)
-    }.roundToNearest(25)
+    }.roundToNearest(roundToNearest)
 }

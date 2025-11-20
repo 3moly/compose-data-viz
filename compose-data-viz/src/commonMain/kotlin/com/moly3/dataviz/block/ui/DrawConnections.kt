@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import com.moly3.dataviz.block.func.makeSideOffset
 import com.moly3.dataviz.block.func.reverse
 import com.moly3.dataviz.core.block.model.Action
-import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.ConnectionConfig
 import com.moly3.dataviz.core.block.model.DragAction
 import com.moly3.dataviz.core.block.model.DragType
@@ -30,7 +30,7 @@ fun DrawConnections(
     userCoordinate: Offset,
     dragActionState: MutableState<DragAction?>,
     shapes: List<Shape>,
-    connections: List<ArcConnection>,
+    connections: List<ShapeConnection>,
     config: ConnectionConfig,
     zoom: Float,
     centerOfScreen: Offset,
@@ -38,7 +38,8 @@ fun DrawConnections(
     action: Action?,
     selectedConnectionStrokeWidth: Float,
     lineColor: Color,
-    drawColor: Color
+    drawColor: Color,
+    roundToNearest: Int?
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
         for (connection in connections) {
@@ -52,7 +53,8 @@ fun DrawConnections(
                     userCoordinate = userCoordinate,
                     boxSide = fromBox,
                     zoom = zoom,
-                    side = connection.fromSide
+                    side = connection.fromSide,
+                    roundToNearest = roundToNearest
                 )
             val endPoint =
                 makeSideOffset(
@@ -60,7 +62,8 @@ fun DrawConnections(
                     userCoordinate = userCoordinate,
                     boxSide = toBox,
                     zoom = zoom,
-                    side = connection.toSide
+                    side = connection.toSide,
+                    roundToNearest = roundToNearest
                 )
             drawSmoothArrow(
                 id = connection.id,

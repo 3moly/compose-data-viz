@@ -5,7 +5,7 @@ import androidx.compose.ui.geometry.Offset
 data class SelectedConnection(
     val startPoint: Offset,
     val endPoint: Offset,
-    val connection: ArcConnection
+    val connection: ShapeConnection
 ) {
 
     fun getMenuCenter(): Offset {

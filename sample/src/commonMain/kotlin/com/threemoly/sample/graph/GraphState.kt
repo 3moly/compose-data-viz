@@ -7,7 +7,7 @@ import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 
-data class State(
+data class GraphState(
     val isShowSettings: Boolean = false,
     val config: GraphSettingsConfig = GraphSettingsConfig.Default,
     val graphNodes: ImmutableList<ObsidianGraphNode> = persistentListOf(),

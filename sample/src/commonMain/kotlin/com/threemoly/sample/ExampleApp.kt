@@ -6,10 +6,22 @@ import com.threemoly.sample.uikit.SettingsFuture
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.moly3.dataviz.core.block.model.ShapeConnection
+import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.StylusPath
+import com.threemoly.sample.block.CustomShape
+import com.threemoly.sample.block.ShapeData
+import com.threemoly.sample.block.catUrl
+import com.threemoly.sample.graph.generateRandomGraphState
+import kotlinx.coroutines.launch
 
 const val canvasPage = "Canvas"
 const val graphPage = "Graph"
@@ -22,6 +34,69 @@ data class Page(
 
 @Composable
 fun ExampleApp() {
+    val nodeCountState = remember { mutableStateOf(15f) }
+    val graphState = remember {
+        mutableStateOf(
+            generateRandomGraphState(
+                nodeCount = nodeCountState.value.toInt(),
+                connectionsPercentPerNode = 10f
+            )
+        )
+    }
+    LaunchedEffect(nodeCountState.value) {
+        launch(io) {
+            val newState = generateRandomGraphState(
+                nodeCount = nodeCountState.value.toInt(),
+                connectionsPercentPerNode = 10f
+            )
+            graphState.value = graphState.value.copy(
+                graphNodes = newState.graphNodes,
+                connections = newState.connections
+            )
+        }
+    }
+
+    val shapes = remember {
+        mutableStateListOf(
+            CustomShape(
+                id = 1L,
+                color = Color.Red,
+                position = Offset(-200f, 0f),
+                size = Offset(100f, 50f),
+                data = ShapeData.Text("3moly/compose-data-viz")
+            ),
+            CustomShape(
+                id = 2L,
+                color = Color.Cyan,
+                position = Offset(200f, -100f),
+                size = Offset(100f, 150f),
+                data = ShapeData.ImageUrl(catUrl)
+            ),
+        )
+    }
+    val connections = remember {
+        mutableStateListOf(
+            ShapeConnection(
+                id = 0L,
+                fromSide = BoxSide.RIGHT,
+                toSide = BoxSide.LEFT,
+                fromBox = 1L,
+                toBox = 2L,
+                color = Color.Magenta
+            ),
+            ShapeConnection(
+                id = 1L,
+                fromSide = BoxSide.TOP,
+                toSide = BoxSide.BOTTOM,
+                fromBox = 2L,
+                toBox = 1L,
+                color = Color.Green
+            )
+        )
+    }
+    val paths = remember<SnapshotStateList<StylusPath>> {
+        mutableStateListOf()
+    }
     MaterialTheme {
         val pages =
             remember {
@@ -59,11 +134,13 @@ fun ExampleApp() {
                     if (!isMobile) {
                         NavigationRail(
                             header = {
-                                Text(
-                                    "Samples",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(16.dp)
-                                )
+                                Column {
+                                    Text(
+                                        "Samples",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
                             }
                         ) {
                             for (page in pages) {
@@ -71,14 +148,21 @@ fun ExampleApp() {
                             }
                         }
                     }
-
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         when (selectedPage.key) {
-                            canvasPage -> CanvasSample()
-                            graphPage -> GraphSample()
+                            canvasPage -> CanvasSample(
+                                shapes = shapes,
+                                connections = connections,
+                                paths = paths
+                            )
+
+                            graphPage -> GraphSample(
+                                state = graphState,
+                                nodeCountState = nodeCountState
+                            )
                         }
                     }
                 }

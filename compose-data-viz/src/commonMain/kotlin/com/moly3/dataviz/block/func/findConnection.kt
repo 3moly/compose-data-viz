@@ -1,7 +1,7 @@
 package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.unit.Density
-import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.ConnectionConfig
 import com.moly3.dataviz.core.block.model.DragAction
 import com.moly3.dataviz.core.block.model.Shape
@@ -10,13 +10,14 @@ import androidx.compose.ui.geometry.Offset
 
 internal fun findConnection(
     shapes: List<Shape>,
-    connections: List<ArcConnection>,
+    connections: List<ShapeConnection>,
     dragAction: DragAction?,
     cursorPosition: Offset,
     centerOfScreen: Offset,
     userCoordinate: Offset,
     zoom: Float,
-    config: ConnectionConfig
+    config: ConnectionConfig,
+    roundToNearest: Int?
 ): SelectedConnection? {
     var startPointW: Offset? = null
     var endPointW: Offset? = null
@@ -31,7 +32,8 @@ internal fun findConnection(
             userCoordinate = userCoordinate,
             boxSide = fromBox,
             zoom = zoom,
-            side = connection.fromSide
+            side = connection.fromSide,
+            roundToNearest = roundToNearest
         )
         startPointW = makeSideWorldOffset(
             itemPosition = fromBox.position,
@@ -43,7 +45,8 @@ internal fun findConnection(
             userCoordinate = userCoordinate,
             boxSide = toBox,
             zoom = zoom,
-            side = connection.toSide
+            side = connection.toSide,
+            roundToNearest = roundToNearest
         )
         endPointW = makeSideWorldOffset(
             itemPosition = toBox.position,

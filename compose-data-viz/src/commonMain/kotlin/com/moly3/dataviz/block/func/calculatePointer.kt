@@ -2,7 +2,7 @@ package com.moly3.dataviz.block.func
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerIcon
-import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.BoxSide
 import com.moly3.dataviz.core.block.model.ConnectionConfig
 import com.moly3.dataviz.core.block.model.DetectionType
@@ -16,7 +16,7 @@ import com.moly3.dataviz.core.block.model.allSides
 fun calculatePointer(
     shapes: List<Shape>,
     mapCursor: Offset,
-    connections: List<ArcConnection>,
+    connections: List<ShapeConnection>,
     zoom: Float,
     connectionConfig: ConnectionConfig,
     userCoordinate: Offset,
@@ -25,7 +25,8 @@ fun calculatePointer(
     dragAction: DragAction?,
     sizeRound: Int,
     detectionPercent: Float,
-    circleRadius: Float?
+    circleRadius: Float?,
+    roundToNearest: Int?
 ): PointerDetection {
     val foundShape =
         shapes.firstNotNullOfOrNull { x ->
@@ -75,7 +76,8 @@ fun calculatePointer(
         centerOfScreen = centerOfScreen,
         userCoordinate = userCoordinate,
         zoom = zoom,
-        config = connectionConfig
+        config = connectionConfig,
+        roundToNearest = roundToNearest
     )
     var foundSideShape: Pair<Shape, BoxSide>? = null
     for (shape in shapes) {

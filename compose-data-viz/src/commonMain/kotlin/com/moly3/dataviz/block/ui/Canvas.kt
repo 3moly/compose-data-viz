@@ -16,15 +16,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -34,7 +27,7 @@ import com.moly3.dataviz.block.func.dashboard
 import com.moly3.dataviz.block.func.getMapPosition
 import com.moly3.dataviz.block.func.roundToNearest
 import com.moly3.dataviz.core.block.model.Action
-import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.CanvasSettings
 import com.moly3.dataviz.core.block.model.ConnectionConfig
 import com.moly3.dataviz.core.block.model.DragAction
@@ -46,7 +39,7 @@ import com.moly3.dataviz.core.block.model.StylusPoint
 import kotlin.math.abs
 
 @Composable
-fun Canvas(
+fun <ShapeType : Shape> Canvas(
     modifier: Modifier,
     action: Action?,
     backgroundModifier: Modifier,
@@ -56,18 +49,18 @@ fun Canvas(
     roundToNearest: Int?,
     userCoordinate: Offset,
     isDrawing: Boolean,
-    shapes: List<Shape>,
-    connections: List<ArcConnection>,
+    shapes: List<ShapeType>,
+    connections: List<ShapeConnection>,
     drawingPaths: List<StylusPath>,
     onActionSet: (Action?) -> Unit,
     onAddPath: (StylusPath) -> Unit,
     onMoveShape: (Int, Offset) -> Unit,
     onResizeShape: (Int, Offset, Offset) -> Unit,
-    onAddConnection: (ArcConnection) -> Unit,
+    onAddConnection: (ShapeConnection) -> Unit,
     onZoomChange: (Float) -> Unit,
     onUserCoordinateChange: (Offset) -> Unit,
     settingsPanel: @Composable (position: Offset, action: Action, onDoneAction: () -> Unit) -> Unit,
-    onDrawBlock: @Composable (DrawShapeState) -> Unit,
+    onDrawBlock: @Composable (DrawShapeState<ShapeType>) -> Unit,
 ) {
     var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
     val scaleMovementModifier = 5f
@@ -123,7 +116,8 @@ fun Canvas(
             centerOfScreen,
             connectionConfig,
             userCoordinate,
-            cursorPosition
+            cursorPosition,
+            roundToNearest
         ) {
             calculatePointer(
                 shapes = shapes,
@@ -137,34 +131,18 @@ fun Canvas(
                 dragAction = dragActionState.value,
                 sizeRound = sizeRound,
                 detectionPercent = 0.1f,
-                circleRadius = 12f
+                circleRadius = 12f,
+                roundToNearest = roundToNearest
             )
         }
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
     Box(
         modifier = modifier
             .fillMaxSize()
-            .onKeyEvent(onKeyEvent = { event ->
-                if (Key.MetaLeft == event.key) {
-                    isHomeHoldState.value = event.type == KeyEventType.KeyDown
-                } else if (
-                    event.key == Key.Backspace ||
-                    event.key == Key.Delete
-                ) {
-                    //todo tryDeleteAction()
-                }
-                true
-            })
-            .focusRequester(focusRequester)
             .clip(RoundedCornerShape(0.dp))
     ) {
         Box(backgroundModifier.fillMaxSize())
         Row(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 DrawConnections(
@@ -182,7 +160,8 @@ fun Canvas(
                     action = action,
                     selectedConnectionStrokeWidth = strokeWidth.value,
                     lineColor = settings.defaultLineColor,
-                    drawColor = Color.White
+                    drawColor = Color.White,
+                    roundToNearest = roundToNearest
                 )
                 DrawShapes(
                     mousePosition = mapCursor,
@@ -216,7 +195,7 @@ fun Canvas(
                         }
                         .dashboard(
                             scope = scope,
-                            roundToNearest = roundToNearestState,
+                            roundToNearestState = roundToNearestState,
                             zoomState = zoomState,
                             sizeRound = sizeRound,
                             cursorPositionState = cursorPositionState,
@@ -261,7 +240,7 @@ fun Canvas(
                                 }
                             },
                             dragActionState = dragActionState,
-                            onClick = { focusRequester.requestFocus() },
+                            onClick = {  },
                             onMoveShape = onMoveShape,
                             onResizeShape = onResizeShape,
                             onAddConnection = onAddConnection,

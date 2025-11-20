@@ -2,11 +2,13 @@ package com.threemoly.sample.block
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -16,7 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -28,17 +29,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import coil3.compose.rememberAsyncImagePainter
 import com.mikepenz.hypnoticcanvas.shaderBackground
 import com.moly3.dataviz.block.func.absoluteOffset
 import com.moly3.dataviz.block.ui.Canvas
 import com.moly3.dataviz.core.block.model.Action
-import com.moly3.dataviz.core.block.model.ArcConnection
-import com.moly3.dataviz.core.block.model.BoxSide
+import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.CanvasSettings
-import com.moly3.dataviz.core.block.model.Shape
 import com.moly3.dataviz.core.block.model.StylusPath
 import com.moly3.dataviz.func.darker
 import com.threemoly.sample.shader.UmlShader
+import com.threemoly.sample.uikit.BButton
+import com.threemoly.sample.uikit.ObsText
 import com.threemoly.sample.uikit.SettingsPanel
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeStyle
@@ -49,55 +52,21 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-data class MyShape(
-    override val id: Long,
-    val color: Color?,
-    override val position: Offset,
-    override val size: Offset
-) : Shape
+const val catUrl =
+    "https://png.pngtree.com/png-clipart/20230511/ourmid/pngtree-isolated-cat-on-white-background-png-image_7094927.png"
+const val dogUrl =
+    "https://t3.ftcdn.net/jpg/08/28/49/30/360_F_828493018_Ntaia2HBMK7UHVFyP8jv0UrTcD7Fk7pw.jpg"
+const val sharkUrl =
+    "https://art.ngfiles.com/images/1600000/1600866_mynameispat_shark-pog.png?f1611179886"
 
 @OptIn(ExperimentalTime::class)
 @Composable
-fun CanvasSample() {
-    val shapes = remember {
-        mutableStateListOf(
-            MyShape(
-                id = 1L,
-                color = Color.Red,
-                position = Offset(-200f, 0f),
-                size = Offset(100f, 50f)
-            ),
-            MyShape(
-                id = 2L,
-                color = Color.Cyan,
-                position = Offset(200f, -100f),
-                size = Offset(100f, 150f)
-            ),
-        )
-    }
-    val connections = remember {
-        mutableStateListOf(
-            ArcConnection(
-                id = 0L,
-                fromSide = BoxSide.RIGHT,
-                toSide = BoxSide.LEFT,
-                fromBox = 1L,
-                toBox = 2L,
-                color = Color.Magenta
-            ),
-            ArcConnection(
-                id = 1L,
-                fromSide = BoxSide.TOP,
-                toSide = BoxSide.BOTTOM,
-                fromBox = 2L,
-                toBox = 1L,
-                color = Color.Green
-            )
-        )
-    }
-    val paths = remember<SnapshotStateList<StylusPath>> {
-        mutableStateListOf()
-    }
+fun CanvasSample(
+    shapes: SnapshotStateList<CustomShape>,
+    connections: SnapshotStateList<ShapeConnection>,
+    paths: SnapshotStateList<StylusPath>
+) {
+
     val isDrawingState = remember { mutableStateOf(false) }
     val backgroundSecondary = Color.Black.darker(0.8f)
     val hazeState = rememberHazeState(blurEnabled = true)
@@ -133,6 +102,11 @@ fun CanvasSample() {
             sideCircleColor = Color.Blue,
             selectedShapeBorderColor = Color.Blue
         )
+    }
+
+    fun changePicture(shape: CustomShape, newPictureUrl: String) {
+        val index = shapes.indexOf(shape)
+        shapes[index] = shapes[index].copy(data = ShapeData.ImageUrl(newPictureUrl))
     }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -178,15 +152,66 @@ fun CanvasSample() {
                 } else {
                     Color.Black.copy(alpha = 0.3f) // Dark semi-transparent
                 }
-
                 Box(
-                    Modifier
+                    shapeState.modifier
+                        .let {
+                            if (shapeState.isDoubleClicked) {
+                                it.zIndex(100f)
+                            } else
+                                it
+                        }
                         .fillMaxSize()
                         .hazeSource(hazeState, zIndex = 2f + shapeState.shape.id)
                         .hazeEffect(hazeState, hazeStyle) // Apply blur first
                         .background(bgColor) // Then semi-transparent overlay
                         .border((1f * zoomState.value * borderCoef).dp, Color.White)
-                )
+                ) {
+                    when (val data = shapeState.shape.data) {
+                        is ShapeData.ImageUrl -> {
+                            if (shapeState.isDoubleClicked) {
+                                val isSelected = remember { mutableStateOf(false) }
+                                Column(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    BButton(text = "cat", fontColor = Color.White) {
+                                        changePicture(
+                                            shapeState.shape,
+                                            catUrl
+                                        )
+                                        actionState.value = null
+                                    }
+                                    BButton(text = "dog", fontColor = Color.White) {
+                                        changePicture(
+                                            shapeState.shape,
+                                            dogUrl
+                                        )
+                                        actionState.value = null
+                                    }
+                                    BButton(text = "shark", fontColor = Color.White) {
+                                        changePicture(
+                                            shapeState.shape,
+                                            sharkUrl
+                                        )
+                                        actionState.value = null
+                                    }
+                                }
+                            } else {
+                                Image(
+                                    modifier = Modifier.fillMaxSize(),
+                                    painter = rememberAsyncImagePainter(data.url),
+                                    contentDescription = null
+                                )
+                            }
+
+                        }
+
+                        is ShapeData.Text -> {
+                            ObsText(text = data.text)
+                        }
+                    }
+                }
             },
             settingsPanel = { offset, action, onDoneAction ->
                 var centerWidth by remember { mutableStateOf(0f) }
@@ -269,11 +294,12 @@ fun CanvasSample() {
         ) {
             Box(Modifier.size(30.dp).background(Color.Gray).clickable {
                 shapes.add(
-                    MyShape(
+                    CustomShape(
                         Clock.System.now().toEpochMilliseconds(),
                         position = Offset(0f, 0f),
                         size = Offset(50f, 50f),
-                        color = Color.Red
+                        color = Color.Red,
+                        data = ShapeData.Text("change me")
                     )
                 )
             })

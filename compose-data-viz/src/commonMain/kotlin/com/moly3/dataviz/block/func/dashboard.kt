@@ -7,7 +7,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import com.moly3.dataviz.block.minShapeSize
 import com.moly3.dataviz.core.block.model.Action
-import com.moly3.dataviz.core.block.model.ArcConnection
+import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.BoxSide
 import com.moly3.dataviz.core.block.model.ConnectionConfig
 import com.moly3.dataviz.core.block.model.DragAction
@@ -28,7 +28,7 @@ import kotlin.time.ExperimentalTime
 fun Modifier.dashboard(
     scope: CoroutineScope,
     sizeRound: Int,
-    roundToNearest: State<Int?>,
+    roundToNearestState: State<Int?>,
     zoomState: State<Float>,
     userCoordinateState: State<Offset>,
     isDrawingState: State<Boolean>,
@@ -39,7 +39,7 @@ fun Modifier.dashboard(
     connectionConfig: ConnectionConfig,
 
     shapes: State<List<Shape>>,
-    connections: State<List<ArcConnection>>,
+    connections: State<List<ShapeConnection>>,
     dragActionState: MutableState<DragAction?>,
     actionState: State<Action?>,
 
@@ -49,7 +49,7 @@ fun Modifier.dashboard(
     onScrollChange: (delta: Offset) -> Unit = {},
 
     onActionSet: (Action?) -> Unit,
-    onAddConnection: (ArcConnection) -> Unit,
+    onAddConnection: (ShapeConnection) -> Unit,
     onMoveShape: (Int, Offset) -> Unit,
     onResizeShape: (Int, Offset, Offset) -> Unit,
 
@@ -105,7 +105,8 @@ fun Modifier.dashboard(
                         centerOfScreen = centerOfScreenState.value,
                         userCoordinate = userCoordinateState.value,
                         zoom = zoomState.value,
-                        config = connectionConfig
+                        config = connectionConfig,
+                        roundToNearest = roundToNearestState.value
                     )
                     if (foundConnection != null) {
                         onActionSet(Action.Connection(foundConnection))
@@ -329,7 +330,7 @@ fun Modifier.dashboard(
                                 }
                                 if (foundSideShape != null) {
                                     onAddConnection(
-                                        ArcConnection(
+                                        ShapeConnection(
                                             id = Clock.System.now()
                                                 .toEpochMilliseconds(),
                                             fromBox = action.startShapeId,
@@ -361,14 +362,15 @@ fun Modifier.dashboard(
                                     val shapePosition = shape.position
                                     val shapeSize = shape.size
 
+                                    val roundToNearest = roundToNearestState.value
                                     val accelerate = dragAction.accelerate
                                     val resizePosition =
-                                        resizePosition(accelerate, resizeType)
+                                        resizePosition(accelerate, resizeType, roundToNearest)
                                     val shapeSizeApp =
                                         resizeSize(
                                             accelerate,
                                             resizeType,
-                                            roundToNearest = roundToNearest.value
+                                            roundToNearest = roundToNearest
                                         )
 
                                     onResizeShape(

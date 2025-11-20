@@ -34,9 +34,9 @@ import androidx.compose.ui.geometry.Offset
 val borderPadding = 1.dp
 
 @Composable
-fun BoxScope.DrawShapes(
+fun <ShapeType : Shape> BoxScope.DrawShapes(
     mousePosition: Offset,
-    shapes: List<Shape>,
+    shapes: List<ShapeType>,
     dragActionState: MutableState<DragAction?>,
     userCoordinate: Offset,
     zoom: Float,
@@ -45,7 +45,7 @@ fun BoxScope.DrawShapes(
     sideCircleColor: Color,
     selectedShapeBorderColor: Color,
     roundToNearest: Int?,
-    onDrawBlock: @Composable (DrawShapeState) -> Unit,
+    onDrawBlock: @Composable (DrawShapeState<ShapeType>) -> Unit,
 ) {
     for (item in shapes) {
         val shapeParams = calculateShapeParams(
@@ -65,43 +65,39 @@ fun BoxScope.DrawShapes(
                     action.shape.id == item.id
         }
 
-        Box(
-            modifier = Modifier
-                .absoluteOffset(shapeParams.offset.x, shapeParams.offset.y)
-                .width(shapeParams.itemWidth + borderPadding)
-                .height(shapeParams.itemHeight + borderPadding)
-                .align(Alignment.Center)
-                .let {
-                    if (isSelected) {
-                        it.border(borderPadding, selectedShapeBorderColor)
-                    } else {
-                        it
-                    }
-                }.padding(borderPadding)
-
-        ) {
-            onDrawBlock(
-                DrawShapeState(
-                    shape = item,
-                    isSelected = isSelected,
-                    isDoubleClicked = action is Action.DoubleClicked && item.id == action.shape.id
-                )
+        onDrawBlock(
+            DrawShapeState(
+                modifier = Modifier
+                    .absoluteOffset(shapeParams.offset.x, shapeParams.offset.y)
+                    .width(shapeParams.itemWidth + borderPadding)
+                    .height(shapeParams.itemHeight + borderPadding)
+                    .align(Alignment.Center)
+                    .let {
+                        if (isSelected) {
+                            it.border(borderPadding, selectedShapeBorderColor)
+                        } else {
+                            it
+                        }
+                    }.padding(borderPadding),
+                shape = item,
+                isSelected = isSelected,
+                isDoubleClicked = action is Action.DoubleClicked && item.id == action.shape.id
             )
-        }
+        )
 
         // Draw corner circles
         if (isSelected) {
             val cornerCircleSize = 12
             val corners = listOf(
-                Offset(-0f, -0f), // Top-left
-                Offset(1f, -0f),  // Top-right
-                Offset(0f, 1f),  // Bottom-left
-                Offset(1f, 1f)    // Bottom-right
+                Offset(0f, 0f), // Top-left
+                Offset(1f * density, 0f),  // Top-right
+                Offset(0f, 1f * density),  // Bottom-left
+                Offset(1f * density, 1f * density)    // Bottom-right
             )
             for (corner in corners) {
                 val cornerOffset = Offset(
-                    x = shapeParams.itemPosition.x + (item.size.x * corner.x),
-                    y = shapeParams.itemPosition.y + (item.size.y * corner.y)
+                    x = shapeParams.itemPosition.x + (shapeParams.itemWidth.value * corner.x / zoom),
+                    y = shapeParams.itemPosition.y + (shapeParams.itemHeight.value * corner.y / zoom)
                 ) - userCoordinate
 
                 Box(

@@ -13,6 +13,7 @@ fun makeSideOffset(
     boxSide: Shape,
     zoom: Float,
     side: BoxSide,
+    roundToNearest: Int?
 ): Offset {
 
     val itemPosition =
@@ -27,7 +28,8 @@ fun makeSideOffset(
             ) {
                 (boxSide.position + resizePosition(
                     dragAction.accelerate,
-                    (dragAction.dragType as DragType.Resize).type
+                    (dragAction.dragType as DragType.Resize).type,
+                    roundToNearest = roundToNearest
                 ))
             } else boxSide.position
         } else

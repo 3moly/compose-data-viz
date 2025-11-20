@@ -41,7 +41,8 @@ kotlin {
     }
 
     //noinspection UseTomlInstead
-    //keeping clean libs.versions.toml from other libs
+    //keeping clean libs.versions.toml from libs that used only in this sample
+    val coil = "3.3.0"
     sourceSets {
         commonMain.dependencies {
             implementation(project(":compose-data-viz"))
@@ -51,22 +52,35 @@ kotlin {
             implementation(compose.material)
             implementation(compose.material3)
 
+            //noinspection UseTomlInstead
             implementation("com.mikepenz.hypnoticcanvas:hypnoticcanvas:0.4.1")
+            //noinspection UseTomlInstead
             implementation("dev.chrisbanes.haze:haze:1.7.0")
+            //noinspection UseTomlInstead
             implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.4.0")
+
+            //noinspection UseTomlInstead
+            implementation("io.coil-kt.coil3:coil:$coil")
+            //noinspection UseTomlInstead
+            implementation("io.coil-kt.coil3:coil-network-ktor3:$coil")
+            //noinspection UseTomlInstead
+            implementation("io.coil-kt.coil3:coil-compose:$coil")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
-            implementation("androidx.activity:activity-compose:1.11.0")
+            //noinspection UseTomlInstead
+            implementation("androidx.activity:activity-compose:1.12.0")
             implementation("androidx.appcompat:appcompat:1.7.1")
             implementation("androidx.core:core-ktx:1.17.0")
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
 
+            //noinspection UseTomlInstead
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+            implementation("io.ktor:ktor-client-java:3.3.2")
         }
     }
 }
