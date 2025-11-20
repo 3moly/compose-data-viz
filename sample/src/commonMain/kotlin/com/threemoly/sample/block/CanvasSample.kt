@@ -57,7 +57,7 @@ const val catUrl =
 const val dogUrl =
     "https://t3.ftcdn.net/jpg/08/28/49/30/360_F_828493018_Ntaia2HBMK7UHVFyP8jv0UrTcD7Fk7pw.jpg"
 const val sharkUrl =
-    "https://art.ngfiles.com/images/1600000/1600866_mynameispat_shark-pog.png?f1611179886"
+    "https://i.redd.it/dqm6bph5mqxb1.jpg"
 
 @OptIn(ExperimentalTime::class)
 @Composable
@@ -81,8 +81,8 @@ fun CanvasSample(
     val actionState = remember { mutableStateOf<Action?>(value = null) }
 
     val isShowSettings = remember { mutableStateOf(false) }
-    val settingsWidth by animateDpAsState(if (isShowSettings.value) 130.dp else 48.dp)
-    val zoomState = remember { mutableStateOf(1f) }
+    val density = LocalDensity.current
+    val zoomState = remember(density) { mutableStateOf(density.density) }
     val strokeWidthState = remember { mutableStateOf(1f) }
     val roundToNearest = remember { mutableStateOf(0) }
     val userCoordinateState = remember { mutableStateOf(Offset(0f, 0f)) }
@@ -208,7 +208,11 @@ fun CanvasSample(
                         }
 
                         is ShapeData.Text -> {
-                            ObsText(text = data.text)
+                            ObsText(
+                                modifier = Modifier.align(Alignment.Center),
+                                text = data.text,
+                                color = Color.White
+                            )
                         }
                     }
                 }

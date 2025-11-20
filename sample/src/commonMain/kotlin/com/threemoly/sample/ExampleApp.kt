@@ -2,7 +2,7 @@ package com.threemoly.sample
 
 import com.threemoly.sample.block.CanvasSample
 import com.threemoly.sample.graph.GraphSample
-import com.threemoly.sample.uikit.SettingsFuture
+import com.threemoly.sample.uikit.icons.SettingsFuture
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.BoxSide
@@ -20,7 +22,9 @@ import com.moly3.dataviz.core.block.model.StylusPath
 import com.threemoly.sample.block.CustomShape
 import com.threemoly.sample.block.ShapeData
 import com.threemoly.sample.block.catUrl
+import com.threemoly.sample.func.openUrl
 import com.threemoly.sample.graph.generateRandomGraphState
+import com.threemoly.sample.uikit.icons.GithubSvgrepoCom
 import kotlinx.coroutines.launch
 
 const val canvasPage = "Canvas"
@@ -35,12 +39,13 @@ data class Page(
 @Composable
 fun ExampleApp() {
     val nodeCountState = remember { mutableStateOf(15f) }
-    val graphState = remember {
+    val density = LocalDensity.current
+    val graphState = remember(density) {
         mutableStateOf(
             generateRandomGraphState(
                 nodeCount = nodeCountState.value.toInt(),
                 connectionsPercentPerNode = 10f
-            )
+            ).copy(zoom = density.density)
         )
     }
     LaunchedEffect(nodeCountState.value) {
@@ -136,9 +141,10 @@ fun ExampleApp() {
                             header = {
                                 Column {
                                     Text(
-                                        "Samples",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.padding(16.dp)
+                                        "3moly/\ncompose-data-diz\nSamples",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(16.dp),
+                                        textAlign = TextAlign.Center
                                     )
                                 }
                             }
@@ -146,6 +152,21 @@ fun ExampleApp() {
                             for (page in pages) {
                                 NavigationItem(page, selectedPage) { selectedPage = it }
                             }
+                            Box(Modifier.weight(1f))
+                            NavigationRailItem(
+                                selected = false,
+                                onClick = {
+                                    openUrl("https://github.com/3moly/compose-data-viz")
+                                },
+                                icon = {
+                                    Icon(
+                                       GithubSvgrepoCom,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                },
+                                label = { Text("Github") }
+                            )
                         }
                     }
                     Box(

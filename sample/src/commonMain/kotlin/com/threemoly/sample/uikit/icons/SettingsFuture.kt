@@ -1,4 +1,4 @@
-package com.threemoly.sample.uikit
+package com.threemoly.sample.uikit.icons
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor

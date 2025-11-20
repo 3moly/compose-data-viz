@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.threemoly.sample.uikit.icons.SettingsFuture
 
 @Composable
 fun BoxScope.SettingsPanel(
