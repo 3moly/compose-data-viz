@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 
 class AndroidApp : Application() {
     companion object {
@@ -28,9 +31,15 @@ class AppActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val systemBarColor = Color.TRANSPARENT
-        //initKoin(AndroidApp.INSTANCE)
-        //val root = RootComponent(componentContext = defaultComponentContext())
+
         setContent {
+            setSingletonImageLoaderFactory {
+                ImageLoader.Builder(this)
+                    .components {
+                        add(KtorNetworkFetcherFactory())
+                    }
+                    .build()
+            }
             val view = LocalView.current
             val isLightStatusBars by remember { mutableStateOf(false) }
             if (!view.isInEditMode) {

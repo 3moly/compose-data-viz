@@ -1,8 +1,5 @@
 package com.threemoly.sample
 
-import com.threemoly.sample.block.CanvasSample
-import com.threemoly.sample.graph.GraphSample
-import com.threemoly.sample.uikit.icons.SettingsFuture
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,29 +9,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.block.model.ShapeConnection
 import com.moly3.dataviz.core.block.model.BoxSide
 import com.moly3.dataviz.core.block.model.StylusPath
-import com.threemoly.sample.block.CustomShape
-import com.threemoly.sample.block.ShapeData
-import com.threemoly.sample.block.catUrl
-import com.threemoly.sample.func.openUrl
-import com.threemoly.sample.graph.generateRandomGraphState
-import com.threemoly.sample.uikit.icons.GithubSvgrepoCom
+import com.threemoly.sample.base.Page
+import com.threemoly.sample.base.uikit.BottomNavigationBar
+import com.threemoly.sample.base.uikit.NavigationItem
+import com.threemoly.sample.base.block.CustomShape
+import com.threemoly.sample.base.block.ShapeData
+import com.threemoly.sample.base.func.generateRandomGraphState
+import com.threemoly.sample.base.func.openUrl
+import com.threemoly.sample.base.io
+import com.threemoly.sample.base.uikit.icons.GithubSvgrepoCom
+import com.threemoly.sample.base.uikit.icons.Scale
+import com.threemoly.sample.base.uikit.icons.Share
 import kotlinx.coroutines.launch
 
 const val canvasPage = "Canvas"
 const val graphPage = "Graph"
-
-data class Page(
-    val key: String,
-    val text: String,
-    val icon: ImageVector
-)
 
 @Composable
 fun ExampleApp() {
@@ -65,21 +60,21 @@ fun ExampleApp() {
         mutableStateListOf(
             CustomShape(
                 id = 1L,
-                color = Color.Red,
+                backgroundColor = Color.Red,
                 position = Offset(-200f, -100f),
                 size = Offset(250f, 100f),
-                data = ShapeData.Text("3moly/compose-data-viz")
+                data = ShapeData.Text("click, drag, resize")
             ),
             CustomShape(
                 id = 2L,
-                color = Color.Cyan,
+                backgroundColor = Color.Cyan,
                 position = Offset(150f, -200f),
                 size = Offset(150f, 250f),
                 data = ShapeData.ImageUrl(catUrl)
             ),
             CustomShape(
                 id = 3L,
-                color = Color.Black,
+                backgroundColor = Color.Black,
                 position = Offset(0f, 100f),
                 size = Offset(250f, 70f),
                 data = ShapeData.Text("double click on the picture")
@@ -124,12 +119,12 @@ fun ExampleApp() {
                     Page(
                         key = canvasPage,
                         text = "Canvas",
-                        icon = SettingsFuture
+                        icon = Scale
                     ),
                     Page(
                         key = graphPage,
                         text = "Graph",
-                        icon = SettingsFuture
+                        icon = Share
                     )
                 )
             }

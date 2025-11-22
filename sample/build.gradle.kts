@@ -74,12 +74,15 @@ kotlin {
             implementation("androidx.activity:activity-compose:1.12.0")
             implementation("androidx.appcompat:appcompat:1.7.1")
             implementation("androidx.core:core-ktx:1.17.0")
+            //noinspection UseTomlInstead
+            implementation("io.ktor:ktor-client-okhttp:3.3.2")
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
 
             //noinspection UseTomlInstead
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+            //noinspection UseTomlInstead
             implementation("io.ktor:ktor-client-java:3.3.2")
         }
     }
@@ -92,7 +95,7 @@ android {
     namespace = "com.threemoly.sample"
     compileSdk = 36
     defaultConfig {
-        minSdk = 21
+        minSdk = 23
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
