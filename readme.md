@@ -9,7 +9,7 @@
 
 # compose-data-vizualization
 
-You need Mira canvas or Graph nodes like in Obsidian App in Compose multiplatform?
+You need Miro canvas or Graph nodes like in Obsidian App in Compose multiplatform?
 <br/>
 This library can help you. Most prepared motions and actions with Canvas and Graph are given.
 
