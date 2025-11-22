@@ -1,7 +1,7 @@
 ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.3moly/compose-data-viz)
 
 <p align="middle">
-    <img src="./docs/media/canvas_demo.png" width="49%" />
+    <img src="./docs/media/canvas_demo.jpg" width="49%" />
     <img src="./docs/media/graph_demo.png" width="49%" />
 </p>
 
