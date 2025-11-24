@@ -328,6 +328,7 @@ fun CanvasSample(
             onActionSet = {
                 actionState.value = it
             },
+            consume = false,
             onAddPath = { path ->
                 paths.add(path.copy(color = Color.Cyan))
             }

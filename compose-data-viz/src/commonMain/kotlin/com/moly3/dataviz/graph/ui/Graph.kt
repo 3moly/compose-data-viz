@@ -36,6 +36,7 @@ data class DragNodeData<Id>(
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
+    consume: Boolean,
     userPosition: Offset,
     zoom: Float,
 
@@ -117,6 +118,7 @@ fun <Id, Data> Graph(
             .pointerInput(watchNodeId) {
                 detectPointerTransformGestures(
                     scope = scope,
+                    consume = consume,
                     numberOfPointers = 0,
                     requisite = PointerRequisite.GreaterThan,
                     onScrollChange = {

@@ -27,6 +27,7 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 fun Modifier.dashboard(
     scope: CoroutineScope,
+    consume: Boolean,
     sizeRound: Int,
     roundToNearestState: State<Int?>,
     zoomState: State<Float>,
@@ -60,6 +61,7 @@ fun Modifier.dashboard(
 ): Modifier {
     return this.pointerInput(Unit) {
         detectPointerTransformGestures(
+            consume = consume,
             scope = scope,
             numberOfPointers = 0,
             requisite = PointerRequisite.GreaterThan,

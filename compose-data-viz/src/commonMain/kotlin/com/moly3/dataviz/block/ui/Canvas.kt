@@ -40,6 +40,7 @@ import kotlin.math.abs
 
 @Composable
 fun <ShapeType : Shape> Canvas(
+    consume: Boolean,
     modifier: Modifier,
     action: Action?,
     backgroundModifier: Modifier,
@@ -195,6 +196,7 @@ fun <ShapeType : Shape> Canvas(
                         }
                         .dashboard(
                             scope = scope,
+                            consume = consume,
                             roundToNearestState = roundToNearestState,
                             zoomState = zoomState,
                             sizeRound = sizeRound,
@@ -240,7 +242,7 @@ fun <ShapeType : Shape> Canvas(
                                 }
                             },
                             dragActionState = dragActionState,
-                            onClick = {  },
+                            onClick = { },
                             onMoveShape = onMoveShape,
                             onResizeShape = onResizeShape,
                             onAddConnection = onAddConnection,

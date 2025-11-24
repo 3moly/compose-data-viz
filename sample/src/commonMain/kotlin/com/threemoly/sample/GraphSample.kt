@@ -40,6 +40,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
         //todo .background(LocalAppTheme.current.colors.backgroundPrimary)
     ) {
         Graph(
+            consume = false,
             connections = state.value.connections,
             stateNodes = state.value.graphNodes,
             viewSettings = state.value.graphViewSettings,
