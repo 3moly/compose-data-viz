@@ -2,12 +2,15 @@
 
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
+import kotlin.collections.set
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
+    kotlin("native.cocoapods")
 }
 
 kotlin {
@@ -19,6 +22,23 @@ kotlin {
     iosX64()
     iosArm64()
     iosSimulatorArm64()
+
+    cocoapods {
+        summary = "Some description for the Shared Module"
+        homepage = "Link to the Shared Module homepage"
+        version = "1.0"
+        ios.deploymentTarget = "16.0"
+        podfile = project.file("../iosApp/Podfile")
+
+        framework {
+            baseName = "shared"
+            isStatic = true
+        }
+        xcodeConfigurationToNativeBuildType["debug"] = NativeBuildType.DEBUG
+        xcodeConfigurationToNativeBuildType["release"] = NativeBuildType.RELEASE
+        xcodeConfigurationToNativeBuildType["beta"] = NativeBuildType.DEBUG
+        xcodeConfigurationToNativeBuildType["betarelease"] = NativeBuildType.RELEASE
+    }
 
     macosX64()
     macosArm64()

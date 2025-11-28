@@ -14,3 +14,5 @@ xcuserdata
 publish.sh
 /kotlin-js-store/wasm/yarn.lock
 /iosApp/Pods/
+/iosApp/Podfile.lock
+/sample/sample.podspec

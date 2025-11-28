@@ -6,8 +6,8 @@ data class ShapeConnection(
     val id: Long,
     val fromBox: Long,
     val toBox: Long,
-    var fromSide: BoxSide,
-    var toSide: BoxSide,
+    val fromSide: BoxSide,
+    val toSide: BoxSide,
     val arcHeight: Float = 80f,
     val color: Color?
 )
