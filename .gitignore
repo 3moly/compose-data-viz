@@ -13,3 +13,4 @@ xcuserdata
 *.gpg
 publish.sh
 /kotlin-js-store/wasm/yarn.lock
+/iosApp/Pods/
