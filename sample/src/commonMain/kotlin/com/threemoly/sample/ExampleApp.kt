@@ -12,9 +12,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.moly3.dataviz.core.block.model.ShapeConnection
-import com.moly3.dataviz.core.block.model.BoxSide
-import com.moly3.dataviz.core.block.model.StylusPath
+import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
+import com.moly3.dataviz.core.whiteboard.model.BoxSide
+import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.threemoly.sample.base.Page
 import com.threemoly.sample.base.uikit.BottomNavigationBar
 import com.threemoly.sample.base.uikit.NavigationItem
@@ -87,24 +87,24 @@ fun ExampleApp() {
                 id = 0L,
                 fromSide = BoxSide.RIGHT,
                 toSide = BoxSide.LEFT,
-                fromBox = 1L,
-                toBox = 2L,
+                fromBoxId = 1L,
+                toBoxId = 2L,
                 color = Color.Magenta
             ),
             ShapeConnection(
                 id = 1L,
                 fromSide = BoxSide.TOP,
                 toSide = BoxSide.BOTTOM,
-                fromBox = 2L,
-                toBox = 1L,
+                fromBoxId = 2L,
+                toBoxId = 1L,
                 color = Color.Green
             ),
             ShapeConnection(
                 id = 2L,
                 fromSide = BoxSide.LEFT,
                 toSide = BoxSide.RIGHT,
-                fromBox = 3L,
-                toBox = 2L,
+                fromBoxId = 3L,
+                toBoxId = 2L,
                 color = Color.Yellow
             )
         )

@@ -92,7 +92,7 @@ suspend fun PointerInputScope.detectTransformGestures(
                 // get another and use it if other pointers are also down
                 // event.changes.first() doesn't return same order
                 val pointerInputChange =
-                    event.changes.firstOrNull { it.id == pointerId }
+                    event.changes.lastOrNull { it.id == pointerId }
                         ?: event.changes.first()
 
                 // Next time will check same pointer with this id
@@ -302,7 +302,7 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                 // get another and use it if other pointers are also down
                 // event.changes.first() doesn't return same order
                 val pointerInputChange =
-                    event.changes.firstOrNull { it.id == pointerId }
+                    event.changes.lastOrNull { it.id == pointerId }
                         ?: event.changes.first()
 
                 // Next time will check same pointer with this id

@@ -37,7 +37,6 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
         Modifier
             .fillMaxSize()
             .background(Color.White.darker(0.5f))
-        //todo .background(LocalAppTheme.current.colors.backgroundPrimary)
     ) {
         Graph(
             consume = false,

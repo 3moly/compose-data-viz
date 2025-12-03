@@ -1,7 +1,7 @@
 ![Maven Central Version](https://img.shields.io/maven-central/v/io.github.3moly/compose-data-viz)
 
 <p align="middle">
-    <img src="./docs/media/canvas_demo.jpg" width="49%" />
+    <img src="docs/media/whiteboard_demo.jpg" width="49%" />
     <img src="./docs/media/graph_demo.png" width="49%" />
 </p>
 
@@ -9,9 +9,9 @@
 
 # compose-data-vizualization
 
-You need Miro canvas or Graph nodes like in Obsidian App in Compose multiplatform?
+You need Miro whiteboard or Graph nodes like in Obsidian App in Compose multiplatform?
 <br/>
-This library can help you. Most prepared motions and actions with Canvas and Graph are given.
+This library can help you. Most prepared motions and actions with Whiteboard and Graph are given.
 
 Open demo site in wasm (mobile friendly):
 
@@ -27,10 +27,10 @@ implementation("io.github.3moly:compose-data-viz-core:0.1.0")
 
 ### Sample code
 
-In sample module there is CanvasSample and GraphSample functions.
+In sample module there is WhiteboardSample and GraphSample functions.
 With them you can understand faster how to deal with the library.
 
-### Canvas
+### Whiteboard
 
 The key part is a shape. For library it's important to know about 3 fields.
 
@@ -61,33 +61,35 @@ And Modifier with calculated size and location will show in DrawShapeState.
 So you can use this Modifier for drawing Shape, you can draw any shape you want.
 
 ```kotlin
-onDrawBlock: @Composable (DrawShapeState<ShapeType>) -> Unit
+onDrawBlock: @Composable (DrawShapeState<ShapeType, Id>) -> Unit
 ```
 
 ```kotlin
 @Composable
-fun <ShapeType : Shape> Canvas(
-modifier: Modifier,
-action: Action?,
-backgroundModifier: Modifier,
-connectionsModifier: Modifier,
-settings: CanvasSettings,
-zoom: Float,
-roundToNearest: Int?,
-userCoordinate: Offset,
-isDrawing: Boolean,
-shapes: List<ShapeType>,
-connections: List<ShapeConnection>,
-drawingPaths: List<StylusPath>,
-onActionSet: (Action?) -> Unit,
-onAddPath: (StylusPath) -> Unit,
-onMoveShape: (Int, Offset) -> Unit,
-onResizeShape: (Int, Offset, Offset) -> Unit,
-onAddConnection: (ShapeConnection) -> Unit,
-onZoomChange: (Float) -> Unit,
-onUserCoordinateChange: (Offset) -> Unit,
-settingsPanel: @Composable (position: Offset, action: Action, onDoneAction: () -> Unit) -> Unit,
-onDrawBlock: @Composable (DrawShapeState<ShapeType>) -> Unit,
+fun <ShapeType : Shape<Id>, Id> Whiteboard(
+    consume: Boolean,
+    modifier: Modifier,
+    action: Action<ShapeType, Id>?,
+    backgroundModifier: Modifier,
+    connectionsModifier: Modifier,
+    settings: CanvasSettings,
+    zoom: Float,
+    roundToNearest: Int?,
+    connectionDragBlankId: Id,
+    userCoordinate: Offset,
+    isDrawing: Boolean,
+    shapes: List<ShapeType>,
+    connections: List<ShapeConnection<Id>>,
+    drawingPaths: List<StylusPath>,
+    onActionSet: (Action<ShapeType, Id>?) -> Unit,
+    onAddPath: (StylusPath) -> Unit,
+    onMoveShape: (Int, Offset) -> Unit,
+    onResizeShape: (Int, Offset, Offset) -> Unit,
+    onAddConnection: (AddShapeConnection<Id>) -> Unit,
+    onZoomChange: (Float) -> Unit,
+    onUserCoordinateChange: (Offset) -> Unit,
+    settingsPanel: @Composable (position: Offset, action: Action<ShapeType, Id>, onDoneAction: () -> Unit) -> Unit,
+    onDrawBlock: @Composable (DrawShapeState<ShapeType, Id>) -> Unit,
 ) {
     //...
 }
@@ -124,3 +126,6 @@ fun <Id, Data> Graph(
 }
 ```
 
+## Used in
+
+- [CedarJam](https://github.com/3moly/CedarJam)

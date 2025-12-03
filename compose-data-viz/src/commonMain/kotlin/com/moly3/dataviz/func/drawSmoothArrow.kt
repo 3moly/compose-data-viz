@@ -5,9 +5,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import com.moly3.dataviz.core.block.model.Action
-import com.moly3.dataviz.core.block.model.BoxSide
-import com.moly3.dataviz.core.block.model.ConnectionConfig
+import com.moly3.dataviz.core.whiteboard.model.Action
+import com.moly3.dataviz.core.whiteboard.model.BoxSide
+import com.moly3.dataviz.core.whiteboard.model.ConnectionConfig
+import com.moly3.dataviz.core.whiteboard.model.Shape
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -15,8 +16,8 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-fun DrawScope.drawSmoothArrow(
-    id: Long,
+fun <ShapeType : Shape<Id>, Id> DrawScope.drawSmoothArrow(
+    id: Id,
     startPoint: Offset,
     endPoint: Offset,
     fromSide: BoxSide,
@@ -24,7 +25,7 @@ fun DrawScope.drawSmoothArrow(
     color: Color,
     config: ConnectionConfig,
     zoom: Float = 1f,
-    action: Action?,
+    action: Action<ShapeType, Id>?,
     selectedConnectionStrokeWidth: Float = 1f
 ) {
     val strokeWidth = config.strokeWidth.toPx()

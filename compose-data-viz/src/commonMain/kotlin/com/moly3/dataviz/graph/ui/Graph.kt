@@ -131,7 +131,7 @@ fun <Id, Data> Graph(
                         scope.launch(io) {
                             val tapOffset = (position - centerSizeState) / latestZoom
                             val foundNode =
-                                latestNodes.firstOrNull { node ->
+                                latestNodes.lastOrNull { node ->
                                     isNodeTapped(
                                         nodeOffset = latestCoordinatesState[node.id] ?: Offset.Zero,
                                         cameraOffset = -latestUserPosition,
@@ -156,7 +156,7 @@ fun <Id, Data> Graph(
                                 draggedNodeState = draggedNodeState?.copy(offset = moveOffset)
                             } else {
                                 val foundNode =
-                                    latestNodes.firstOrNull { node ->
+                                    latestNodes.lastOrNull { node ->
 
                                         isNodeTapped(
                                             nodeOffset = latestCoordinatesState[node.id]
@@ -182,7 +182,7 @@ fun <Id, Data> Graph(
                         println("onGestureStart pointer: $pointer")
                         val tapOffset =
                             (pointer.position - centerSizeState) / latestZoom
-                        val foundNode = latestNodes.firstOrNull { node ->
+                        val foundNode = latestNodes.lastOrNull { node ->
                             isNodeTapped(
                                 nodeOffset = latestCoordinatesState[node.id] ?: Offset.Zero,
                                 cameraOffset = -latestUserPosition,

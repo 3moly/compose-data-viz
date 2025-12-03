@@ -62,7 +62,7 @@ internal fun <Id, Data> GraphInternal(
     val cursorNodeTextLayout = remember(nodes, cursorNodeId) {
         val style = TextStyle.Default.copy(fontSize = (24 / localDensity.density).sp)
         if (cursorNodeId != null) {
-            val node = nodes.firstOrNull { it.id == cursorNodeId }
+            val node = nodes.lastOrNull { it.id == cursorNodeId }
             if (node != null) {
                 textMeasurerNoCaching.measure(
                     text = node.name,
@@ -190,7 +190,7 @@ internal fun <Id, Data> GraphInternal(
             translate(center.x + movementOffset.x, center.y + movementOffset.y)
         }) {
             if (cursorNodeId != null && cursorNodeTextLayout != null) {
-                val cursorNode = nodes.firstOrNull { it.id == cursorNodeId }
+                val cursorNode = nodes.lastOrNull { it.id == cursorNodeId }
                 if (cursorNode != null) {
                     val nodeCenter =
                         cursorNode.getNodeOffset(coords = coordinates) ?: return@withTransform
