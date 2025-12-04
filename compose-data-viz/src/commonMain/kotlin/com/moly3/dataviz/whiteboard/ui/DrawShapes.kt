@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.whiteboard.func.absoluteOffset
@@ -29,7 +30,7 @@ import com.moly3.dataviz.core.whiteboard.model.DrawShapeState
 import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.allSides
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.whiteboard.func.getSideShapeDragAction
+import androidx.compose.ui.graphics.Shadow
 
 
 val borderPadding = 1f
@@ -118,11 +119,10 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
         val boxSize = shapeParams.size
 
         for (side in allSides) {
-
             val sideOffset = makeSideOffset(
                 itemPosition = shapeParams.itemPosition,
                 userCoordinate = userCoordinate,
-                boxSize = boxSize,
+                shapeSize = boxSize / zoom,
                 zoom = zoom,
                 side = side
             )
@@ -133,17 +133,22 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
                 side = side,
                 radius = sizeRound / 2f
             )
-            if (isInSide && isConnectionDrag || isSelected) {
+            if (isConnectionDrag || isSelected) {
+                val shape = RoundedCornerShape((sizeRound * zoom).dp)
                 Box(
                     modifier = Modifier
                         .absoluteOffset(sideOffset / density)
-                        .size((sizeRound * zoom).dp / density)
+                        .size((sizeRound * zoom / density).dp)
                         .align(Alignment.Center)
                         .background(
                             color = sideCircleColor,
-                            RoundedCornerShape((sizeRound * zoom).dp)
+                            shape = shape
                         )
-                        .clip(RoundedCornerShape((sizeRound * zoom).dp)),
+                        .clip(shape)
+                        .innerShadow(shape) {
+                            this.color = Color.Red
+                            radius = 4f * zoom
+                        },
                 ) {}
             }
         }

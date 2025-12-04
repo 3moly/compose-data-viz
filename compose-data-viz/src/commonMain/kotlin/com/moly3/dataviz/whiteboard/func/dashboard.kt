@@ -108,7 +108,8 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                         userCoordinate = userCoordinateState.value,
                         zoom = zoomState.value,
                         config = connectionConfig,
-                        roundToNearest = roundToNearestState.value
+                        roundToNearest = roundToNearestState.value,
+                        density = density
                     )
                     if (foundConnection != null) {
                         onActionSet(Action.Connection(foundConnection))

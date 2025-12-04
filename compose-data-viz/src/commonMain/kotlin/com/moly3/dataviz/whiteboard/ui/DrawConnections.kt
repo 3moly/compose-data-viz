@@ -43,66 +43,71 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
     action: Action<ShapeType, Id>?,
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
-        for (connection in connections) {
-            val fromBox = shapes.lastOrNull { b -> b.id == connection.fromBoxId }
-            val toBox = shapes.lastOrNull { b -> b.id == connection.toBoxId }
-            if (fromBox == null || toBox == null)
-                continue
-            val startPoint =
-                makeSideOffset(
-                    dragAction = dragActionState.value,
-                    userCoordinate = userCoordinate,
-                    boxSide = fromBox,
-                    zoom = zoom,
-                    side = connection.fromSide,
-                    roundToNearest = roundToNearest
-                )
-            val endPoint =
-                makeSideOffset(
-                    dragAction = dragActionState.value,
-                    userCoordinate = userCoordinate,
-                    boxSide = toBox,
-                    zoom = zoom,
-                    side = connection.toSide,
-                    roundToNearest = roundToNearest
-                )
-            drawSmoothArrow(
-                id = connection.id,
-                action = action,
-                startPoint = (startPoint + centerOfScreen),
-                endPoint = (endPoint + centerOfScreen),
-                fromSide = connection.fromSide,
-                toSide = connection.toSide,
-                color = connection.color ?: lineColor,
-                zoom = zoom,
-                config = config,
-                selectedConnectionStrokeWidth = selectedConnectionStrokeWidth
-            )
-        }
-        if (dragActionState.value != null && dragActionState.value!!.dragType is DragType.Connection) {
-            val connection =
-                (dragActionState.value!!.dragType as DragType.Connection)
+        withTransform({
 
-            val startPoint = makeSideOffset(
-                itemPosition = connection.boxSide.position,
-                userCoordinate = userCoordinate,
-                boxSize = connection.boxSide.size,
-                zoom = zoom,
-                side = connection.startShapeType
-            )
-            val endPoint = cursorPosition
-            drawSmoothArrow<ShapeType, Id>(
-                id = connectionDragBlankId,
-                startPoint = (startPoint + centerOfScreen),
-                endPoint = (endPoint),
-                fromSide = connection.startShapeType,
-                toSide = connection.startShapeType.reverse(),
-                color = lineColor,
-                zoom = zoom,
-                config = config,
-                action = null
-            )
+        }){
+            for (connection in connections) {
+                val fromBox = shapes.lastOrNull { b -> b.id == connection.fromBoxId }
+                val toBox = shapes.lastOrNull { b -> b.id == connection.toBoxId }
+                if (fromBox == null || toBox == null)
+                    continue
+                val startPoint =
+                    makeSideOffset(
+                        dragAction = dragActionState.value,
+                        userCoordinate = userCoordinate,
+                        boxSide = fromBox,
+                        zoom = zoom,
+                        side = connection.fromSide,
+                        roundToNearest = roundToNearest,
+                    )
+                val endPoint =
+                    makeSideOffset(
+                        dragAction = dragActionState.value,
+                        userCoordinate = userCoordinate,
+                        boxSide = toBox,
+                        zoom = zoom,
+                        side = connection.toSide,
+                        roundToNearest = roundToNearest
+                    )
+                drawSmoothArrow(
+                    id = connection.id,
+                    action = action,
+                    startPoint = (startPoint + centerOfScreen),
+                    endPoint = (endPoint + centerOfScreen),
+                    fromSide = connection.fromSide,
+                    toSide = connection.toSide,
+                    color = connection.color ?: lineColor,
+                    zoom = zoom /density,
+                    config = config,
+                    selectedConnectionStrokeWidth = selectedConnectionStrokeWidth
+                )
+            }
+            if (dragActionState.value != null && dragActionState.value!!.dragType is DragType.Connection) {
+                val connection =
+                    (dragActionState.value!!.dragType as DragType.Connection)
+
+                val startPoint = makeSideOffset(
+                    itemPosition = connection.boxSide.position,
+                    userCoordinate = userCoordinate,
+                    shapeSize = connection.boxSide.size,
+                    zoom = zoom,
+                    side = connection.startShapeType
+                )
+                val endPoint = cursorPosition
+                drawSmoothArrow(
+                    id = connectionDragBlankId,
+                    startPoint = (startPoint + centerOfScreen),
+                    endPoint = (endPoint),
+                    fromSide = connection.startShapeType,
+                    toSide = connection.startShapeType.reverse(),
+                    color = lineColor,
+                    zoom = zoom,
+                    config = config,
+                    action = null
+                )
+            }
         }
+
         for (path in paths) {
             drawCompletedPath(
                 zoom = zoom,
@@ -164,54 +169,6 @@ fun DrawScope.drawCompletedPath(
             drawCircle(
                 color = path.color,
                 radius = point.strokeWidth / 2f,
-                center = Offset(point.x, point.y)
-            )
-        }
-    }
-}
-
-fun DrawScope.drawCurrentStroke2(
-    zoom: Float,
-    movementOffset: Offset,
-    points: List<StylusPoint>
-) {
-    withTransform({
-        scale(zoom, zoom)
-        translate(center.x + movementOffset.x, center.y + movementOffset.y)
-    }) {
-        if (points.isEmpty()) return
-        if (points.size == 1) {
-            val point = points.first()
-            drawCircle(
-                color = Color.Red, // Use red to make sure it's visible
-                radius = maxOf(point.strokeWidth / 2f, 8f), // Make it bigger
-                center = Offset(point.x, point.y)
-            )
-            //println("Drew single point at ${point.x}, ${point.y}")
-            return
-        }
-
-        // Draw all segments in the current path
-        for (i in 1 until points.size) {
-            val startPoint = points[i - 1]
-            val endPoint = points[i]
-
-            val avgStrokeWidth = maxOf((startPoint.strokeWidth + endPoint.strokeWidth) / 2f, 4f)
-
-            drawLine(
-                color = Color.Blue, // Use blue to make sure it's visible
-                start = Offset(startPoint.x, startPoint.y),
-                end = Offset(endPoint.x, endPoint.y),
-                strokeWidth = avgStrokeWidth,
-                cap = StrokeCap.Round
-            )
-        }
-
-        // Draw larger circles at each point for visibility
-        points.forEach { point ->
-            drawCircle(
-                color = Color.Blue,
-                radius = maxOf(point.strokeWidth / 2f, 4f),
                 center = Offset(point.x, point.y)
             )
         }

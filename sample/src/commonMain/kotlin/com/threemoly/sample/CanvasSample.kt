@@ -47,7 +47,7 @@ import com.moly3.dataviz.whiteboard.func.absoluteOffset
 import com.moly3.dataviz.whiteboard.ui.Whiteboard
 import com.moly3.dataviz.core.whiteboard.model.Action
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
-import com.moly3.dataviz.core.whiteboard.model.CanvasSettings
+import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.moly3.dataviz.func.darker
 import com.threemoly.sample.base.block.CustomShape
@@ -117,8 +117,8 @@ fun CanvasSample(
         selectedShader.zoom = zoomState.value
         selectedShader.dotSpacing = 50f
     }
-    val canvasSettings = remember(strokeWidthState.value) {
-        CanvasSettings(
+    val whiteboardSettings = remember(strokeWidthState.value, density.density) {
+        WhiteboardSettings(
             strokeWidth = strokeWidthState.value,
             defaultLineColor = Color.Cyan,
             sideCircleColor = Color.Blue
@@ -136,7 +136,6 @@ fun CanvasSample(
     }
     Row(Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -149,7 +148,7 @@ fun CanvasSample(
                 roundToNearest = roundToNearest.value,
                 backgroundModifier = Modifier,
                 connectionsModifier = Modifier.hazeSource(hazeState, zIndex = 1f),
-                settings = canvasSettings,
+                settings = whiteboardSettings,
                 zoom = zoomState.value,
                 onZoomChange = {
                     zoomState.value = it

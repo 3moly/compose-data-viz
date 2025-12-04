@@ -96,8 +96,6 @@ fun <ShapeType : Shape<Id>, Id> DrawScope.drawSmoothArrow(
             )
         }
     }
-
-
     drawPath(
         path = path,
         color = color,

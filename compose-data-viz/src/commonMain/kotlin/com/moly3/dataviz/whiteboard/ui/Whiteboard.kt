@@ -29,7 +29,7 @@ import com.moly3.dataviz.whiteboard.func.roundToNearest
 import com.moly3.dataviz.core.whiteboard.model.Action
 import com.moly3.dataviz.core.whiteboard.model.AddShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
-import com.moly3.dataviz.core.whiteboard.model.CanvasSettings
+import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.core.whiteboard.model.ConnectionConfig
 import com.moly3.dataviz.core.whiteboard.model.DragAction
 import com.moly3.dataviz.core.whiteboard.model.DragType
@@ -46,7 +46,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     action: Action<ShapeType, Id>?,
     backgroundModifier: Modifier,
     connectionsModifier: Modifier,
-    settings: CanvasSettings,
+    settings: WhiteboardSettings,
     zoom: Float,
     roundToNearest: Int?,
     connectionDragBlankId: Id,
@@ -139,7 +139,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                 detectionPercent = 0.1f,
                 circleRadius = circleRadius,
                 roundToNearest = roundToNearest,
-                action = action
+                action = action,
+                density = actualDensity.density
             )
         }
     Box(

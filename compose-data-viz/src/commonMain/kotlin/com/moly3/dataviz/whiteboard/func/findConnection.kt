@@ -17,7 +17,8 @@ internal fun <Id> findConnection(
     userCoordinate: Offset,
     zoom: Float,
     config: ConnectionConfig,
-    roundToNearest: Int?
+    roundToNearest: Int?,
+    density: Float
 ): SelectedConnection<Id>? {
     var startPointW: Offset? = null
     var endPointW: Offset? = null

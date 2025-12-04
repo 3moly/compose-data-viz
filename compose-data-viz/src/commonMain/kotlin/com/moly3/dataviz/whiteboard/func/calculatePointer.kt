@@ -30,7 +30,8 @@ fun <ShapeType : Shape<Id>, Id> calculatePointer(
     sizeRound: Int,
     detectionPercent: Float,
     circleRadius: Float?,
-    roundToNearest: Int?
+    roundToNearest: Int?,
+    density: Float
 ): PointerDetection {
 
     val ses = getShapeGlobalDragType(
@@ -50,7 +51,8 @@ fun <ShapeType : Shape<Id>, Id> calculatePointer(
         userCoordinate = userCoordinate,
         zoom = zoom,
         config = connectionConfig,
-        roundToNearest = roundToNearest
+        roundToNearest = roundToNearest,
+        density = density
     )
 
     return if (ses != null) {

@@ -2,7 +2,7 @@ package com.moly3.dataviz.core.whiteboard.model
 
 import androidx.compose.ui.graphics.Color
 
-data class CanvasSettings(
+data class WhiteboardSettings(
     val strokeWidth: Float = 1f,
     val defaultLineColor: Color,
     val sideCircleColor: Color,
