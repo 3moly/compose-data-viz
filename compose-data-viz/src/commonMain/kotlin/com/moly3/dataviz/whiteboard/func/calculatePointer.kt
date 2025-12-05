@@ -2,6 +2,7 @@ package com.moly3.dataviz.whiteboard.func
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.unit.Density
 import com.moly3.dataviz.core.whiteboard.model.Action
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.BoxSide

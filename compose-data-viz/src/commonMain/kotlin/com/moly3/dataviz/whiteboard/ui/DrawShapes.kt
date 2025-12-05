@@ -17,20 +17,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.innerShadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.moly3.dataviz.whiteboard.func.absoluteOffset
-import com.moly3.dataviz.whiteboard.func.calculateShapeParams
-import com.moly3.dataviz.whiteboard.func.isInSidePosition
-import com.moly3.dataviz.whiteboard.func.makeSideOffset
 import com.moly3.dataviz.core.whiteboard.model.Action
 import com.moly3.dataviz.core.whiteboard.model.DragAction
 import com.moly3.dataviz.core.whiteboard.model.DragType
 import com.moly3.dataviz.core.whiteboard.model.DrawShapeState
 import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.allSides
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Shadow
+import com.moly3.dataviz.whiteboard.func.absoluteOffset
+import com.moly3.dataviz.whiteboard.func.calculateShapeParams
+import com.moly3.dataviz.whiteboard.func.makeSideOffsetShape
 
 
 val borderPadding = 1f
@@ -51,10 +49,12 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
     zoom: Float,
     density: Float,
     action: Action<ShapeType, Id>?,
-    sideCircleColor: Color,
     roundToNearest: Int?,
     onDrawBlock: @Composable (DrawShapeState<ShapeType, Id>) -> Unit,
+    onDrawConnectionCircle: @Composable (RoundedCornerShape, Modifier) -> Unit
 ) {
+    val shape = RoundedCornerShape((sizeRound * zoom).dp)
+
     val isConnectionDrag = dragActionState.value?.dragType is DragType.Connection
     for ((index, item) in shapes.withIndex()) {
         val shapeParams = calculateShapeParams(
@@ -89,7 +89,6 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
             )
         )
 
-
         if (isSelected) {
             val cornerCircleSize = 12
 
@@ -119,37 +118,37 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
         val boxSize = shapeParams.size
 
         for (side in allSides) {
-            val sideOffset = makeSideOffset(
+            val sideOffset = makeSideOffsetShape(
                 itemPosition = shapeParams.itemPosition,
                 userCoordinate = userCoordinate,
                 shapeSize = boxSize / zoom,
                 zoom = zoom,
-                side = side
-            )
-            val isInSide = isInSidePosition(
-                mousePosition = mousePosition,
-                itemPosition = shapeParams.itemPosition,
-                boxSize = boxSize,
                 side = side,
-                radius = sizeRound / 2f
+                density = density
             )
+//          todo  val isInSide = isInSidePosition(
+//                mousePosition = mousePosition,
+//                itemPosition = shapeParams.itemPosition,
+//                boxSize = boxSize / zoom,
+//                side = side,
+//                radius = sizeRound / 2f
+//            )
             if (isConnectionDrag || isSelected) {
-                val shape = RoundedCornerShape((sizeRound * zoom).dp)
-                Box(
-                    modifier = Modifier
+                onDrawConnectionCircle(
+                    shape,
+                    Modifier
                         .absoluteOffset(sideOffset / density)
                         .size((sizeRound * zoom / density).dp)
                         .align(Alignment.Center)
-                        .background(
-                            color = sideCircleColor,
-                            shape = shape
-                        )
                         .clip(shape)
-                        .innerShadow(shape) {
-                            this.color = Color.Red
-                            radius = 4f * zoom
-                        },
-                ) {}
+                )
+//                Box(
+//                    modifier =
+//                    . innerShadow (shape) {
+//                    this.color = Color.Red
+//                    radius = 4f * zoom
+//                },
+//                ) {}
             }
         }
     }

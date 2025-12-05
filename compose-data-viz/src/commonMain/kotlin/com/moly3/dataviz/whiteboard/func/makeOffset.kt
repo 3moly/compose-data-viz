@@ -1,7 +1,6 @@
 package com.moly3.dataviz.whiteboard.func
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.Density
 import com.moly3.dataviz.whiteboard.minShapeSize
 import com.moly3.dataviz.core.whiteboard.model.BoxSide
 import com.moly3.dataviz.core.whiteboard.model.DragAction
@@ -70,42 +69,31 @@ fun makeSideOffset(
     zoom: Float,
     side: BoxSide
 ): Offset {
-    val koef = 2f
+    val base = when (side) {
+        BoxSide.LEFT -> Offset(-shapeSize.x / 2, 0f)
+        BoxSide.TOP -> Offset(0f, -shapeSize.y / 2)
+        BoxSide.RIGHT -> Offset(shapeSize.x / 2, 0f)
+        BoxSide.BOTTOM -> Offset(0f, shapeSize.y / 2)
+    }
+    return ((userCoordinate + (-(itemPosition + base) - shapeSize / 2f)) * -1f * zoom)
+}
+
+fun makeSideOffsetShape(
+    itemPosition: Offset,
+    userCoordinate: Offset,
+    shapeSize: Offset,
+    zoom: Float,
+    side: BoxSide,
+    density: Float
+): Offset {
+    val koef = 2f /density
     val base = when (side) {
         BoxSide.LEFT -> Offset(-shapeSize.x / koef, 0f)
         BoxSide.TOP -> Offset(0f, -shapeSize.y / koef)
         BoxSide.RIGHT -> Offset(shapeSize.x / koef, 0f)
         BoxSide.BOTTOM -> Offset(0f, shapeSize.y / koef)
     }
-    return ((userCoordinate + (-(itemPosition  + base) - shapeSize)) * -1f * zoom)
-}
-
-// Упрощённая понятная функция: возвращает смещение в пикселях (Offset)
-fun makeSideOffsetPx(
-    itemPosition: Offset,    // позиция центра элемента в px
-    userCoordinate: Offset,  // координата пользовательского смещения/скролла в px
-    boxSize: Offset,         // размер коробки элемента в px
-    zoom: Float,
-    side: BoxSide
-): Offset {
-    val base = when (side) {
-        BoxSide.LEFT -> Offset(-boxSize.x / 2f, 0f)
-        BoxSide.TOP -> Offset(0f, -boxSize.y / 2f)
-        BoxSide.RIGHT -> Offset(boxSize.x / 2f, 0f)
-        BoxSide.BOTTOM -> Offset(0f, boxSize.y / 2f)
-    }
-
-    // точка ручки (в px)
-    val handlePos = itemPosition + base
-
-    // вектор от userCoordinate до ручки
-    val relative = handlePos - userCoordinate
-
-    // применяем zoom к относительному вектору
-    val scaled = relative * zoom
-
-    // возвращаем scaled — это смещение в px от (0,0) канваса, которое потом конвертируем в dp
-    return scaled
+    return ((userCoordinate + (-(itemPosition + base) - shapeSize / 2f * density)) * -1f * zoom)
 }
 
 

@@ -45,7 +45,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
     Canvas(modifier = modifier.fillMaxSize()) {
         withTransform({
 
-        }){
+        }) {
             for (connection in connections) {
                 val fromBox = shapes.lastOrNull { b -> b.id == connection.fromBoxId }
                 val toBox = shapes.lastOrNull { b -> b.id == connection.toBoxId }
@@ -77,7 +77,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     fromSide = connection.fromSide,
                     toSide = connection.toSide,
                     color = connection.color ?: lineColor,
-                    zoom = zoom /density,
+                    zoom = zoom / density,  //ISSUE 01: Density
                     config = config,
                     selectedConnectionStrokeWidth = selectedConnectionStrokeWidth
                 )
@@ -101,7 +101,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     fromSide = connection.startShapeType,
                     toSide = connection.startShapeType.reverse(),
                     color = lineColor,
-                    zoom = zoom,
+                    zoom = zoom / density,  //ISSUE 01: Density
                     config = config,
                     action = null
                 )

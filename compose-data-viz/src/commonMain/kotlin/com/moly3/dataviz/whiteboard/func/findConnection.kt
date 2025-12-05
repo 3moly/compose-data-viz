@@ -65,7 +65,7 @@ internal fun <Id> findConnection(
             fromSide = connection.fromSide,
             toSide = connection.toSide,
             config = config,
-            density = Density(1f, 1f),
+            density = Density(density,1f),
             zoom = zoom
         )
     }

@@ -97,7 +97,6 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                     } else {
                         onActionSet(Action.ShapeAction(foundShape))
                     }
-
                 } else {
                     val foundConnection = findConnection(
                         shapes = shapes,
@@ -109,7 +108,7 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                         zoom = zoomState.value,
                         config = connectionConfig,
                         roundToNearest = roundToNearestState.value,
-                        density = density
+                        density = 1f / density  //ISSUE 01: Density
                     )
                     if (foundConnection != null) {
                         onActionSet(Action.Connection(foundConnection))

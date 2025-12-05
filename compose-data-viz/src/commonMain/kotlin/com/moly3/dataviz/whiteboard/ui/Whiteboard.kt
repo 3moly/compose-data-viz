@@ -65,6 +65,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     onUserCoordinateChange: (Offset) -> Unit,
     settingsPanel: @Composable (position: Offset, action: Action<ShapeType, Id>, onDoneAction: () -> Unit) -> Unit,
     onDrawBlock: @Composable (DrawShapeState<ShapeType, Id>) -> Unit,
+    onDrawConnectionCircle: @Composable (RoundedCornerShape, Modifier) -> Unit
 ) {
     var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
     val scaleMovementModifier = 5f
@@ -123,7 +124,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
             cursorPosition,
             roundToNearest,
             action,
-            circleRadius
+            circleRadius,
+            actualDensity.density
         ) {
             calculatePointer(
                 shapes = shapes,
@@ -140,7 +142,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                 circleRadius = circleRadius,
                 roundToNearest = roundToNearest,
                 action = action,
-                density = actualDensity.density
+                density = 1f / actualDensity.density //ISSUE 01: Density
             )
         }
     Box(
@@ -173,7 +175,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                     connectionDragBlankId = connectionDragBlankId
                 )
                 DrawShapes(
-                    mousePosition = mapCursor,
+                    mousePosition = cursorPosition,
                     shapes = shapes,
                     dragActionState = dragActionState,
                     userCoordinate = userCoordinate,
@@ -181,8 +183,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                     density = actualDensity.density,
                     action = action,
                     onDrawBlock = onDrawBlock,
-                    sideCircleColor = settings.sideCircleColor,
-                    roundToNearest = roundToNearest
+                    roundToNearest = roundToNearest,
+                    onDrawConnectionCircle = onDrawConnectionCircle
                 )
                 val actionState = rememberUpdatedState(action)
                 val updatedShapes = rememberUpdatedState(shapes)

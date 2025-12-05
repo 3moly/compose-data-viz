@@ -2,6 +2,7 @@ package com.threemoly.sample
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +21,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -38,6 +41,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -55,6 +59,7 @@ import com.threemoly.sample.base.block.ShapeData
 import com.threemoly.sample.base.uikit.shader.UmlShader
 import com.threemoly.sample.base.uikit.BButton
 import com.threemoly.sample.base.uikit.ButtonIcon
+import com.threemoly.sample.base.uikit.ObsCheckbox
 import com.threemoly.sample.base.uikit.ObsText
 import com.threemoly.sample.base.uikit.SettingsPanel
 import com.threemoly.sample.base.uikit.icons.DownCircle
@@ -134,6 +139,9 @@ fun CanvasSample(
         val index = shapes.indexOf(shape)
         shapes[index] = shapes[index].copy(data = ShapeData.Text(newText))
     }
+
+    var isDensity by remember { mutableStateOf(false) }
+    val densityAnim by animateFloatAsState(if (isDensity) 2f else 1f)
     Row(Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Box(
@@ -280,7 +288,9 @@ fun CanvasSample(
                                             actionState.value = null
                                         },
                                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                        colors = TextFieldDefaults.colors(unfocusedContainerColor = Color.White)
+                                        colors = TextFieldDefaults.colors(
+                                            unfocusedContainerColor = Color.White
+                                        )
                                     )
                                     LaunchedEffect(Unit) {
                                         focusRequest.requestFocus()
@@ -396,7 +406,13 @@ fun CanvasSample(
                     paths.add(path.copy(color = Color.Cyan))
                 },
                 connectionDragBlankId = 1L,
-                circleRadius = 12f
+                circleRadius = 12f,
+                onDrawConnectionCircle = { shape, modifier ->
+                    Box(modifier = modifier.background(Color.White, shape).innerShadow(shape) {
+                        color = Color.Black
+                        radius = 4f
+                    })
+                }
             )
             SettingsPanel(
                 backgroundColor = Color.White,
@@ -427,6 +443,9 @@ fun CanvasSample(
                     onValueChange = {
                         strokeWidthState.value = it
                     })
+                ObsCheckbox(isDensity, onCheckedChange = {
+                    isDensity = it
+                })
             }
             Row(
                 modifier = Modifier.padding(bottom = 46.dp).align(Alignment.BottomCenter),
