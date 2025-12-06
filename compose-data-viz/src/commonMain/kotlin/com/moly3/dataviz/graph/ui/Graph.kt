@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.graph.func.HybridGraphRenderer
 import com.moly3.dataviz.graph.func.isNodeTapped
@@ -56,7 +57,8 @@ fun <Id, Data> Graph(
     primaryColor: Color,
     fontColor: Color,
     circleColor: Color,
-    circleLineColor: Color
+    circleLineColor: Color,
+    textStyle: TextStyle = TextStyle.Default,
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset(0.0F, 0.0F)) }
@@ -253,6 +255,7 @@ fun <Id, Data> Graph(
         primaryColor = primaryColor,
         circleColor = circleColor,
         circleLineColor = circleLineColor,
-        fontColor = fontColor
+        fontColor = fontColor,
+        textStyle = textStyle
     )
 }

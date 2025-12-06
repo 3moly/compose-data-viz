@@ -35,6 +35,7 @@ internal fun <Id, Data> GraphInternal(
     circleRadius: Float,
     zoom: Float,
     primaryColor: Color,
+    textStyle: TextStyle = TextStyle.Default,
     fontColor: Color,
     circleColor: Color,
     circleLineColor: Color
@@ -49,8 +50,8 @@ internal fun <Id, Data> GraphInternal(
     val textMeasurer = rememberTextMeasurer(cacheSize = Int.MAX_VALUE)
     val textMeasurerNoCaching = rememberTextMeasurer(cacheSize = 0)
 
-    val textLayouts = remember(nodes) {
-        val style = TextStyle.Default.copy(fontSize = (12 / localDensity.density).sp)
+    val textLayouts = remember(nodes, textStyle) {
+        val style = textStyle.copy(fontSize = (12 / localDensity.density).sp)
         nodes.associate { node ->
             node.id to textMeasurer.measure(
                 text = node.name,
@@ -59,8 +60,8 @@ internal fun <Id, Data> GraphInternal(
         }
     }
 
-    val cursorNodeTextLayout = remember(nodes, cursorNodeId) {
-        val style = TextStyle.Default.copy(fontSize = (24 / localDensity.density).sp)
+    val cursorNodeTextLayout = remember(nodes, cursorNodeId, textStyle) {
+        val style = textStyle.copy(fontSize = (24 / localDensity.density).sp)
         if (cursorNodeId != null) {
             val node = nodes.lastOrNull { it.id == cursorNodeId }
             if (node != null) {
