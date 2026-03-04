@@ -119,7 +119,6 @@ fun <Id, Data> Graph(
             }
             .pointerInput(watchNodeId) {
                 detectPointerTransformGestures(
-                    scope = scope,
                     consume = consume,
                     numberOfPointers = 0,
                     requisite = PointerRequisite.GreaterThan,
@@ -181,7 +180,6 @@ fun <Id, Data> Graph(
                         }
                     },
                     onGestureStart = { pointer ->
-                        println("onGestureStart pointer: $pointer")
                         val tapOffset =
                             (pointer.position - centerSizeState) / latestZoom
                         val foundNode = latestNodes.lastOrNull { node ->

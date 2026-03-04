@@ -1,8 +1,10 @@
 package com.moly3.dataviz.core.graph.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 
 @Serializable
+@Stable
 data class GraphNode<Id, Data>(
     val id: Id,
     val name: String,

@@ -2,6 +2,7 @@
 
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidLibrary = { id = "com.android.library", version.ref = "agp" }
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 compose = { id = "org.jetbrains.compose", version.ref = "plugin-compose" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
@@ -10,16 +11,18 @@ serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref 
 
 [versions]
 
-composedataviz = "0.1.6"
-composedatavizcore = "0.1.6"
+composedataviz = "0.1.10"
+composedatavizcore = "0.1.10"
 
-agp = "8.13.1"
-kotlin = "2.2.21"
-plugin-compose = "1.9.3"
-maven-publish = "0.35.0"
-serialization = "1.9.0"
+agp = "9.1.0"
+foundation = "1.10.1"
+kotlin = "2.3.10"
+plugin-compose = "1.10.1"
+maven-publish = "0.36.0"
+serialization = "1.10.0"
 
 [libraries]
 
+foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "foundation" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }

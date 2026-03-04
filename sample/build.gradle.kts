@@ -7,7 +7,7 @@ import kotlin.collections.set
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
     kotlin("native.cocoapods")
@@ -17,7 +17,25 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     jvm()
-    androidTarget()
+    android {
+//        defaultConfig {
+//            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+//        }
+        namespace = "com.threemoly.sample"
+        compileSdk = 36
+//        defaultConfig {
+//            minSdk = 23
+//        }
+//        compileOptions {
+//            sourceCompatibility = JavaVersion.VERSION_17
+//            targetCompatibility = JavaVersion.VERSION_17
+//        }
+//        sourceSets["main"].apply {
+//            manifest.srcFile("src/androidMain/AndroidManifest.xml")
+//            res.srcDirs("src/androidMain/resources")
+//            resources.srcDirs("src/commonMain/resources")
+//        }
+    }
 
     iosX64()
     iosArm64()
@@ -108,25 +126,7 @@ kotlin {
     }
 }
 
-android {
-    defaultConfig {
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-    namespace = "com.threemoly.sample"
-    compileSdk = 36
-    defaultConfig {
-        minSdk = 23
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    sourceSets["main"].apply {
-        manifest.srcFile("src/androidMain/AndroidManifest.xml")
-        res.srcDirs("src/androidMain/resources")
-        resources.srcDirs("src/commonMain/resources")
-    }
-}
+
 
 
 compose.desktop {

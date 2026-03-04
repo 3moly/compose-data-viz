@@ -205,7 +205,6 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                                 ) / 2f
                         }
                         .dashboard(
-                            scope = scope,
                             consume = consume,
                             roundToNearestState = roundToNearestState,
                             zoomState = zoomState,

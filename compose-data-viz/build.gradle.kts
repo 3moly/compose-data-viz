@@ -2,7 +2,7 @@
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.maven.publish)
@@ -10,9 +10,23 @@ plugins {
 
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+    android {
+        namespace = "io.github.moly3.composedataviz"
+        compileSdk = 36
+//    defaultConfig {
+//        minSdk = 21
+//    }
+//    compileOptions {
+//        sourceCompatibility = JavaVersion.VERSION_17
+//        targetCompatibility = JavaVersion.VERSION_17
+//    }
+    }
     applyDefaultHierarchyTemplate()
 
-    androidTarget()
+//    androidTarget()
     jvm()
 
     iosX64()
@@ -35,7 +49,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(compose.foundation)
+            implementation(libs.foundation)
             api(projects.composeDataVizCore)
         }
         commonTest.dependencies {
@@ -44,17 +58,7 @@ kotlin {
     }
 }
 
-android {
-    namespace = "io.github.moly3.composedataviz"
-    compileSdk = 36
-    defaultConfig {
-        minSdk = 21
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-}
+
 
 mavenPublishing {
     publishToMavenCentral()
