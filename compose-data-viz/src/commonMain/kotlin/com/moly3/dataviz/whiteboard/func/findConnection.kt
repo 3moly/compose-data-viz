@@ -9,6 +9,7 @@ import com.moly3.dataviz.core.whiteboard.model.SelectedConnection
 import androidx.compose.ui.geometry.Offset
 
 internal fun <Id> findConnection(
+    minShapeSize: Float,
     shapes: List<Shape<Id>>,
     connections: List<ShapeConnection<Id>>,
     dragAction: DragAction<Id>?,
@@ -29,6 +30,7 @@ internal fun <Id> findConnection(
 
         // These transform world coordinates to screen coordinates
         val startPoint = makeSideOffset(
+            minShapeSize = minShapeSize,
             dragAction = dragAction,
             userCoordinate = userCoordinate,
             boxSide = fromBox,
@@ -42,6 +44,7 @@ internal fun <Id> findConnection(
             side = connection.fromSide
         )
         val endPoint = makeSideOffset(
+            minShapeSize = minShapeSize,
             dragAction = dragAction,
             userCoordinate = userCoordinate,
             boxSide = toBox,
@@ -65,7 +68,7 @@ internal fun <Id> findConnection(
             fromSide = connection.fromSide,
             toSide = connection.toSide,
             config = config,
-            density = Density(density,1f),
+            density = Density(density, 1f),
             zoom = zoom
         )
     }

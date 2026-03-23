@@ -42,6 +42,7 @@ val sizeRound = 25
 
 @Composable
 fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
+    minShapeSize: Float,
     mousePosition: Offset,
     shapes: List<ShapeType>,
     dragActionState: MutableState<DragAction<Id>?>,
@@ -63,7 +64,8 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
             density = density,
             userCoordinate = userCoordinate,
             dragAction = dragActionState.value,
-            roundToNearest = roundToNearest
+            roundToNearest = roundToNearest,
+            minShapeSize = minShapeSize
         )
         val isSelected = remember(item.id, dragActionState.value, action) {
             val dragAction = dragActionState.value

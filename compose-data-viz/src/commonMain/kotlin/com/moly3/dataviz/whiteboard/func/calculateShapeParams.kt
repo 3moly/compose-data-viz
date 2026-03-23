@@ -7,9 +7,9 @@ import com.moly3.dataviz.core.whiteboard.model.DragType
 import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.ShapeParams
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.whiteboard.minShapeSize
 
 fun <Id> calculateShapeParams(
+    minShapeSize: Float,
     item: Shape<Id>,
     zoom: Float,
     density: Float,

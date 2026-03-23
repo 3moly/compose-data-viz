@@ -19,13 +19,13 @@ import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.StylusPoint
 import com.moly3.dataviz.core.whiteboard.model.allSides
-import com.moly3.dataviz.whiteboard.minShapeSize
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
+    minShapeSize: Float,
     consume: Boolean,
     sizeRound: Int,
     circleRadiusState: State<Float?>,
@@ -111,6 +111,7 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                         }
                     } else {
                         val foundConnection = findConnection(
+                            minShapeSize = minShapeSize,
                             shapes = currentShapes,
                             connections = currentConnections,
                             dragAction = dragActionState.value,
@@ -197,11 +198,13 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                                         boxSide = targetShape
                                     )
                                 )
+
                                 is DragType.Resize -> DragAction(
                                     startMapPosition = mousePosition,
                                     accelerate = Offset(0f, 0f),
                                     dragType = dragType
                                 )
+
                                 is DragType.ShapeDrag -> DragAction(
                                     startMapPosition = targetShape.position,
                                     accelerate = targetShape.position,
@@ -298,15 +301,19 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                                     )
                                 }
                             }
+
                             is DragType.ShapeDrag -> {
-                                val foundIndex = currentShapes.indexOfFirst { x -> x.id == action.shapeId }
+                                val foundIndex =
+                                    currentShapes.indexOfFirst { x -> x.id == action.shapeId }
                                 if (foundIndex != -1) {
                                     currentOnMoveShape(foundIndex, dragAction.accelerate)
                                 }
                             }
+
                             is DragType.Resize -> {
                                 val resizeType = action.type
-                                val foundIndex = currentShapes.indexOfFirst { x -> x.id == action.shapeId }
+                                val foundIndex =
+                                    currentShapes.indexOfFirst { x -> x.id == action.shapeId }
 
                                 if (foundIndex != -1) {
                                     val shape = currentShapes[foundIndex]
@@ -315,8 +322,13 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
 
                                     val roundToNearest = roundToNearestState.value
                                     val accelerate = dragAction.accelerate
-                                    val resizePosition = resizePosition(accelerate, resizeType, roundToNearest)
-                                    val shapeSizeApp = resizeSize(accelerate, resizeType, roundToNearest = roundToNearest)
+                                    val resizePosition =
+                                        resizePosition(accelerate, resizeType, roundToNearest)
+                                    val shapeSizeApp = resizeSize(
+                                        accelerate,
+                                        resizeType,
+                                        roundToNearest = roundToNearest
+                                    )
 
                                     currentOnResizeShape(
                                         foundIndex,

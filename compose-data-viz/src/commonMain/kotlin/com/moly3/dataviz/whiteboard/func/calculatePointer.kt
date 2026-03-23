@@ -18,6 +18,7 @@ import com.moly3.dataviz.func.lastNotNullOfOrNull
 import com.moly3.dataviz.whiteboard.func.toPointerType
 
 fun <ShapeType : Shape<Id>, Id> calculatePointer(
+    minShapeSize: Float,
     shapes: List<ShapeType>,
     mapCursor: Offset,
     connections: List<ShapeConnection<Id>>,
@@ -44,6 +45,7 @@ fun <ShapeType : Shape<Id>, Id> calculatePointer(
     )
 
     val foundConnection = findConnection(
+        minShapeSize = minShapeSize,
         shapes = shapes,
         connections = connections,
         dragAction = dragAction,

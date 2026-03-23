@@ -3,6 +3,7 @@ package com.threemoly.sample
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,8 +35,19 @@ import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.PaintingStyle
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
@@ -47,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil3.compose.rememberAsyncImagePainter
 import com.mikepenz.hypnoticcanvas.shaderBackground
+import com.moly3.dataviz.core.whiteboard.func.calculateBounds
 import com.moly3.dataviz.whiteboard.func.absoluteOffset
 import com.moly3.dataviz.whiteboard.ui.Whiteboard
 import com.moly3.dataviz.core.whiteboard.model.Action
@@ -54,6 +67,7 @@ import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.moly3.dataviz.func.darker
+import com.moly3.dataviz.whiteboard.ui.drawCompletedPath
 import com.threemoly.sample.base.block.CustomShape
 import com.threemoly.sample.base.block.ShapeData
 import com.threemoly.sample.base.uikit.shader.UmlShader
@@ -151,6 +165,7 @@ fun CanvasSample(
                     .shaderBackground(shader = selectedShader)
             )
             Whiteboard(
+                minShapeSize = 0f,
                 modifier = Modifier.fillMaxSize(),
                 action = actionState.value,
                 roundToNearest = roundToNearest.value,
@@ -171,7 +186,12 @@ fun CanvasSample(
                     shapes[index] = shapes[index].copy(position = position)
                 },
                 onResizeShape = { index, position, size ->
-                    shapes[index] = shapes[index].copy(position = position, size = size)
+                    val shape = shapes[index]
+                    if (shape.data is ShapeData.Drawing) {
+                        shapes[index] = shapes[index].copy(position = position)
+                    } else {
+                        shapes[index] = shapes[index].copy(position = position, size = size)
+                    }
                 },
                 onAddConnection = { addConnection ->
                     connections.add(
@@ -197,6 +217,13 @@ fun CanvasSample(
                         (shapeState.shape.backgroundColor
                             ?: Color.Black).copy(alpha = 0.3f) // Dark semi-transparent
                     }
+                    val isDrawBack = remember(shapeState.shape) {
+                        when (shapeState.shape.data) {
+                            is ShapeData.Drawing -> false
+                            is ShapeData.ImageUrl -> true
+                            is ShapeData.Text -> true
+                        }
+                    }
                     Box(
                         shapeState.modifier
                             .let {
@@ -206,10 +233,16 @@ fun CanvasSample(
                                     it
                             }
                             .fillMaxSize()
-                            .hazeSource(hazeState, zIndex = 2f + shapeState.index)
-                            .hazeEffect(hazeState, hazeStyle) // Apply blur first
-                            .background(bgColor) // Then semi-transparent overlay
-                            .border((1f * zoomState.value * borderCoef).dp, Color.White)
+                            .let {
+                                if (isDrawBack) {
+                                    it.hazeSource(hazeState, zIndex = 2f + shapeState.index)
+                                        .hazeEffect(hazeState, hazeStyle)
+                                        .background(bgColor)
+                                        .border((1f * zoomState.value * borderCoef).dp, Color.White)
+                                } else {
+                                    it
+                                }
+                            }
                     ) {
                         when (val data = shapeState.shape.data) {
                             is ShapeData.ImageUrl -> {
@@ -304,6 +337,75 @@ fun CanvasSample(
                                     )
                                 }
                             }
+
+                            is ShapeData.Drawing -> {
+                                val bounds = remember(data.value) {
+                                    data.value.calculateBounds()
+                                }
+                                val pathData = data.value
+
+                                val drawingBitmap = remember(pathData, bounds) {
+                                    val bitmap = ImageBitmap(
+                                        bounds.size.width.toInt(),
+                                        bounds.size.height.toInt()
+                                    )
+                                    val canvas = Canvas(bitmap)
+                                    val paint = Paint().apply {
+                                        color = pathData.color
+                                        strokeWidth =
+                                            pathData.points.firstOrNull()?.strokeWidth ?: 5f
+                                        style = PaintingStyle.Stroke
+                                        strokeCap = StrokeCap.Round
+                                        strokeJoin = StrokeJoin.Round
+                                    }
+
+                                    val composePath = Path().apply {
+                                        if (pathData.points.isNotEmpty()) {
+                                            moveTo(
+                                                pathData.points.first().x,
+                                                pathData.points.first().y
+                                            )
+                                            pathData.points.forEach { lineTo(it.x, it.y) }
+                                        }
+                                    }
+
+                                    canvas.drawPath(composePath, paint)
+                                    bitmap
+                                }
+                                Image(
+                                    bitmap = drawingBitmap,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.FillBounds // This ensures it scales with the Box
+                                )
+//                                val composePath = remember(data.value.points) {
+//                                    Path().apply {
+//                                        val points = data.value.points
+//                                        if (points.isNotEmpty()) {
+//                                            moveTo(points.first().x, points.first().y)
+//                                            for (i in 1 until points.size) {
+//                                                lineTo(points[i].x, points[i].y)
+//                                            }
+//                                        }
+//                                    }
+//                                }
+//
+//                                Canvas(modifier = Modifier.fillMaxSize()) {
+//                                    // 2. DO NOT use withTransform { scale(...) } if the parent Box
+//                                    // is already being scaled/transformed by shapeState.modifier.
+//
+//                                    drawPath(
+//                                        path = composePath,
+//                                        color = data.value.color,
+//                                        style = Stroke(
+//                                            // 3. Keep stroke consistent by dividing by zoom
+//                                            width = (data.value.points.firstOrNull()?.strokeWidth ?: 5f) * zoomState.value,
+//                                            cap = StrokeCap.Round,
+//                                            join = StrokeJoin.Round
+//                                        )
+//                                    )
+//                                }
+                            }
                         }
                     }
                 },
@@ -397,13 +499,37 @@ fun CanvasSample(
                         }
                     }
                 },
-                drawingPaths = paths,
                 onActionSet = {
                     actionState.value = it
                 },
                 consume = false,
                 onAddPath = { path ->
-                    paths.add(path.copy(color = Color.Cyan))
+                    val pathBounds = path.calculateBounds()
+
+                    // 1. Shift every point's coordinates to be relative to the path's bounding box
+                    val localizedPoints = path.points.map { point ->
+                        point.copy(
+                            x = point.x - pathBounds.globalPosition.x,
+                            y = point.y - pathBounds.globalPosition.y
+                        )
+                    }
+
+                    // 2. Create a new path with the localized points and the updated color
+                    val localizedPath = path.copy(
+                        points = localizedPoints,
+                        color = Color.Cyan
+                    )
+
+                    // 3. Add the shape using the global position and the localized path data
+                    shapes.add(
+                        CustomShape(
+                            id = Clock.System.now().toEpochMilliseconds(),
+                            position = pathBounds.globalPosition,
+                            size = Offset(pathBounds.size.width, pathBounds.size.height),
+                            backgroundColor = Color.Gray,
+                            data = ShapeData.Drawing(localizedPath)
+                        )
+                    )
                 },
                 connectionDragBlankId = 1L,
                 circleRadius = 12f,

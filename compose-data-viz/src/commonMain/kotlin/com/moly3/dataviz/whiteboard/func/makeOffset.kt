@@ -1,13 +1,13 @@
 package com.moly3.dataviz.whiteboard.func
 
 import androidx.compose.ui.geometry.Offset
-import com.moly3.dataviz.whiteboard.minShapeSize
 import com.moly3.dataviz.core.whiteboard.model.BoxSide
 import com.moly3.dataviz.core.whiteboard.model.DragAction
 import com.moly3.dataviz.core.whiteboard.model.DragType
 import com.moly3.dataviz.core.whiteboard.model.Shape
 
 fun <Id> makeSideOffset(
+    minShapeSize: Float,
     dragAction: DragAction<Id>?,
     userCoordinate: Offset,
     boxSide: Shape<Id>,
@@ -86,7 +86,7 @@ fun makeSideOffsetShape(
     side: BoxSide,
     density: Float
 ): Offset {
-    val koef = 2f /density
+    val koef = 2f / density
     val base = when (side) {
         BoxSide.LEFT -> Offset(-shapeSize.x / koef, 0f)
         BoxSide.TOP -> Offset(0f, -shapeSize.y / koef)

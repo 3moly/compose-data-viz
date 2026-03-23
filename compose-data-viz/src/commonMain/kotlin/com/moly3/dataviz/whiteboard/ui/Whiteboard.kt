@@ -41,6 +41,7 @@ import kotlin.math.abs
 
 @Composable
 fun <ShapeType : Shape<Id>, Id> Whiteboard(
+    minShapeSize: Float,
     consume: Boolean,
     modifier: Modifier,
     action: Action<ShapeType, Id>?,
@@ -55,7 +56,6 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     isDrawing: Boolean,
     shapes: List<ShapeType>,
     connections: List<ShapeConnection<Id>>,
-    drawingPaths: List<StylusPath>,
     onActionSet: (Action<ShapeType, Id>?) -> Unit,
     onAddPath: (StylusPath) -> Unit,
     onMoveShape: (Int, Offset) -> Unit,
@@ -128,6 +128,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
             actualDensity.density
         ) {
             calculatePointer(
+                minShapeSize = minShapeSize,
                 shapes = shapes,
                 mapCursor = mapCursor,
                 connections = connections,
@@ -156,8 +157,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
         ) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 DrawConnections(
+                    minShapeSize = minShapeSize,
                     modifier = connectionsModifier,
-                    paths = drawingPaths,
                     stylusPoint = currentPath,
                     shapes = shapes,
                     connections = connections,
@@ -175,6 +176,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                     connectionDragBlankId = connectionDragBlankId
                 )
                 DrawShapes(
+                    minShapeSize = minShapeSize,
                     mousePosition = cursorPosition,
                     shapes = shapes,
                     dragActionState = dragActionState,
@@ -257,7 +259,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                             onResizeShape = onResizeShape,
                             onAddConnection = onAddConnection,
                             onZoomChange = onZoomChange,
-                            onUserCoordinateChange = onUserCoordinateChange
+                            onUserCoordinateChange = onUserCoordinateChange,
+                            minShapeSize = minShapeSize
                         )
                         .pointerHoverIcon(pointer.pointerIcon)
                 ) {}

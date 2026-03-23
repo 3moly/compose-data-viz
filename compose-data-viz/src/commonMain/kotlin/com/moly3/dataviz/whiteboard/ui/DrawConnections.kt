@@ -24,6 +24,7 @@ import com.moly3.dataviz.func.drawSmoothArrow
 
 @Composable
 fun <ShapeType : Shape<Id>, Id> DrawConnections(
+    minShapeSize: Float,
     modifier: Modifier,
     connectionDragBlankId: Id,
     zoom: Float,
@@ -37,7 +38,6 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
     shapes: List<ShapeType>,
     connections: List<ShapeConnection<Id>>,
     stylusPoint: List<StylusPoint>,
-    paths: List<StylusPath>,
     dragActionState: MutableState<DragAction<Id>?>,
     config: ConnectionConfig,
     action: Action<ShapeType, Id>?,
@@ -53,6 +53,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     continue
                 val startPoint =
                     makeSideOffset(
+                        minShapeSize = minShapeSize,
                         dragAction = dragActionState.value,
                         userCoordinate = userCoordinate,
                         boxSide = fromBox,
@@ -62,6 +63,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     )
                 val endPoint =
                     makeSideOffset(
+                        minShapeSize = minShapeSize,
                         dragAction = dragActionState.value,
                         userCoordinate = userCoordinate,
                         boxSide = toBox,
@@ -106,14 +108,6 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     action = null
                 )
             }
-        }
-
-        for (path in paths) {
-            drawCompletedPath(
-                zoom = zoom,
-                movementOffset = -userCoordinate,
-                path = path
-            )
         }
         drawCompletedPath(
             zoom = zoom,
