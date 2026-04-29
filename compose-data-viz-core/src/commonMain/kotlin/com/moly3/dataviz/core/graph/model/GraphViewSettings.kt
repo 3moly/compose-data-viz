@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GraphViewSettings(
+    val targetFrameMs: Long = 16L,
+    val cpuCores: Int? = null,
     val centerForce: Float,
     val linkForce: Float,
     val linkDistance: Float,
