@@ -14,12 +14,12 @@ serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref 
 composedataviz = "0.1.12"
 composedatavizcore = "0.1.12"
 
-agp = "9.1.0"
-foundation = "1.10.1"
-kotlin = "2.3.10"
-plugin-compose = "1.10.1"
+agp = "9.2.0"
+foundation = "1.10.3"
+kotlin = "2.3.20"
+plugin-compose = "1.10.3"
 maven-publish = "0.36.0"
-serialization = "1.10.0"
+serialization = "1.11.0"
 
 [libraries]
 
