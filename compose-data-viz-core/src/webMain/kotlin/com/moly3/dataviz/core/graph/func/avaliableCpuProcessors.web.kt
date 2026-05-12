@@ -1,5 +1,5 @@
 package com.moly3.dataviz.core.graph.func
 
-actual fun avaliableCpuProcessors(cpuCores: Int?): Int {
-    return cpuCores ?: 4
+actual fun avaliableCpuProcessors(defaultCpuCores: Int?): Int {
+    return defaultCpuCores ?: 4
 }

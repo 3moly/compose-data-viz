@@ -304,7 +304,8 @@ object GraphPresets {
         maxForce      = 15f,
         dampingFactor = 0.92f,
         maxConnectionsForFullProcessing = 100,
-        spatialOptimizationThreshold    = 50
+        spatialOptimizationThreshold    = 50,
+        circleSizeMultiplier = null
     )
 
     /** Hundreds of nodes — slightly tighter, stronger center pull. */

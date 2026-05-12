@@ -15,7 +15,7 @@ data class GraphState(
     val connections: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
     val zoom: Float = 1f,
     val graphUserPosition: Offset = Offset.Zero,
-    val graphViewSettings: GraphViewSettings = GraphPresets.large(),
+    val graphViewSettings: GraphViewSettings = GraphPresets.massive(),
     val coordinates: ImmutableMap<String, Offset> = persistentMapOf(),
     val velocities: ImmutableMap<String, Offset> = persistentMapOf(),
 )

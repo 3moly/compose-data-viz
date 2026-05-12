@@ -1,8 +1,10 @@
 package com.moly3.dataviz.core.graph.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 
 @Serializable
+@Stable
 data class GraphViewSettings(
     val targetFrameMs: Long = 16L,
     val cpuCores: Int? = null,
@@ -11,6 +13,7 @@ data class GraphViewSettings(
     val linkDistance: Float,
     val repelForce: Float,
     val circleSize: Float,
+    val circleSizeMultiplier: Float?,
     val connectedRepulsionMultiplier: Float,
     val mutualConnectionRepulsionMultiplier: Float,
     val unconnectedRepulsionMultiplier: Float,
@@ -20,7 +23,8 @@ data class GraphViewSettings(
     val maxForce: Float,
     val dampingFactor: Float = 0.92f,
     val maxConnectionsForFullProcessing: Int = 100,
-    val spatialOptimizationThreshold: Int = 50
+    val spatialOptimizationThreshold: Int = 50,
+    val maxTextsAtCenterVisible: Int = Int.MAX_VALUE,
 ) {
     companion object {
         val Default = GraphViewSettings(
@@ -37,7 +41,8 @@ data class GraphViewSettings(
             minMutualConnectionsForClustering = 10,
             maxForce = 15f,
             maxConnectionsForFullProcessing = 100,
-            spatialOptimizationThreshold = 50
+            spatialOptimizationThreshold = 50,
+            circleSizeMultiplier = null
         )
     }
 }

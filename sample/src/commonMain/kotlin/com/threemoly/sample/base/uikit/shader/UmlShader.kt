@@ -2,27 +2,12 @@ package com.threemoly.sample.base.uikit.shader
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import com.mikepenz.hypnoticcanvas.RuntimeEffect
-import com.mikepenz.hypnoticcanvas.shaders.Shader
+import com.moly3.shaders.RuntimeEffect
+import com.moly3.shaders.Shader
 
 object UmlShader : Shader {
     override val name: String
         get() = "uml shader"
-
-    override val authorName: String
-        get() = "3moly"
-
-    override val authorUrl: String
-        get() = "https://github.com/3moly/"
-
-    override val credit: String
-        get() = "https://github.com/3moly"
-
-    override val license: String
-        get() = "MIT License"
-
-    override val licenseUrl: String
-        get() = "https://opensource.org/license/mit"
 
     override val speedModifier: Float
         get() = 0.1f

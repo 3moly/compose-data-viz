@@ -12,8 +12,12 @@ data class GraphNode<Id, Data>(
     val colorValue: ULong? = null
 ) {
     companion object {
-        fun getCircleSize(circleRadius: Float, connectionCount: Int): Float {
-            return circleRadius + 1 * connectionCount.coerceIn(0, 30)
+        fun getCircleSize(circleRadius: Float, connectionCount: Int, multiplier: Float?): Float {
+            return if (multiplier != null) {
+                circleRadius + multiplier * connectionCount.coerceIn(0, 30)
+            } else {
+                circleRadius
+            }
         }
     }
 }

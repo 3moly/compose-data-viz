@@ -37,7 +37,7 @@ kotlin {
 //        }
     }
 
-    iosX64()
+    
     iosArm64()
     iosSimulatorArm64()
 
@@ -58,7 +58,7 @@ kotlin {
         xcodeConfigurationToNativeBuildType["betarelease"] = NativeBuildType.RELEASE
     }
 
-    macosX64()
+    
     macosArm64()
 
     js {
@@ -90,8 +90,6 @@ kotlin {
             implementation(compose.material)
             implementation(compose.material3)
 
-            //noinspection UseTomlInstead
-            implementation("com.mikepenz.hypnoticcanvas:hypnoticcanvas:0.4.1")
             //noinspection UseTomlInstead
             implementation("dev.chrisbanes.haze:haze:1.7.0")
             //noinspection UseTomlInstead

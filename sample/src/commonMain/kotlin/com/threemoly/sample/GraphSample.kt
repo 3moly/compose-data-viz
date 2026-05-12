@@ -31,8 +31,6 @@ val random = Random(124)
 
 @Composable
 fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Float>) {
-
-
     Box(
         Modifier
             .fillMaxSize()
@@ -51,7 +49,8 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             },
             userPosition = state.value.graphUserPosition,
             onCentralGlobalPosition = {
-                state.value = state.value.copy(graphUserPosition = state.value.graphUserPosition + it)
+                state.value =
+                    state.value.copy(graphUserPosition = state.value.graphUserPosition + it)
             },
             onNodeClick = { node ->
                 val graphNodes = state.value.graphNodes.toMutableList()
@@ -246,7 +245,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             onValueChange = {
                 nodeCountState.value = it
             },
-            valueRange = 1f..200f
+            valueRange = 1f..50_000f
         )
     }
 }

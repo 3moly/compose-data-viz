@@ -39,7 +39,7 @@ fun ExampleApp() {
         mutableStateOf(
             generateRandomGraphState(
                 nodeCount = nodeCountState.value.toInt(),
-                connectionsPercentPerNode = 10f
+                maxBranchingFactor = 10
             ).copy(zoom = density.density)
         )
     }
@@ -47,7 +47,7 @@ fun ExampleApp() {
         launch(io) {
             val newState = generateRandomGraphState(
                 nodeCount = nodeCountState.value.toInt(),
-                connectionsPercentPerNode = 10f
+                maxBranchingFactor = 3
             )
             graphState.value = graphState.value.copy(
                 graphNodes = newState.graphNodes,

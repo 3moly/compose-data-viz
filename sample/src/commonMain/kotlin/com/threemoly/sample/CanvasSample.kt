@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil3.compose.rememberAsyncImagePainter
-import com.mikepenz.hypnoticcanvas.shaderBackground
 import com.moly3.dataviz.core.whiteboard.func.calculateBounds
 import com.moly3.dataviz.whiteboard.func.absoluteOffset
 import com.moly3.dataviz.whiteboard.ui.Whiteboard
@@ -68,6 +67,7 @@ import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.whiteboard.ui.drawCompletedPath
+import com.moly3.shaders.shaderBackground
 import com.threemoly.sample.base.block.CustomShape
 import com.threemoly.sample.base.block.ShapeData
 import com.threemoly.sample.base.uikit.shader.UmlShader
