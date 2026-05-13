@@ -11,7 +11,7 @@ serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref 
 
 [versions]
 
-composedataviz = "0.1.16"
+composedataviz = "0.1.17"
 
 agp = "9.2.1"
 foundation = "1.11.0-rc01"

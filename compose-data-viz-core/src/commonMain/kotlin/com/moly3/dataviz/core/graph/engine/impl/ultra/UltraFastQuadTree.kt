@@ -4,7 +4,6 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 class UltraFastQuadTree(initialCapacity: Int = 1024) {
-    // Structure of Arrays (SoA)
     var nodeX = FloatArray(initialCapacity)
     var nodeY = FloatArray(initialCapacity)
     var nodeHalf = FloatArray(initialCapacity)
@@ -12,8 +11,6 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
     var nodeComX = FloatArray(initialCapacity)
     var nodeComY = FloatArray(initialCapacity)
 
-    // MEMORY HACK: Instead of 4 arrays for children, we use 1.
-    // The 4 children of a node are always at firstChild, +1, +2, and +3.
     var firstChild = IntArray(initialCapacity) { -1 }
     var nodeBody = IntArray(initialCapacity) { -1 }
 
@@ -50,6 +47,9 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
 
         posXRef = positionsX
         posYRef = positionsY
+
+        // Pre-size capacity: worst case ~4n nodes for full tree
+        ensureCapacity(n * 4 + 16)
 
         var minX = positionsX[0]; var maxX = positionsX[0]
         var minY = positionsY[0]; var maxY = positionsY[0]
@@ -95,20 +95,18 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         }
 
         if (fc == -1 && existingBody != -1) {
-            if (depth >= 16) return // Prevent infinite recursion on identical positions
+            if (depth >= 16) return
 
             val newHalf = nodeHalf[nodeIdx] * 0.5f
             val cx = nodeX[nodeIdx]; val cy = nodeY[nodeIdx]
             ensureCapacity(count + 4)
             val first = count
-            // Create 4 children contiguously
-            newNode(cx - newHalf, cy - newHalf, newHalf) // NW
-            newNode(cx + newHalf, cy - newHalf, newHalf) // NE
-            newNode(cx - newHalf, cy + newHalf, newHalf) // SW
-            newNode(cx + newHalf, cy + newHalf, newHalf) // SE
+            newNode(cx - newHalf, cy - newHalf, newHalf)
+            newNode(cx + newHalf, cy - newHalf, newHalf)
+            newNode(cx - newHalf, cy + newHalf, newHalf)
+            newNode(cx + newHalf, cy + newHalf, newHalf)
             firstChild[nodeIdx] = first
 
-            // Re-route existing body
             val exX = posXRef!![existingBody]; val exY = posYRef!![existingBody]
             val exChild = first + (if (exX >= cx) 1 else 0) + (if (exY >= cy) 2 else 0)
             insert(exChild, existingBody, exX, exY, depth + 1, updateMass = false)
@@ -121,7 +119,10 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
     }
 
     /**
-     * ITERATIVE Repulsion - No Recursion, Zero Allocation, Wasm/JS Safe.
+     * Iterative repulsion traversal. The stack needs to be sized for worst-case
+     * depth; 256 was risky for very dense graphs. Caller should pass a stack
+     * sized at least 4 * tree depth. log4(5000) ~ 6, but skewed distributions
+     * push deeper. 512 is safer.
      */
     fun computeRepulsionIterative(
         x: Float, y: Float, bodyIdx: Int,
@@ -135,6 +136,7 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         stack[stackSize++] = rootIndex
 
         var fx = 0f; var fy = 0f
+        val stackCap = stack.size
 
         while (stackSize > 0) {
             val nodeIdx = stack[--stackSize]
@@ -149,29 +151,33 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
             val fc = firstChild[nodeIdx]
             val body = nodeBody[nodeIdx]
 
-            // Leaf node check
             if (fc == -1) {
                 if (body != bodyIdx && body != -1) {
                     val dist = sqrt(distSq)
-                    val mag = repelStrength * mass / ((dist + softening) * (dist + softening))
-                    fx -= (dx / dist) * mag
-                    fy -= (dy / dist) * mag
+                    val ds = dist + softening
+                    val mag = repelStrength * mass / (ds * ds)
+                    val invDist = 1f / dist
+                    fx -= dx * invDist * mag
+                    fy -= dy * invDist * mag
                 }
                 continue
             }
 
-            // Internal node - use Barnes Hut Approximation
             if (size * size < thetaSq * distSq) {
                 val dist = sqrt(distSq)
-                val mag = repelStrength * mass / ((dist + softening) * (dist + softening))
-                fx -= (dx / dist) * mag
-                fy -= (dy / dist) * mag
+                val ds = dist + softening
+                val mag = repelStrength * mass / (ds * ds)
+                val invDist = 1f / dist
+                fx -= dx * invDist * mag
+                fy -= dy * invDist * mag
             } else {
-                // Traverse children (Push all 4 contiguous children to stack)
-                stack[stackSize++] = fc
-                stack[stackSize++] = fc + 1
-                stack[stackSize++] = fc + 2
-                stack[stackSize++] = fc + 3
+                // Bounds-check stack growth (silently skip rather than crash)
+                if (stackSize + 4 <= stackCap) {
+                    stack[stackSize++] = fc
+                    stack[stackSize++] = fc + 1
+                    stack[stackSize++] = fc + 2
+                    stack[stackSize++] = fc + 3
+                }
             }
         }
         outForce[0] = fx; outForce[1] = fy

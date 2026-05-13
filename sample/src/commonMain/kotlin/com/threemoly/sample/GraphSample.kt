@@ -56,7 +56,11 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
                 )
             },
 
-            onNodeClick = { node -> state.spawnConnectedNode(node.id) },
+            onNodeClick = { node ->
+                for (item in 0 until 50) {
+                    state.spawnConnectedNode(node.id)
+                }
+            },
 
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())

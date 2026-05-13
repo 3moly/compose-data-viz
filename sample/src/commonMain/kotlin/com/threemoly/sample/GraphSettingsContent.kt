@@ -332,4 +332,7 @@ private fun PhysicsAdvancedSection(view: GraphViewSettings, onChange: (GraphView
     IntSliderRow("Target frame (ms)", view.targetFrameMs.toInt(), valueRange = 4..100) {
         onChange(view.copy(targetFrameMs = it.toLong()))
     }
+    SliderRow("hubExpansionExponent", view.hubExpansionExponent, valueRange = 0f .. 1f) {
+        onChange(view.copy(hubExpansionExponent = it))
+    }
 }
