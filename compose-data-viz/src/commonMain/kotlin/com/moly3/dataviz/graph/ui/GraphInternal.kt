@@ -16,6 +16,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.colorspace.ColorSpace
+import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
@@ -119,18 +121,17 @@ private fun <Id, Data> resolveNodeColor(
 internal fun <Id, Data> GraphInternal(
     modifier: Modifier = Modifier,
     settings: GraphSettings,
-
+    atlas: TextureAtlas? = null,
+    getIconIndex: (Id) -> Int? = { null },
     nodes: List<GraphNode<Id, Data>>,
     connections: Map<Id, List<Id>>,
     coordinates: Map<Id, Offset>,
     draggedNodeId: Id?,
     cursorNodeId: Id?,
     watchNodeId: Id?,
-
     movementOffset: Offset,
     zoom: Float,
 ) {
-    // Pull out the slices we'll reference a lot — easier to read below.
     val theme        = settings.theme
     val view         = settings.view
     val selectionCfg = settings.selection
@@ -142,41 +143,32 @@ internal fun <Id, Data> GraphInternal(
     val circleRadius          = view.circleSize
     val circleSizeMultiplier  = view.circleSizeMultiplier
     val maxTextsAtCenterVisible = textCfg.maxLabelsVisible
-
+    val fallbackBitmap = remember(atlas) {
+        androidx.compose.ui.graphics.ImageBitmap(1, 1)
+    }
 
     val shader        = remember { GraphShader }
     val runtimeEffect = remember(shader) { buildEffect(shader) }
-//    val buildShader   = remember(runtimeEffect) { runtimeEffect.buildShader() }
-    val buildShader = remember(
-        runtimeEffect,
-        view.circleQuality,
-        view.circleBorderWidth,
-        view.circleBorderColor,
-    ) {
+    val buildShader = remember(runtimeEffect, atlas, view, fallbackBitmap) {
         runtimeEffect.apply {
-            setFloatUniform("uQuality", view.circleQuality.coerceIn(0f, 1f))
-            setFloatUniform("uBorderWidth", view.circleBorderWidth.coerceIn(0f, 0.5f))
+            setFloatUniform("uQuality", view.circleQuality)
+            setFloatUniform("uBorderWidth", view.circleBorderWidth)
 
-            val borderCol = view.circleBorderColor
-            if (borderCol != null) {
-                // half4 uniform — 4 floats: r, g, b, a
-                setFloatUniform(
-                    "uBorderColor",
-                    borderCol.red,
-                    borderCol.green,
-                    borderCol.blue,
-                    borderCol.alpha,
-                )
-                setFloatUniform("uUseBorderColor", 1f)
+            if (atlas != null) {
+                setFloatUniform("uUseAtlas", 1f)
+                setImageUniform("uAtlas", atlas.imageBitmap)
+                setFloatUniform("uTileSize", atlas.tileSizePx.toFloat())
+                setFloatUniform("uColumns", atlas.columns.toFloat())
             } else {
-                setFloatUniform("uBorderColor", 0f, 0f, 0f, 1f)
-                setFloatUniform("uUseBorderColor", 0f)
+                setFloatUniform("uUseAtlas", 0f)
+                setImageUniform("uAtlas", fallbackBitmap)
+                setFloatUniform("uTileSize", 1f)
+                setFloatUniform("uColumns", 1f)
             }
         }.buildShader()
     }
     val animZoom = zoom
 
-    // --- Selection-driven scalar animations ---
     val cursorCircleSizeKoef by animateFloatAsState(
         targetValue = if (cursorNodeId != null || draggedNodeId != null) selectionCfg.scaleOnHover else 1f,
         animationSpec = tween(durationMillis = selectionCfg.scaleAnimationMs),
@@ -189,7 +181,6 @@ internal fun <Id, Data> GraphInternal(
         label = "selectionActive"
     )
 
-    // --- Text infrastructure ---
     val localDensity = LocalDensity.current
     val textPadding = remember(textCfg.labelPaddingDp) {
         localDensity.run { textCfg.labelPaddingDp.toDp().toPx() }
@@ -250,7 +241,6 @@ internal fun <Id, Data> GraphInternal(
     val latestNodes              by rememberUpdatedState(nodes)
     val latestSelectionCfg       by rememberUpdatedState(selectionCfg)
 
-    // --- Per-frame animation loop ---
     LaunchedEffect(Unit) {
         var lastNanos = 0L
         while (true) {
@@ -312,16 +302,12 @@ internal fun <Id, Data> GraphInternal(
     val drawText  = animZoom > textCfg.visibilityZoomThreshold
     val drawEdges = animZoom > edgeCfg.visibilityZoomThreshold
 
-    // =========================================================
-    // Draw
-    // =========================================================
     Canvas(modifier = modifier) {
         val canvasW = size.width
         val canvasH = size.height
         val centerX = canvasW * 0.5f
         val centerY = canvasH * 0.5f
 
-        // Frustum culling in world space
         val invZoom = 1f / animZoom.coerceAtLeast(0.0001f)
         val cullPad = 100f
         val cullL = (-centerX) * invZoom - movementOffset.x - cullPad
@@ -330,13 +316,15 @@ internal fun <Id, Data> GraphInternal(
         val cullB = (canvasH - centerY) * invZoom - movementOffset.y + cullPad
 
         // -------- Pass 1: build per-node vertex buffers --------
-        buffers.ensureCapacity(nodes.size)
+        buffers.ensureCapacity(nodes.size * 2)
         var visibleNodeCount = 0
 
         val posArray = buffers.positions
         val texArray = buffers.texCoords
         val colArray = buffers.colors
         val idxArray = buffers.indices
+
+        val whiteColorInt = Color.White.toArgb()
 
         for (i in nodes.indices) {
             val node = nodes[i]
@@ -350,41 +338,80 @@ internal fun <Id, Data> GraphInternal(
             )
             val r = if (node.id == activeNodeId) baseRadius * cursorCircleSizeKoef else baseRadius
 
-            val base = resolveNodeColor(node, draggedNodeId, cursorNodeId, theme)
-            val dim  = nodeAnimStates[node.id]?.dimFactor ?: 0f
-            val color = lerp(base, base.copy(alpha = selectionCfg.fadedNodeAlpha), dim)
-            val colorInt = color.toArgb()
+            val iconIndex = getIconIndex(node.id) ?: -1
+            val hasIcon = iconIndex >= 0 && atlas != null
 
-            val vOff = visibleNodeCount * 4
-            val fOff = vOff * 2
+            val base = resolveNodeColor(node, draggedNodeId, cursorNodeId, theme)
+            val dim = nodeAnimStates[node.id]?.dimFactor ?: 0f
+            val nodeColor = lerp(base, base.copy(alpha = selectionCfg.fadedNodeAlpha), dim)
+            val nodeColorInt = nodeColor.toArgb()
+
+            // -------------------------------------------------------------
+            // QUAD 1: Base Background Layer (Always Drawn)
+            // -------------------------------------------------------------
+            var vOff = visibleNodeCount * 4
+            var fOff = vOff * 2
+            var iOff = visibleNodeCount * 6
 
             posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
             posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
             posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
             posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
 
-            texArray[fOff + 0] = -1f; texArray[fOff + 1] = -1f
-            texArray[fOff + 2] =  1f; texArray[fOff + 3] = -1f
-            texArray[fOff + 4] =  1f; texArray[fOff + 5] =  1f
-            texArray[fOff + 6] = -1f; texArray[fOff + 7] =  1f
+            texArray[fOff + 0] = -101f; texArray[fOff + 1] = -101f
+            texArray[fOff + 2] = -99f;  texArray[fOff + 3] = -101f
+            texArray[fOff + 4] = -99f;  texArray[fOff + 5] = -99f
+            texArray[fOff + 6] = -101f; texArray[fOff + 7] = -99f
 
-            colArray[vOff + 0] = colorInt
-            colArray[vOff + 1] = colorInt
-            colArray[vOff + 2] = colorInt
-            colArray[vOff + 3] = colorInt
+            colArray[vOff + 0] = nodeColorInt
+            colArray[vOff + 1] = nodeColorInt
+            colArray[vOff + 2] = nodeColorInt
+            colArray[vOff + 3] = nodeColorInt
 
-            val iOff = visibleNodeCount * 6
             idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
             idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
             idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
 
             visibleNodeCount++
+
+            // -------------------------------------------------------------
+            // QUAD 2: Icon Layer (Drawn strictly on top if hasIcon == true)
+            // -------------------------------------------------------------
+            if (hasIcon) {
+                val atlasCols = atlas!!.columns.toFloat()
+                val atlasTileSize = atlas.tileSizePx.toFloat()
+
+                val texU = (iconIndex % atlasCols.toInt()) * atlasTileSize
+                val texV = (iconIndex / atlasCols.toInt()) * atlasTileSize
+                val texSpan = atlasTileSize
+
+                vOff = visibleNodeCount * 4
+                fOff = vOff * 2
+                iOff = visibleNodeCount * 6
+
+                posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
+                posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
+                posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
+                posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
+
+                texArray[fOff + 0] = texU;           texArray[fOff + 1] = texV
+                texArray[fOff + 2] = texU + texSpan; texArray[fOff + 3] = texV
+                texArray[fOff + 4] = texU + texSpan; texArray[fOff + 5] = texV + texSpan
+                texArray[fOff + 6] = texU;           texArray[fOff + 7] = texV + texSpan
+
+                colArray[vOff + 0] = whiteColorInt
+                colArray[vOff + 1] = whiteColorInt
+                colArray[vOff + 2] = whiteColorInt
+                colArray[vOff + 3] = whiteColorInt
+
+                idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
+                idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
+                idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
+
+                visibleNodeCount++
+            }
         }
 
-        // -------- Pass 2: regular node labels (closest-to-center wins) --------
-
-
-        // -------- Pass 3: world-space draws (edges, watch ring, node sprites) --------
         withTransform({
             scale(animZoom, animZoom)
             translate(center.x + movementOffset.x, center.y + movementOffset.y)
@@ -464,7 +491,6 @@ internal fun <Id, Data> GraphInternal(
                 )
             }
 
-            // Origin dot (debug aid). Keep as accent color, scaled to 1px.
             drawCircle(color = theme.accentColor, radius = 1f / animZoom, center = Offset.Zero)
         }
 
@@ -509,34 +535,18 @@ internal fun <Id, Data> GraphInternal(
                 val finalAlpha = (nodeTextAlpha * zoomAlpha).coerceIn(0f, 1f)
                 if (finalAlpha < 0.01f) continue
 
-                // 1. Calculate the pivot point (Top-Center of the text)
-//                val pivotX = screenPos.x
-//                val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
-//                val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
-//
-//                // 2. Determine the scale
-//                val textScale = if (textCfg.scaleLabelsWithZoom) {
-//                    animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
-//                } else {
-//                    1f
-//                }
-
                 val pivotX = screenPos.x
                 val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
                 val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
 
-                // 2. Determine the scale
                 val textScale = if (textCfg.scaleLabelsWithZoom) {
                     animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
                 } else {
                     1f
                 }
 
-                // 3. Draw with or without transformation
                 if (textScale != 1f) {
                     withTransform({
-                        // FIX: Use Compose's native pivot parameter.
-                        // This prevents the scale from defaulting to the Canvas center.
                         scale(
                             scaleX = textScale,
                             scaleY = textScale,
@@ -561,7 +571,6 @@ internal fun <Id, Data> GraphInternal(
             }
         }
 
-        // -------- Pass 4: prominent active-node label pill --------
         if (activeNodeId != null && activeNodeTextLayout != null && cursorTextAlpha > 0.01f) {
             val activePos = coordinates[activeNodeId]
             if (activePos != null) {

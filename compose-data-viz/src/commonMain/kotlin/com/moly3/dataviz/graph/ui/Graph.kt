@@ -50,10 +50,12 @@ fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
     settings: GraphSettings = GraphSettings.Default,
     engine: IGraphEngine<Id, Data> = remember { UltraFastEngine() },
-
+    atlas: TextureAtlas? = null,
     consume: Boolean,
     userPosition: Offset,
     zoom: Float,
+
+    getIconIndex: (Id) -> Int? = { null }, // New Lambda
 
     isImmediateReheatOnUpdate: Boolean = false,
 
@@ -145,7 +147,7 @@ fun <Id, Data> Graph(
         }
     }
 
-    if(isImmediateReheatOnUpdate){
+    if (isImmediateReheatOnUpdate) {
         LaunchedEffect(stateNodes, connections, settings.view) {
             engine.reheat()
         }
@@ -262,6 +264,8 @@ fun <Id, Data> Graph(
     }
 
     GraphInternal(
+        atlas = atlas,
+        getIconIndex = getIconIndex,
         modifier = modifier
             .fillMaxSize()
             .onGloballyPositioned {

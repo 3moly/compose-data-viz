@@ -1,6 +1,7 @@
 package com.moly3.shaders
 
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ImageBitmap
 
 interface RuntimeEffect {
 
@@ -25,6 +26,8 @@ interface RuntimeEffect {
 
     /** Updates the uniforms for the shader, on changes of the size or time.*/
     fun update(shader: Shader, time: Float, width: Float, height: Float) {}
+    fun setImageUniform(name: String, image: ImageBitmap) {}
+
 
     /** Builds an updates ShaderBrush*/
     fun build(): Brush

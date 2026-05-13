@@ -89,6 +89,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material)
             implementation(compose.material3)
+            implementation(compose.components.resources)
 
             //noinspection UseTomlInstead
             implementation("dev.chrisbanes.haze:haze:1.7.0")
@@ -125,7 +126,11 @@ kotlin {
 }
 
 
-
+compose.resources {
+    publicResClass = false
+    packageOfResClass = "com.moly3.dataviz.sample.resources"
+    generateResClass = auto
+}
 
 compose.desktop {
     application {

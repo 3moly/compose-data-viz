@@ -7,42 +7,60 @@ object GraphShader : Shader {
     override val name: String get() = "graph_node"
 
     override val sksl: String get() = """
+        uniform shader uAtlas;
+        uniform float uUseAtlas;
+        uniform float uTileSize;
+        uniform float uColumns;       
         uniform float uQuality;
         uniform float uBorderWidth;
         uniform half4 uBorderColor;
         uniform float uUseBorderColor;
 
-        half4 main(float2 coord) {
-            float dist = length(coord);
+        half4 main(float2 coord) {    
+            float2 localCoord;
+            half4 texCol = half4(0.0); 
             
-            // For perfectly smooth edges, aaWidth should ideally be (1.0 / radiusInPixels).
-            // If you are locked into using uQuality, we map it to a much softer range 
-            // to prevent the hard jagged edges on smaller circles.
+            // If the coordinates are highly negative, we know it's a background quad!
+            bool isBackground = coord.x < -50.0;
+
+            if (isBackground) {
+                // Restore the coordinates to exactly [-1, 1] to draw the circle
+                localCoord = coord + 100.0; 
+            } else if (uUseAtlas > 0.5) {
+                // It's an icon quad, apply atlas mapping
+                localCoord = fract(coord / uTileSize) * 2.0 - 1.0;
+                texCol = uAtlas.eval(coord); 
+                if (texCol.a > 0.0) {
+                    texCol.rgb = texCol.rgb / texCol.a;
+                }
+            } else {
+                localCoord = coord; 
+            }
+
+            float dist = length(localCoord);
             float aaWidth = mix(0.15, 0.02, uQuality); 
             float outerAlpha = 1.0 - smoothstep(1.0 - aaWidth, 1.0, dist);
             
-            // No border: solid white disc, vertex color tints it
-            if (uBorderWidth <= 0.0) {
-                // FIX: Premultiplied alpha. Multiply RGB by alpha.
-                return half4(half3(outerAlpha), half(outerAlpha));
+            if (dist > 1.0) return half4(0.0);
+            
+            half4 finalCol;
+
+            if (!isBackground) {
+                // LAYER 2: ICON 
+                finalCol = texCol;
+            } else {
+                // LAYER 1: BASE BACKGROUND
+                finalCol = half4(1.0);
+                if (uBorderWidth > 0.0) {
+                    float innerRadius = 1.0 - uBorderWidth;
+                    float innerAlpha = 1.0 - smoothstep(innerRadius - aaWidth, innerRadius, dist);
+                    half4 border = mix(half4(0.6, 0.6, 0.6, 1.0), uBorderColor, half(uUseBorderColor));
+                    finalCol = mix(border, finalCol, half(innerAlpha));
+                }
             }
             
-            float innerRadius = 1.0 - uBorderWidth;
-            float innerAlpha = 1.0 - smoothstep(
-                innerRadius - aaWidth,
-                innerRadius,
-                dist
-            );
-            
-            half4 innerCol = half4(1.0, 1.0, 1.0, 1.0);
-            half4 derivedBorder = half4(0.6, 0.6, 0.6, 1.0);
-            
-            half4 borderCol = mix(derivedBorder, uBorderColor, half(uUseBorderColor));
-            half4 result = mix(borderCol, innerCol, half(innerAlpha));
-            
-            // FIX: Premultiplied alpha for the final composite
-            float finalAlpha = result.a * outerAlpha;
-            return half4(result.rgb * half(finalAlpha), half(finalAlpha));
+            float finalAlpha = finalCol.a * outerAlpha;
+            return half4(finalCol.rgb * half(finalAlpha), half(finalAlpha));
         }
     """
 }

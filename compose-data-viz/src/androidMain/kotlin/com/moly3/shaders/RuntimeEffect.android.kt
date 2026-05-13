@@ -1,11 +1,14 @@
 package com.moly3.shaders
 
+import android.graphics.BitmapShader
 import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.asAndroidBitmap
 
 /**
  * No-op implementation of the Runtime effect for devices not supporting the [RuntimeShader].
@@ -42,6 +45,17 @@ internal class AndroidRuntimeEffect(shader: Shader) : RuntimeEffect {
 
     override fun setFloatUniform(name: String, value1: Float, value2: Float, value3: Float) {
         compositeRuntimeEffect.setFloatUniform(name, value1, value2, value3)
+    }
+
+    override fun setImageUniform(name: String, image: ImageBitmap) {
+        // 1. Extract native Android Bitmap
+        val androidBitmap = image.asAndroidBitmap()
+
+        // 2. Create native Android BitmapShader
+        val bitmapShader = BitmapShader(androidBitmap, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+
+        // 3. Bind to AGSL
+        compositeRuntimeEffect.setInputShader(name, bitmapShader)
     }
 
     override fun setFloatUniform(
