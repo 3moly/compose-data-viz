@@ -291,6 +291,10 @@ private fun PhysicsForcesSection(view: GraphViewSettings, onChange: (GraphViewSe
     SliderRow("Damping", view.dampingFactor, valueRange = 0.5f..1f) {
         onChange(view.copy(dampingFactor = it))
     }
+    SliderRow("Node quality", view.circleQuality, valueRange = 0.01f..1f,
+        valueFormatter = { "%.0f".format(it) }) {
+        onChange(view.copy(circleQuality = it))
+    }
 }
 
 // =====================================================================================

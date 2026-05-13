@@ -68,6 +68,6 @@ mavenPublishing {
     coordinates(
         "io.github.3moly",
         "compose-data-viz-core",
-        libs.versions.composedatavizcore.get()
+        libs.versions.composedataviz.get()
     )
 }

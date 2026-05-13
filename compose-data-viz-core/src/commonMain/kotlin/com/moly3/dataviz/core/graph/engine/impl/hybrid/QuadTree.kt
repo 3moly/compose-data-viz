@@ -272,7 +272,7 @@ internal class QuadTree {
         }
     }
 
-    private inline fun applyRepulsion(
+    private fun applyRepulsion(
         dx: Float, dy: Float, distSq: Float, mass: Float,
         repelStrength: Float, softening: Float,
         out: FloatArray

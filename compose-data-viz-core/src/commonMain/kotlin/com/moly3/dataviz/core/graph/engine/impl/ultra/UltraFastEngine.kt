@@ -201,7 +201,7 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
         // Handle dragged node
         if (draggedIdx >= 0 && draggedNode?.offset != null) {
-            draggedNode.offset?.let { draggedNodeOffset ->
+            draggedNode.offset.let { draggedNodeOffset ->
                 posX[draggedIdx] = draggedNodeOffset.x
                 posY[draggedIdx] = draggedNodeOffset.y
             }

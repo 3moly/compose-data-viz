@@ -18,6 +18,7 @@ interface RuntimeEffect {
 
     /** Sets a float array uniform for this shader */
     fun setFloatUniform(name: String, value1: Float, value2: Float, value3: Float) {}
+    fun setFloatUniform(name: String, value1: Float, value2: Float, value3: Float, value4: Float) {}
 
     /** Sets a float array uniform for this shader */
     fun setFloatUniform(name: String, values: FloatArray) {}

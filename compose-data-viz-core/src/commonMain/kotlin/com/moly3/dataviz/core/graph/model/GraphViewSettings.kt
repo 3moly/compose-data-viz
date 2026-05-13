@@ -1,6 +1,7 @@
 package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.Serializable
 
 /**
@@ -8,7 +9,7 @@ import kotlinx.serialization.Serializable
  *
  * Kept @Serializable because physics presets may be persisted to disk.
  */
-@Serializable
+//@Serializable
 @Stable
 data class GraphViewSettings(
     val targetFrameMs: Long = 16L,
@@ -19,6 +20,14 @@ data class GraphViewSettings(
     val repelForce: Float,
     val circleSize: Float,
     val circleSizeMultiplier: Float?,
+    /** Circle edge quality: 0f = pixelated/hard, 1f = smooth. Controls AA width. */
+    val circleQuality: Float = 0.001f,
+
+    /** Border thickness as fraction of radius (0f = no border, 0.1f = 10% border). */
+    val circleBorderWidth: Float = 0.1f,
+
+    /** Border color. Null = use node color darkened. */
+    val circleBorderColor: Color? = null,
     val connectedRepulsionMultiplier: Float,
     val mutualConnectionRepulsionMultiplier: Float,
     val unconnectedRepulsionMultiplier: Float,

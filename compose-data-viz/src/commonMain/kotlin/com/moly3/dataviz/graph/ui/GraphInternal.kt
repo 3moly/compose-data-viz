@@ -143,10 +143,37 @@ internal fun <Id, Data> GraphInternal(
     val circleSizeMultiplier  = view.circleSizeMultiplier
     val maxTextsAtCenterVisible = textCfg.maxLabelsVisible
 
+
     val shader        = remember { GraphShader }
     val runtimeEffect = remember(shader) { buildEffect(shader) }
-    val buildShader   = remember(runtimeEffect) { runtimeEffect.buildShader() }
+//    val buildShader   = remember(runtimeEffect) { runtimeEffect.buildShader() }
+    val buildShader = remember(
+        runtimeEffect,
+        view.circleQuality,
+        view.circleBorderWidth,
+        view.circleBorderColor,
+    ) {
+        runtimeEffect.apply {
+            setFloatUniform("uQuality", view.circleQuality.coerceIn(0f, 1f))
+            setFloatUniform("uBorderWidth", view.circleBorderWidth.coerceIn(0f, 0.5f))
 
+            val borderCol = view.circleBorderColor
+            if (borderCol != null) {
+                // half4 uniform — 4 floats: r, g, b, a
+                setFloatUniform(
+                    "uBorderColor",
+                    borderCol.red,
+                    borderCol.green,
+                    borderCol.blue,
+                    borderCol.alpha,
+                )
+                setFloatUniform("uUseBorderColor", 1f)
+            } else {
+                setFloatUniform("uBorderColor", 0f, 0f, 0f, 1f)
+                setFloatUniform("uUseBorderColor", 0f)
+            }
+        }.buildShader()
+    }
     val animZoom = zoom
 
     // --- Selection-driven scalar animations ---
@@ -482,12 +509,55 @@ internal fun <Id, Data> GraphInternal(
                 val finalAlpha = (nodeTextAlpha * zoomAlpha).coerceIn(0f, 1f)
                 if (finalAlpha < 0.01f) continue
 
-                drawText(
-                    textLayoutResult = layout,
-                    topLeft = screenPos - layout.half() + Offset(0f, nodeRadius * animZoom + textPadding),
-                    color = theme.textColor,
-                    alpha = finalAlpha
-                )
+                // 1. Calculate the pivot point (Top-Center of the text)
+//                val pivotX = screenPos.x
+//                val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
+//                val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
+//
+//                // 2. Determine the scale
+//                val textScale = if (textCfg.scaleLabelsWithZoom) {
+//                    animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
+//                } else {
+//                    1f
+//                }
+
+                val pivotX = screenPos.x
+                val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
+                val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
+
+                // 2. Determine the scale
+                val textScale = if (textCfg.scaleLabelsWithZoom) {
+                    animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
+                } else {
+                    1f
+                }
+
+                // 3. Draw with or without transformation
+                if (textScale != 1f) {
+                    withTransform({
+                        // FIX: Use Compose's native pivot parameter.
+                        // This prevents the scale from defaulting to the Canvas center.
+                        scale(
+                            scaleX = textScale,
+                            scaleY = textScale,
+                            pivot = Offset(pivotX, pivotY)
+                        )
+                    }) {
+                        drawText(
+                            textLayoutResult = layout,
+                            topLeft = textTopLeft,
+                            color = theme.textColor,
+                            alpha = finalAlpha
+                        )
+                    }
+                } else {
+                    drawText(
+                        textLayoutResult = layout,
+                        topLeft = textTopLeft,
+                        color = theme.textColor,
+                        alpha = finalAlpha
+                    )
+                }
             }
         }
 

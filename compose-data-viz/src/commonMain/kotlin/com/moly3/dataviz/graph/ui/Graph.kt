@@ -55,6 +55,8 @@ fun <Id, Data> Graph(
     userPosition: Offset,
     zoom: Float,
 
+    isImmediateReheatOnUpdate: Boolean = false,
+
     stateNodes: List<GraphNode<Id, Data>>,
     coordinates: Map<Id, Offset>,
     velocities: Map<Id, Offset>,
@@ -143,9 +145,12 @@ fun <Id, Data> Graph(
         }
     }
 
-    LaunchedEffect(stateNodes, connections, settings.view) {
-        engine.reheat()
+    if(isImmediateReheatOnUpdate){
+        LaunchedEffect(stateNodes, connections, settings.view) {
+            engine.reheat()
+        }
     }
+
 
     // === PHYSICS LOOP ===
     LaunchedEffect(engine, latestSettings.view.targetFrameMs) {
@@ -223,8 +228,8 @@ fun <Id, Data> Graph(
                 }
 
                 if (coordsCopy != null && velsCopy != null) {
-                    onCoordinatesUpdate(coordsCopy!!)
-                    onVelocitiesUpdate(velsCopy!!)
+                    onCoordinatesUpdate(coordsCopy)
+                    onVelocitiesUpdate(velsCopy)
                 }
             }
         }
@@ -307,7 +312,10 @@ fun <Id, Data> Graph(
                             if (pointerList.size == 2 && abs(1f - gestureZoom) > 0.005f) {
                                 val zoomCfg = latestSettings.zoom
                                 val newScale =
-                                    (latestZoom * gestureZoom).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
+                                    (latestZoom * gestureZoom).coerceIn(
+                                        zoomCfg.minZoom,
+                                        zoomCfg.maxZoom
+                                    )
                                 if (newScale != latestZoom) onZoomChange(newScale)
                             }
                         }

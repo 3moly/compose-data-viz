@@ -44,6 +44,16 @@ internal class AndroidRuntimeEffect(shader: Shader) : RuntimeEffect {
         compositeRuntimeEffect.setFloatUniform(name, value1, value2, value3)
     }
 
+    override fun setFloatUniform(
+        name: String,
+        value1: Float,
+        value2: Float,
+        value3: Float,
+        value4: Float
+    ) {
+        compositeRuntimeEffect.setFloatUniform(name, value1, value2, value3, value4)
+    }
+
     override fun setFloatUniform(name: String, values: FloatArray) {
         compositeRuntimeEffect.setFloatUniform(name, values)
     }
