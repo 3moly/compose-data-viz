@@ -44,18 +44,34 @@ data class GraphViewSettings(
 ) {
     companion object {
         val Default = GraphViewSettings(
-            centerForce = 0.0088f,
-            linkForce = 10f,
-            linkDistance = 100f,
-            repelForce = 20000f,
-            circleSize = 10f,
-            connectedRepulsionMultiplier = 0.3f,
+            centerForce = 0.02f,  // Slightly stronger to keep centered
+
+            // Stronger links with more "snap"
+            linkForce = 35f,      // Increased for faster convergence
+            linkDistance = 30f,   // Tighter connections
+
+            // Higher repulsion to prevent sticking
+            repelForce = 50000f,  // Much higher to break apart stuck nodes
+
+            circleSize = 8f,      // Slightly smaller circles
+
+            // Better connected node handling
+            connectedRepulsionMultiplier = 0.3f,  // Lower = less repulsion between connected nodes
             mutualConnectionRepulsionMultiplier = 0.05f,
             unconnectedRepulsionMultiplier = 1.0f,
-            longDistanceLinkMultiplier = 1f,
-            clusteringForce = 1f,
-            minMutualConnectionsForClustering = 10,
-            maxForce = 15f,
+            longDistanceLinkMultiplier = 2.0f,  // Pull distant connected nodes together faster
+
+            clusteringForce = 1.5f,
+            minMutualConnectionsForClustering = 3,
+
+            maxForce = 60f,  // Higher to allow faster movement
+
+            // IMPORTANT: Higher damping = less bounce, but too high prevents movement
+            dampingFactor = 0.75f,  // Balance between 0.65 (too stiff) and 0.92 (too bouncy)
+
+            hubExpansionExponent = 0.3f,  // Less aggressive expansion (was 0.5)
+
+
             maxConnectionsForFullProcessing = 100,
             spatialOptimizationThreshold = 50,
             circleSizeMultiplier = null

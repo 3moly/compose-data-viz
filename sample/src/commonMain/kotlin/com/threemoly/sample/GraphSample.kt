@@ -65,8 +65,8 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
 //    com.moly3.dataviz.sample.resources
 
     val density = LocalDensity.current
-    val catty = rememberPainterFromComposable(modifier=Modifier.size(50.dp)){
-        Box(Modifier.fillMaxSize().background(Color.Magenta)){
+    val catty = rememberPainterFromComposable(modifier = Modifier.size(50.dp)) {
+        Box(Modifier.fillMaxSize().background(Color.Magenta)) {
             Image(modifier = Modifier.padding(16.dp), painter = catPainter, contentDescription = "")
         }
     }
@@ -75,7 +75,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
         createSvgAtlas(
             painters = listOf(catty ?: scale, share),
             density = density,
-            tileSizePx = 1024
+            tileSizePx = 64
         )
     }
 
@@ -86,6 +86,16 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             .background(Color.White.darker(0.5f))
     ) {
         Graph(
+            isImmediateReheatOnUpdate = true,
+            customPopup = {
+                val catPainter =
+                    rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
+                Image(
+                    painter = catPainter,
+                    contentDescription = null,
+                    modifier = Modifier.size(100.dp)
+                )
+            },
             atlas = atlas,
             settings = s.graphSettings,
             consume = false,
@@ -93,7 +103,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
                 val node = s.graphNodes.find { it.id == nodeId }
                 when {
                     node?.name?.contains("Folder") == true -> 0 // Index of folder icon in painters list
-                    node?.name?.contains("Node") == true -> 1  // Index of image icon
+                    node?.name?.contains("Node") == true -> null  // Index of image icon
                     else -> 0 // No icon
                 }
             },

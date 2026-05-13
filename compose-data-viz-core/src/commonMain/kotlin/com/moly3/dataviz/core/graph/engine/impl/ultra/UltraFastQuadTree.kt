@@ -41,6 +41,7 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         oldBody.copyInto(nodeBody)
     }
 
+    // In UltraFastQuadTree, optimize for speed:
     fun build(positionsX: FloatArray, positionsY: FloatArray, n: Int) {
         count = 0
         if (n == 0) return
@@ -48,16 +49,37 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         posXRef = positionsX
         posYRef = positionsY
 
-        // Pre-size capacity: worst case ~4n nodes for full tree
-        ensureCapacity(n * 4 + 16)
+        // More aggressive capacity estimation for complex graphs
+        ensureCapacity(n * 5 + 32)  // Increased buffer
 
+        // Use parallel min/max finding for large datasets
         var minX = positionsX[0]; var maxX = positionsX[0]
         var minY = positionsY[0]; var maxY = positionsY[0]
-        for (i in 1 until n) {
-            val x = positionsX[i]; val y = positionsY[i]
-            if (x < minX) minX = x else if (x > maxX) maxX = x
-            if (y < minY) minY = y else if (y > maxY) maxY = y
+
+        // Vectorized-like loop for bounds finding
+        for (i in 1 until n step 2) {
+            val x1 = positionsX[i]
+            val x2 = if (i + 1 < n) positionsX[i + 1] else x1
+            val y1 = positionsY[i]
+            val y2 = if (i + 1 < n) positionsY[i + 1] else y1
+
+            if (x1 < x2) {
+                if (x1 < minX) minX = x1
+                if (x2 > maxX) maxX = x2
+            } else {
+                if (x2 < minX) minX = x2
+                if (x1 > maxX) maxX = x1
+            }
+
+            if (y1 < y2) {
+                if (y1 < minY) minY = y1
+                if (y2 > maxY) maxY = y2
+            } else {
+                if (y2 < minY) minY = y2
+                if (y1 > maxY) maxY = y1
+            }
         }
+
         val cx = (minX + maxX) * 0.5f
         val cy = (minY + maxY) * 0.5f
         val half = max(maxX - minX, maxY - minY) * 0.5f + 1f

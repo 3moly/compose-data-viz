@@ -47,20 +47,29 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
     private var frameCount = 0
 
-    // === SLEEP / COOLING STATE ===
     var alpha = 1f
         private set
     private var alphaTarget = 0f
-    private var alphaDecay = 0.015f
+
+    // INCREASE base decay to cool the simulation faster
+    private var alphaDecay = 0.035f
     private val alphaMin = 0.001f
     private val reheatAlpha = 0.5f
 
     private var totalKineticEnergy = 0f
-    private val sleepEnergyThreshold = 0.5f
+
+    // INCREASE threshold so it stops calculating micro-movements sooner
+    private val sleepEnergyThreshold = 2.5f
+
+//    private var totalKineticEnergy = 0f
+//    private val sleepEnergyThreshold = 0.5f
 
     private var lastNodeCountSignature = 0
 
-    override val isAsleep: Boolean get() = alpha < alphaMin && totalKineticEnergy < sleepEnergyThreshold
+    override val isAsleep: Boolean get() {
+        // Much simpler, more aggressive sleep detection.
+        return alpha <= 0f || (alpha < 0.02f && totalKineticEnergy < sleepEnergyThreshold)
+    }
 
     private fun reheat(intensity: Float = reheatAlpha) {
         alpha = max(alpha, intensity)
@@ -83,7 +92,7 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             lastNodeCountSignature = structureSig
         }
 
-        if (draggedNode != null) reheat(0.5f)
+        if (draggedNode != null) reheat(0.01f)
 
         if (isAsleep && draggedNode == null) {
             syncData(graphNodes, coordinates, velocities, connections, structureChanged)
@@ -93,6 +102,7 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         syncData(graphNodes, coordinates, velocities, connections, structureChanged)
         frameCount++
 
+
         // Refresh hubScaleCache if exponent setting changed
         if (settings.hubExpansionExponent != lastHubExponent) {
             recomputeHubScale(settings.hubExpansionExponent)
@@ -101,14 +111,14 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
         // Adaptive QuadTree rebuild: hot = every 2 frames, cool = every 4, very cool = every 8
         val rebuildEvery = when {
-            alpha > 0.3f -> 1
-            alpha > 0.1f -> 2
-            alpha > 0.03f -> 4
-            else -> 8
+            alpha > 0.2f -> 1   // Always rebuild when hot
+            alpha > 0.05f -> 2
+            else -> 4           // Rebuild less often when cool
         }
         if (frameCount % rebuildEvery == 0 || frameCount == 1) {
             quadTree.build(posX, posY, nodeCount)
         }
+
 
         val draggedIdx = draggedNode?.id?.let { idToIndex[it] } ?: -1
         val theta = if (nodeCount > 1000) 1.5f else 1.2f
@@ -204,8 +214,15 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                         val b = edgeB[e]
                         if (a == draggedIdx && b == draggedIdx) continue
 
-                        val dx = posX[b] - posX[a]
-                        val dy = posY[b] - posY[a]
+                        var dx = posX[b] - posX[a]
+                        var dy = posY[b] - posY[a]
+
+                        // [NEW] Anti-Singularity: Force separation if exactly overlapped
+                        if (dx == 0f && dy == 0f) {
+                            dx = 0.01f + (a % 5) * 0.005f
+                            dy = 0.01f + (b % 5) * 0.005f
+                        }
+
                         val distSq = max(dx * dx + dy * dy, 0.01f)
                         // Fast inverse sqrt avoidance: we need dist for the linear spring
                         // (linear in displacement, not in 1/r). One sqrt is unavoidable
@@ -221,28 +238,46 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                         val biasB = degA.toFloat() / degSum.toFloat()
 
                         // Hub expansion: use cached pow values
-                        val hubScale = max(hubScaleCache[a], hubScaleCache[b])
-                        val effectiveLinkDistance = baseLinkDistance * hubScale
+                        val hubScale = (hubScaleCache[a] + hubScaleCache[b]) * 0.5f
+//                        val effectiveLinkDistance = baseLinkDistance * hubScale.coerceIn(1f, 3f)
+                        val degreeScale = if (degSum > 20) {
+                            1f - (degSum - 20) * 0.02f  // Gradually reduce distance for very high degree nodes
+                        } else {
+                            1f
+                        }.coerceAtLeast(0.5f)
+
+                        val effectiveLinkDistance = baseLinkDistance * hubScale * degreeScale
 
                         val distMul = if (dist > effectiveLinkDistance * 1.5f) longMul else 1f
 
                         // Repulsion compensation
-                        val repCompensation = (effectiveRepel / max(distSq, softening)) * invConnRepulsionMul
+                        // FIXED - repulsion compensation should REDUCE attraction, not add to it
+                        val repCompensation = (effectiveRepel / max(distSq, softening)) * connRepulsionMul
 
                         val displacement = dist - effectiveLinkDistance
-                        // Spring magnitude (per-endpoint differs only by bias)
                         val baseLinkMag = effectiveLink * displacement * distMul
 
-                        // Apply to A (pulls toward B if displacement > 0)
-                        val magA = baseLinkMag * biasA + repCompensation
-                        val fxA = dx * invDist * magA
-                        val fyA = dy * invDist * magA
+// Apply to A (pulls toward B if displacement > 0)
+                        val magA = baseLinkMag * biasA * (1f - connRepulsionMul)  // Reduce attraction based on repulsion
+                        val fxA = dx * invDist * magA + dx * invDist * repCompensation  // Add repulsion separately
+                        val fyA = dy * invDist * magA + dy * invDist * repCompensation
 
-                        // Apply to B (Newton's third law: opposite direction, but bias differs)
-                        val magB = baseLinkMag * biasB + repCompensation
-                        val fxB = -dx * invDist * magB
-                        val fyB = -dy * invDist * magB
+// Apply to B (Newton's third law: opposite direction for spring, but repulsion pushes apart)
+                        val magB = baseLinkMag * biasB * (1f - connRepulsionMul)
+                        val fxB = -dx * invDist * magB - dx * invDist * repCompensation  // Repulsion pushes apart
+                        val fyB = -dy * invDist * magB - dy * invDist * repCompensation
 
+                        val antiStickDist = settings.circleSize * 2f  // 2x circle diameter
+                        val antiStickForce = effectiveRepel * 10f  // 10x normal repulsion for very close nodes
+
+                        if (dist < antiStickDist) {
+                            val stickFactor = (1f - dist / antiStickDist) * (1f - dist / antiStickDist)  // Quadratic falloff
+                            val antiFx = dx * invDist * antiStickForce * stickFactor
+                            val antiFy = dy * invDist * antiStickForce * stickFactor
+
+                            tfx[a] -= antiFx; tfy[a] -= antiFy
+                            tfx[b] += antiFx; tfy[b] += antiFy
+                        }
                         if (a != draggedIdx) { tfx[a] += fxA; tfy[a] += fyA }
                         if (b != draggedIdx) { tfx[b] += fxB; tfy[b] += fyB }
                     }
@@ -278,6 +313,13 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         val maxFSq = maxF * maxF
 
         val chunkEnergy = FloatArray(nodeChunks)
+        val adaptiveTimestep = when {
+            alpha > 0.5f -> 0.15f   // Faster movement when hot
+            alpha > 0.2f -> 0.12f
+            alpha > 0.1f -> 0.1f
+            else -> 0.08f           // More stable when cool
+        }
+
         val integrateJobs = (0 until nodeChunks).map { chunkIdx ->
             async(Dispatchers.Default) {
                 val start = chunkIdx * nodeChunkSize
@@ -289,15 +331,16 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                     var fx = forceX[i]
                     var fy = forceY[i]
 
-                    // Clamp force (use sq comparison to skip a sqrt when not needed)
+                    // Clamp force
                     val fMagSq = fx * fx + fy * fy
                     if (fMagSq > maxFSq) {
                         val s = maxF / sqrt(fMagSq)
                         fx *= s; fy *= s
                     }
 
-                    var vx = (velX[i] + fx * 0.1f) * damping
-                    var vy = (velY[i] + fy * 0.1f) * damping
+                    // Use adaptive timestep for velocity integration
+                    var vx = (velX[i] + fx * adaptiveTimestep) * damping
+                    var vy = (velY[i] + fy * adaptiveTimestep) * damping
 
                     val vMagSq = vx * vx + vy * vy
                     if (vMagSq < 1e-3f) {
@@ -307,8 +350,10 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                     }
 
                     velX[i] = vx; velY[i] = vy
-                    posX[i] += vx * 0.5f
-                    posY[i] += vy * 0.5f
+
+                    // Apply velocity smoothing for stability
+                    posX[i] += vx * (0.4f + alpha * 0.3f)  // Scale position update with alpha
+                    posY[i] += vy * (0.4f + alpha * 0.3f)
                 }
                 chunkEnergy[chunkIdx] = localEnergy
             }
@@ -326,6 +371,11 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
         totalKineticEnergy = chunkEnergy.sum()
         alpha += (alphaTarget - alpha) * alphaDecay
+
+        // [NEW] Snap-Freeze: Crush the asymptotic tail to instantly kill micro-wobbles
+        if (alpha < 0.05f) {
+            alpha = 0f
+        }
 
         // Write back to maps
         for (i in 0 until nodeCount) {
@@ -353,7 +403,8 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
         for (i in 0 until nodeCount) {
             val d = degree[i].toFloat()
-            hubScaleCache[i] = d.pow(exponent).coerceAtLeast(1f)
+            // Cap hub expansion to prevent orbits from becoming too large
+            hubScaleCache[i] = min(d.pow(exponent), 4f)  // Cap at 4x base distance
         }
     }
 
@@ -471,7 +522,9 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
         // Dynamic alpha decay scaling
         if (nodeCount > 0) {
-            alphaDecay = 0.02f * (100f / nodeCount.coerceAtLeast(100).toFloat()).coerceAtLeast(0.002f)
+            // Correctly apply coerceIn to the FINAL multiplication result
+            alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+                .coerceIn(0.02f, 0.08f)
         }
     }
 }

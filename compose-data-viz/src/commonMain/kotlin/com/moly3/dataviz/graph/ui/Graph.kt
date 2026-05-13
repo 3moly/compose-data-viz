@@ -71,6 +71,7 @@ fun <Id, Data> Graph(
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
     onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
     onVelocitiesUpdate: (Map<Id, Offset>) -> Unit = {},
+    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset.Zero) }
@@ -265,6 +266,7 @@ fun <Id, Data> Graph(
 
     GraphInternal(
         atlas = atlas,
+        customPopup = customPopup,
         getIconIndex = getIconIndex,
         modifier = modifier
             .fillMaxSize()

@@ -1,8 +1,8 @@
+// Changed Code
 package com.moly3.dataviz.graph.ui
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,13 +20,18 @@ import androidx.compose.ui.graphics.colorspace.ColorSpace
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.core.graph.model.GraphTheme
@@ -38,14 +43,6 @@ import com.moly3.shaders.drawVertices2
 import kotlin.math.max
 import kotlin.math.min
 
-// =====================================================================================
-// Buffer cache & animation helpers (private implementation detail)
-// =====================================================================================
-
-/**
- * Reusable buffer cache. Scratch arrays grow-only; exact arrays are reallocated
- * only when visible count changes (rare during pan/zoom).
- */
 private class GraphBuffers {
     var positions = FloatArray(0)
     var texCoords = FloatArray(0)
@@ -84,38 +81,18 @@ private class GraphBuffers {
     }
 }
 
-/**
- * Per-node animated state used to drive smooth transitions on selection/drag.
- * `textAlpha`  – current text opacity (animated toward target)
- * `dimFactor`  – current dim factor for the node body (animated toward target)
- */
 private class NodeAnimState {
     var textAlpha: Float = 1f
-    var dimFactor: Float = 0f // 0 = full color, 1 = darkest
+    var dimFactor: Float = 0f
+    var activeKoef: Float = 0f
 }
 
-/** Approach `current` toward `target` at `rate` per second. Frame-rate independent. */
 private fun approach(current: Float, target: Float, rate: Float, dtSec: Float): Float {
     if (current == target) return target
     val step = rate * dtSec
     return if (current < target) min(current + step, target)
     else max(current - step, target)
 }
-
-private fun <Id, Data> resolveNodeColor(
-    node: GraphNode<Id, Data>,
-    draggedNodeId: Id?,
-    cursorNodeId: Id?,
-    theme: GraphTheme,
-): Color = when (node.id) {
-    draggedNodeId -> theme.draggedNodeColor
-    cursorNodeId  -> theme.hoveredNodeColor
-    else          -> node.colorValue?.let { Color(it) } ?: theme.nodeColor
-}
-
-// =====================================================================================
-// GraphInternal
-// =====================================================================================
 
 @Composable
 internal fun <Id, Data> GraphInternal(
@@ -131,6 +108,7 @@ internal fun <Id, Data> GraphInternal(
     watchNodeId: Id?,
     movementOffset: Offset,
     zoom: Float,
+    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
 ) {
     val theme        = settings.theme
     val view         = settings.view
@@ -168,18 +146,6 @@ internal fun <Id, Data> GraphInternal(
         }.buildShader()
     }
     val animZoom = zoom
-
-    val cursorCircleSizeKoef by animateFloatAsState(
-        targetValue = if (cursorNodeId != null || draggedNodeId != null) selectionCfg.scaleOnHover else 1f,
-        animationSpec = tween(durationMillis = selectionCfg.scaleAnimationMs),
-        label = "activeScale"
-    )
-
-    val selectionActiveAmount by animateFloatAsState(
-        targetValue = if (cursorNodeId != null || draggedNodeId != null) 1f else 0f,
-        animationSpec = tween(durationMillis = selectionCfg.selectionActiveAnimationMs),
-        label = "selectionActive"
-    )
 
     val localDensity = LocalDensity.current
     val textPadding = remember(textCfg.labelPaddingDp) {
@@ -257,12 +223,16 @@ internal fun <Id, Data> GraphInternal(
                 val hasSelection = currentActiveId != null
                 var anyChange = false
 
+                val rateActive = 1000f / cfg.scaleAnimationMs.coerceAtLeast(1)
+
                 for (i in currentNodes.indices) {
                     val node = currentNodes[i]
                     val state = nodeAnimStates.getOrPut(node.id) { NodeAnimState() }
 
                     val targetText: Float
                     val targetDim: Float
+                    val targetActive = if (node.id == currentActiveId) 1f else 0f
+
                     when {
                         !hasSelection -> { targetText = 1f; targetDim = 0f }
                         node.id == currentActiveId -> { targetText = 0f; targetDim = 0f }
@@ -275,10 +245,12 @@ internal fun <Id, Data> GraphInternal(
 
                     val newText = approach(state.textAlpha, targetText, rateText, dtSec)
                     val newDim  = approach(state.dimFactor, targetDim, cfg.nodeDimRatePerSec, dtSec)
+                    val newActive = approach(state.activeKoef, targetActive, rateActive, dtSec)
 
-                    if (newText != state.textAlpha || newDim != state.dimFactor) {
+                    if (newText != state.textAlpha || newDim != state.dimFactor || newActive != state.activeKoef) {
                         state.textAlpha = newText
                         state.dimFactor = newDim
+                        state.activeKoef = newActive
                         anyChange = true
                     }
                 }
@@ -297,262 +269,285 @@ internal fun <Id, Data> GraphInternal(
         }
     }
 
-    @Suppress("UNUSED_EXPRESSION") animTick
-
     val drawText  = animZoom > textCfg.visibilityZoomThreshold
     val drawEdges = animZoom > edgeCfg.visibilityZoomThreshold
 
-    Canvas(modifier = modifier) {
-        val canvasW = size.width
-        val canvasH = size.height
-        val centerX = canvasW * 0.5f
-        val centerY = canvasH * 0.5f
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
 
-        val invZoom = 1f / animZoom.coerceAtLeast(0.0001f)
-        val cullPad = 100f
-        val cullL = (-centerX) * invZoom - movementOffset.x - cullPad
-        val cullR = (canvasW - centerX) * invZoom - movementOffset.x + cullPad
-        val cullT = (-centerY) * invZoom - movementOffset.y - cullPad
-        val cullB = (canvasH - centerY) * invZoom - movementOffset.y + cullPad
+    Box(modifier = modifier.onSizeChanged { boxSize = it }) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            @Suppress("UNUSED_EXPRESSION") animTick
 
-        // -------- Pass 1: build per-node vertex buffers --------
-        buffers.ensureCapacity(nodes.size * 2)
-        var visibleNodeCount = 0
+            val canvasW = size.width
+            val canvasH = size.height
+            val centerX = canvasW * 0.5f
+            val centerY = canvasH * 0.5f
 
-        val posArray = buffers.positions
-        val texArray = buffers.texCoords
-        val colArray = buffers.colors
-        val idxArray = buffers.indices
+            val invZoom = 1f / animZoom.coerceAtLeast(0.0001f)
+            val cullPad = 100f
+            val cullL = (-centerX) * invZoom - movementOffset.x - cullPad
+            val cullR = (canvasW - centerX) * invZoom - movementOffset.x + cullPad
+            val cullT = (-centerY) * invZoom - movementOffset.y - cullPad
+            val cullB = (canvasH - centerY) * invZoom - movementOffset.y + cullPad
 
-        val whiteColorInt = Color.White.toArgb()
+            buffers.ensureCapacity(nodes.size * 2)
+            var visibleNodeCount = 0
 
-        for (i in nodes.indices) {
-            val node = nodes[i]
-            val pos = coordinates[node.id] ?: continue
-            if (pos.x < cullL || pos.x > cullR || pos.y < cullT || pos.y > cullB) continue
+            val posArray = buffers.positions
+            val texArray = buffers.texCoords
+            val colArray = buffers.colors
+            val idxArray = buffers.indices
 
-            val baseRadius = GraphNode.getCircleSize(
-                circleRadius = circleRadius,
-                connectionCount = connections[node.id]?.size ?: 1,
-                multiplier = circleSizeMultiplier
-            )
-            val r = if (node.id == activeNodeId) baseRadius * cursorCircleSizeKoef else baseRadius
-
-            val iconIndex = getIconIndex(node.id) ?: -1
-            val hasIcon = iconIndex >= 0 && atlas != null
-
-            val base = resolveNodeColor(node, draggedNodeId, cursorNodeId, theme)
-            val dim = nodeAnimStates[node.id]?.dimFactor ?: 0f
-            val nodeColor = lerp(base, base.copy(alpha = selectionCfg.fadedNodeAlpha), dim)
-            val nodeColorInt = nodeColor.toArgb()
-
-            // -------------------------------------------------------------
-            // QUAD 1: Base Background Layer (Always Drawn)
-            // -------------------------------------------------------------
-            var vOff = visibleNodeCount * 4
-            var fOff = vOff * 2
-            var iOff = visibleNodeCount * 6
-
-            posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
-            posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
-            posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
-            posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
-
-            texArray[fOff + 0] = -101f; texArray[fOff + 1] = -101f
-            texArray[fOff + 2] = -99f;  texArray[fOff + 3] = -101f
-            texArray[fOff + 4] = -99f;  texArray[fOff + 5] = -99f
-            texArray[fOff + 6] = -101f; texArray[fOff + 7] = -99f
-
-            colArray[vOff + 0] = nodeColorInt
-            colArray[vOff + 1] = nodeColorInt
-            colArray[vOff + 2] = nodeColorInt
-            colArray[vOff + 3] = nodeColorInt
-
-            idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
-            idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
-            idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
-
-            visibleNodeCount++
-
-            // -------------------------------------------------------------
-            // QUAD 2: Icon Layer (Drawn strictly on top if hasIcon == true)
-            // -------------------------------------------------------------
-            if (hasIcon) {
-                val atlasCols = atlas!!.columns.toFloat()
-                val atlasTileSize = atlas.tileSizePx.toFloat()
-
-                val texU = (iconIndex % atlasCols.toInt()) * atlasTileSize
-                val texV = (iconIndex / atlasCols.toInt()) * atlasTileSize
-                val texSpan = atlasTileSize
-
-                vOff = visibleNodeCount * 4
-                fOff = vOff * 2
-                iOff = visibleNodeCount * 6
-
-                posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
-                posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
-                posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
-                posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
-
-                texArray[fOff + 0] = texU;           texArray[fOff + 1] = texV
-                texArray[fOff + 2] = texU + texSpan; texArray[fOff + 3] = texV
-                texArray[fOff + 4] = texU + texSpan; texArray[fOff + 5] = texV + texSpan
-                texArray[fOff + 6] = texU;           texArray[fOff + 7] = texV + texSpan
-
-                colArray[vOff + 0] = whiteColorInt
-                colArray[vOff + 1] = whiteColorInt
-                colArray[vOff + 2] = whiteColorInt
-                colArray[vOff + 3] = whiteColorInt
-
-                idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
-                idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
-                idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
-
-                visibleNodeCount++
-            }
-        }
-
-        withTransform({
-            scale(animZoom, animZoom)
-            translate(center.x + movementOffset.x, center.y + movementOffset.y)
-        }) {
-            if (drawEdges) {
-                val strokeNormal    = edgeCfg.strokeWidth / animZoom
-                val strokeHighlight = (edgeCfg.strokeWidth + edgeCfg.strokeHighlightBonus) / animZoom
-
-                val baseEdgeColor = theme.resolvedEdgeColor
-                val dimmedLine = lerp(
-                    baseEdgeColor,
-                    baseEdgeColor.copy(alpha = selectionCfg.fadedEdgeAlpha),
-                    selectionActiveAmount
-                )
-
-                for (i in nodes.indices) {
-                    val sId = nodes[i].id
-                    val sPos = coordinates[sId] ?: continue
-                    val conns = connections[sId] ?: continue
-
-                    for (j in conns.indices) {
-                        val tId = conns[j]
-                        val tPos = coordinates[tId] ?: continue
-
-                        val minX = min(sPos.x, tPos.x); val maxX = max(sPos.x, tPos.x)
-                        val minY = min(sPos.y, tPos.y); val maxY = max(sPos.y, tPos.y)
-                        if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
-
-                        val isSelected = sId == activeNodeId || tId == activeNodeId
-                        val stroke = if (isSelected) {
-                            strokeNormal + (strokeHighlight - strokeNormal) * selectionActiveAmount
-                        } else strokeNormal
-                        val edgeColor = if (isSelected) theme.accentColor else dimmedLine
-
-                        drawLine(
-                            color = edgeColor,
-                            start = sPos,
-                            end = tPos,
-                            strokeWidth = stroke
-                        )
-                    }
-                }
-            }
-
-            if (watchNodeId != null) {
-                val watchPos = coordinates[watchNodeId]
-                if (watchPos != null) {
-                    val watchRadius = GraphNode.getCircleSize(
-                        circleRadius, connections[watchNodeId]?.size ?: 1, circleSizeMultiplier
-                    )
-                    drawCircle(
-                        color = theme.accentColor,
-                        radius = watchRadius * watchCfg.radiusMultiplier,
-                        center = watchPos,
-                        style = Stroke(width = watchCfg.strokeWidth / animZoom)
-                    )
-                }
-            }
-
-            if (visibleNodeCount > 0) {
-                val vFloats = visibleNodeCount * 8
-                val cInts   = visibleNodeCount * 4
-                val iShorts = visibleNodeCount * 6
-
-                val exactPos = buffers.getExactPositions(vFloats)
-                val exactTex = buffers.getExactTexCoords(vFloats)
-                val exactCol = buffers.getExactColors(cInts)
-                val exactIdx = buffers.getExactIndices(iShorts)
-
-                posArray.copyInto(exactPos, 0, 0, vFloats)
-                texArray.copyInto(exactTex, 0, 0, vFloats)
-                colArray.copyInto(exactCol, 0, 0, cInts)
-                idxArray.copyInto(exactIdx, 0, 0, iShorts)
-
-                drawContext.canvas.drawVertices2(
-                    exactPos, exactCol, exactTex, exactIdx, shader = buildShader
-                )
-            }
-
-            drawCircle(color = theme.accentColor, radius = 1f / animZoom, center = Offset.Zero)
-        }
-
-        if (drawText) {
-            val visibleTexts = ArrayList<Triple<Int, Float, Offset>>()
+            val solidBackgroundColor = Color(0xFF121212)
 
             for (i in nodes.indices) {
                 val node = nodes[i]
-                if (activeNodeId == node.id) continue
                 val pos = coordinates[node.id] ?: continue
                 if (pos.x < cullL || pos.x > cullR || pos.y < cullT || pos.y > cullB) continue
 
-                val alpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
-                if (alpha < 0.01f) continue
-
-                val screenX = (pos.x + movementOffset.x) * animZoom + centerX
-                val screenY = (pos.y + movementOffset.y) * animZoom + centerY
-
-                val dxs = screenX - centerX
-                val dys = screenY - centerY
-                val distSq = dxs * dxs + dys * dys
-
-                visibleTexts.add(Triple(i, distSq, Offset(screenX, screenY)))
-            }
-
-            visibleTexts.sortBy { it.second }
-
-            val limit = min(visibleTexts.size, maxTextsAtCenterVisible)
-            val zoomFadeStart = textCfg.visibilityZoomThreshold
-            val zoomFadeWidth = textCfg.visibilityZoomFadeWidth
-
-            for (k in 0 until limit) {
-                val (nodeIndex, _, screenPos) = visibleTexts[k]
-                val node = nodes[nodeIndex]
-                val layout = textLayouts[node.id] ?: continue
-
-                val nodeRadius = GraphNode.getCircleSize(
-                    circleRadius, connections[node.id]?.size ?: 1, circleSizeMultiplier
+                val baseRadius = GraphNode.getCircleSize(
+                    circleRadius = circleRadius,
+                    connectionCount = connections[node.id]?.size ?: 1,
+                    multiplier = circleSizeMultiplier
                 )
-                val nodeTextAlpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
-                val zoomAlpha = ((animZoom - zoomFadeStart) / zoomFadeWidth).coerceIn(0f, 1f)
-                val finalAlpha = (nodeTextAlpha * zoomAlpha).coerceIn(0f, 1f)
-                if (finalAlpha < 0.01f) continue
 
-                val pivotX = screenPos.x
-                val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
-                val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
+                val state = nodeAnimStates[node.id]
+                val dim = state?.dimFactor ?: 0f
+                val activeKoef = state?.activeKoef ?: 0f
 
-                val textScale = if (textCfg.scaleLabelsWithZoom) {
-                    animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
-                } else {
-                    1f
+                val r = baseRadius * lerp(1f, selectionCfg.scaleOnHover, activeKoef)
+
+                val iconIndex = getIconIndex(node.id) ?: -1
+                val hasIcon = iconIndex >= 0 && atlas != null
+
+                val baseColor = node.colorValue?.let { Color(it) } ?: theme.nodeColor
+                val hoverOrDragColor = if (node.id == draggedNodeId) theme.draggedNodeColor else theme.hoveredNodeColor
+                val base = lerp(baseColor, hoverOrDragColor, activeKoef)
+
+                val nodeColor = lerp(base, solidBackgroundColor, dim * (1f - selectionCfg.fadedNodeAlpha))
+                val nodeColorInt = nodeColor.toArgb()
+
+                val iconAlpha = lerp(1f, selectionCfg.fadedNodeAlpha, dim)
+                val iconFadedColorInt = Color.White.copy(alpha = iconAlpha).toArgb()
+
+                // ONLY draw the background circle if there is NO icon
+                if (!hasIcon) {
+                    var vOff = visibleNodeCount * 4
+                    var fOff = vOff * 2
+                    var iOff = visibleNodeCount * 6
+
+                    posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
+                    posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
+                    posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
+                    posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
+
+                    texArray[fOff + 0] = -101f; texArray[fOff + 1] = -101f
+                    texArray[fOff + 2] = -99f;  texArray[fOff + 3] = -101f
+                    texArray[fOff + 4] = -99f;  texArray[fOff + 5] = -99f
+                    texArray[fOff + 6] = -101f; texArray[fOff + 7] = -99f
+
+                    colArray[vOff + 0] = nodeColorInt
+                    colArray[vOff + 1] = nodeColorInt
+                    colArray[vOff + 2] = nodeColorInt
+                    colArray[vOff + 3] = nodeColorInt
+
+                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
+                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
+                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
+
+                    visibleNodeCount++
                 }
 
-                if (textScale != 1f) {
-                    withTransform({
-                        scale(
-                            scaleX = textScale,
-                            scaleY = textScale,
-                            pivot = Offset(pivotX, pivotY)
+                // Draw the icon as usual (the shader will handle the square rendering without clipping)
+                if (hasIcon) {
+                    val atlasCols = atlas.columns.toFloat()
+                    val atlasTileSize = atlas.tileSizePx.toFloat()
+
+                    val inset = 0.5f
+
+                    val texU = (iconIndex % atlasCols.toInt()) * atlasTileSize + inset
+                    val texV = (iconIndex / atlasCols.toInt()) * atlasTileSize + inset
+                    val texSpan = atlasTileSize - (inset * 2f)
+//                    val texSpan = atlasTileSize
+
+                    val vOff = visibleNodeCount * 4
+                    val fOff = vOff * 2
+                    val iOff = visibleNodeCount * 6
+
+                    posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
+                    posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
+                    posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
+                    posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
+
+                    texArray[fOff + 0] = texU;           texArray[fOff + 1] = texV
+                    texArray[fOff + 2] = texU + texSpan; texArray[fOff + 3] = texV
+                    texArray[fOff + 4] = texU + texSpan; texArray[fOff + 5] = texV + texSpan
+                    texArray[fOff + 6] = texU;           texArray[fOff + 7] = texV + texSpan
+
+                    colArray[vOff + 0] = iconFadedColorInt
+                    colArray[vOff + 1] = iconFadedColorInt
+                    colArray[vOff + 2] = iconFadedColorInt
+                    colArray[vOff + 3] = iconFadedColorInt
+
+                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
+                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
+                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
+
+                    visibleNodeCount++
+                }
+            }
+
+            withTransform({
+                scale(animZoom, animZoom)
+                translate(center.x + movementOffset.x, center.y + movementOffset.y)
+            }) {
+                if (drawEdges) {
+                    val strokeNormal    = edgeCfg.strokeWidth / animZoom
+                    val strokeHighlight = (edgeCfg.strokeWidth + edgeCfg.strokeHighlightBonus) / animZoom
+
+                    val baseEdgeColor = theme.resolvedEdgeColor
+
+                    for (i in nodes.indices) {
+                        val sId = nodes[i].id
+                        val sPos = coordinates[sId] ?: continue
+                        val conns = connections[sId] ?: continue
+
+                        for (j in conns.indices) {
+                            val tId = conns[j]
+                            val tPos = coordinates[tId] ?: continue
+
+                            val minX = min(sPos.x, tPos.x); val maxX = max(sPos.x, tPos.x)
+                            val minY = min(sPos.y, tPos.y); val maxY = max(sPos.y, tPos.y)
+                            if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
+
+                            val sActive = nodeAnimStates[sId]?.activeKoef ?: 0f
+                            val tActive = nodeAnimStates[tId]?.activeKoef ?: 0f
+                            val maxActive = max(sActive, tActive)
+
+                            val stroke = strokeNormal + (strokeHighlight - strokeNormal) * maxActive
+
+                            val dimmedLine = lerp(
+                                baseEdgeColor,
+                                baseEdgeColor.copy(alpha = selectionCfg.fadedEdgeAlpha),
+                                if (activeNodeId != null) 1f else 0f
+                            )
+                            val edgeColor = lerp(dimmedLine, theme.accentColor, maxActive)
+
+                            drawLine(
+                                color = edgeColor,
+                                start = sPos,
+                                end = tPos,
+                                strokeWidth = stroke
+                            )
+                        }
+                    }
+                }
+
+                if (watchNodeId != null) {
+                    val watchPos = coordinates[watchNodeId]
+                    if (watchPos != null) {
+                        val watchRadius = GraphNode.getCircleSize(
+                            circleRadius, connections[watchNodeId]?.size ?: 1, circleSizeMultiplier
                         )
-                    }) {
+                        drawCircle(
+                            color = theme.accentColor,
+                            radius = watchRadius * watchCfg.radiusMultiplier,
+                            center = watchPos,
+                            style = Stroke(width = watchCfg.strokeWidth / animZoom)
+                        )
+                    }
+                }
+
+                if (visibleNodeCount > 0) {
+                    val vFloats = visibleNodeCount * 8
+                    val cInts   = visibleNodeCount * 4
+                    val iShorts = visibleNodeCount * 6
+
+                    val exactPos = buffers.getExactPositions(vFloats)
+                    val exactTex = buffers.getExactTexCoords(vFloats)
+                    val exactCol = buffers.getExactColors(cInts)
+                    val exactIdx = buffers.getExactIndices(iShorts)
+
+                    posArray.copyInto(exactPos, 0, 0, vFloats)
+                    texArray.copyInto(exactTex, 0, 0, vFloats)
+                    colArray.copyInto(exactCol, 0, 0, cInts)
+                    idxArray.copyInto(exactIdx, 0, 0, iShorts)
+
+                    drawContext.canvas.drawVertices2(
+                        exactPos, exactCol, exactTex, exactIdx, shader = buildShader
+                    )
+                }
+
+                drawCircle(color = theme.accentColor, radius = 1f / animZoom, center = Offset.Zero)
+            }
+
+            if (drawText) {
+                val visibleTexts = ArrayList<Triple<Int, Float, Offset>>()
+
+                for (i in nodes.indices) {
+                    val node = nodes[i]
+                    if (activeNodeId == node.id) continue
+                    val pos = coordinates[node.id] ?: continue
+                    if (pos.x < cullL || pos.x > cullR || pos.y < cullT || pos.y > cullB) continue
+
+                    val alpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
+                    if (alpha < 0.01f) continue
+
+                    val screenX = (pos.x + movementOffset.x) * animZoom + centerX
+                    val screenY = (pos.y + movementOffset.y) * animZoom + centerY
+
+                    val dxs = screenX - centerX
+                    val dys = screenY - centerY
+                    val distSq = dxs * dxs + dys * dys
+
+                    visibleTexts.add(Triple(i, distSq, Offset(screenX, screenY)))
+                }
+
+                visibleTexts.sortBy { it.second }
+
+                val limit = min(visibleTexts.size, maxTextsAtCenterVisible)
+                val zoomFadeStart = textCfg.visibilityZoomThreshold
+                val zoomFadeWidth = textCfg.visibilityZoomFadeWidth
+
+                for (k in 0 until limit) {
+                    val (nodeIndex, _, screenPos) = visibleTexts[k]
+                    val node = nodes[nodeIndex]
+                    val layout = textLayouts[node.id] ?: continue
+
+                    val nodeRadius = GraphNode.getCircleSize(
+                        circleRadius, connections[node.id]?.size ?: 1, circleSizeMultiplier
+                    )
+                    val nodeTextAlpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
+                    val zoomAlpha = ((animZoom - zoomFadeStart) / zoomFadeWidth).coerceIn(0f, 1f)
+                    val finalAlpha = (nodeTextAlpha * zoomAlpha).coerceIn(0f, 1f)
+                    if (finalAlpha < 0.01f) continue
+
+                    val pivotX = screenPos.x
+                    val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
+                    val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
+
+                    val textScale = if (textCfg.scaleLabelsWithZoom) {
+                        animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
+                    } else {
+                        1f
+                    }
+
+                    if (textScale != 1f) {
+                        withTransform({
+                            scale(
+                                scaleX = textScale,
+                                scaleY = textScale,
+                                pivot = Offset(pivotX, pivotY)
+                            )
+                        }) {
+                            drawText(
+                                textLayoutResult = layout,
+                                topLeft = textTopLeft,
+                                color = theme.textColor,
+                                alpha = finalAlpha
+                            )
+                        }
+                    } else {
                         drawText(
                             textLayoutResult = layout,
                             topLeft = textTopLeft,
@@ -560,53 +555,86 @@ internal fun <Id, Data> GraphInternal(
                             alpha = finalAlpha
                         )
                     }
-                } else {
+                }
+            }
+
+            if (customPopup == null && activeNodeId != null && activeNodeTextLayout != null && cursorTextAlpha > 0.01f) {
+                val activePos = coordinates[activeNodeId]
+                if (activePos != null) {
+                    val nodeRadius = GraphNode.getCircleSize(
+                        circleRadius, connections[activeNodeId]?.size ?: 1, circleSizeMultiplier
+                    )
+
+                    val bgPadX = textCfg.activePillPaddingX
+                    val bgPadY = textCfg.activePillPaddingY
+
+                    val activeKoef = nodeAnimStates[activeNodeId]?.activeKoef ?: 1f
+                    val activeScale = lerp(1f, selectionCfg.scaleOnHover, activeKoef)
+
+                    val screenX = (activePos.x + movementOffset.x) * animZoom + centerX
+                    val screenY = (activePos.y + movementOffset.y) * animZoom + centerY +
+                            (nodeRadius * activeScale * animZoom + textPadding + bgPadY +
+                                    (activeNodeTextLayout.size.height / 2f))
+
+                    val textTopLeft = Offset(screenX, screenY) - activeNodeTextLayout.half()
+
+                    val pillBgColor = if (theme.textColor.luminance() > 0.5f)
+                        theme.activeLabelBackgroundDark else theme.activeLabelBackgroundLight
+
+                    drawRoundRect(
+                        color = pillBgColor.copy(alpha = textCfg.activePillBackgroundAlpha * cursorTextAlpha),
+                        topLeft = Offset(textTopLeft.x - bgPadX, textTopLeft.y - bgPadY),
+                        size = Size(
+                            width  = activeNodeTextLayout.size.width  + bgPadX * 2f,
+                            height = activeNodeTextLayout.size.height + bgPadY * 2f
+                        ),
+                        cornerRadius = CornerRadius(textCfg.activePillCornerRadius, textCfg.activePillCornerRadius)
+                    )
+
                     drawText(
-                        textLayoutResult = layout,
+                        textLayoutResult = activeNodeTextLayout,
                         topLeft = textTopLeft,
                         color = theme.textColor,
-                        alpha = finalAlpha
+                        alpha = cursorTextAlpha
                     )
                 }
             }
         }
 
-        if (activeNodeId != null && activeNodeTextLayout != null && cursorTextAlpha > 0.01f) {
+        if (customPopup != null && activeNodeId != null && cursorTextAlpha > 0.01f) {
+            val activeNode = nodeById[activeNodeId]
             val activePos = coordinates[activeNodeId]
-            if (activePos != null) {
+
+            if (activeNode != null && activePos != null) {
+                val centerX = boxSize.width * 0.5f
+                val centerY = boxSize.height * 0.5f
+
                 val nodeRadius = GraphNode.getCircleSize(
                     circleRadius, connections[activeNodeId]?.size ?: 1, circleSizeMultiplier
                 )
 
-                val bgPadX = textCfg.activePillPaddingX
-                val bgPadY = textCfg.activePillPaddingY
+                val activeKoef = nodeAnimStates[activeNodeId]?.activeKoef ?: 1f
+                val activeScale = lerp(1f, selectionCfg.scaleOnHover, activeKoef)
 
-                val screenX = (activePos.x + movementOffset.x) * animZoom + centerX
-                val screenY = (activePos.y + movementOffset.y) * animZoom + centerY +
-                        (nodeRadius * cursorCircleSizeKoef * animZoom + textPadding + bgPadY +
-                                (activeNodeTextLayout.size.height / 2f))
+                Box(modifier = Modifier
+                    .graphicsLayer { alpha = cursorTextAlpha }
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
 
-                val textTopLeft = Offset(screenX, screenY) - activeNodeTextLayout.half()
+                        val screenX = (activePos.x + movementOffset.x) * animZoom + centerX
+                        val screenY = (activePos.y + movementOffset.y) * animZoom + centerY +
+                                (nodeRadius * activeScale * animZoom) + textPadding
 
-                val pillBgColor = if (theme.textColor.luminance() > 0.5f)
-                    theme.activeLabelBackgroundDark else theme.activeLabelBackgroundLight
-
-                drawRoundRect(
-                    color = pillBgColor.copy(alpha = textCfg.activePillBackgroundAlpha * cursorTextAlpha),
-                    topLeft = Offset(textTopLeft.x - bgPadX, textTopLeft.y - bgPadY),
-                    size = Size(
-                        width  = activeNodeTextLayout.size.width  + bgPadX * 2f,
-                        height = activeNodeTextLayout.size.height + bgPadY * 2f
-                    ),
-                    cornerRadius = CornerRadius(textCfg.activePillCornerRadius, textCfg.activePillCornerRadius)
-                )
-
-                drawText(
-                    textLayoutResult = activeNodeTextLayout,
-                    topLeft = textTopLeft,
-                    color = theme.textColor,
-                    alpha = cursorTextAlpha
-                )
+                        layout(placeable.width, placeable.height) {
+                            placeable.place(
+                                x = (screenX - placeable.width / 2f).toInt(),
+                                y = screenY.toInt()
+                            )
+                        }
+                    }
+                ) {
+                    customPopup(activeNode)
+                }
             }
         }
     }
