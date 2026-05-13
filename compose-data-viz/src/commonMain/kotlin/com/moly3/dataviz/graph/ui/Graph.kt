@@ -16,16 +16,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.core.graph.model.GraphNode
-import com.moly3.dataviz.core.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.graph.func.InitialLayout
 import com.moly3.dataviz.graph.func.isNodeTapped
 import com.moly3.gesture.PointerRequisite
@@ -41,15 +39,18 @@ import kotlin.collections.set
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
 
-private const val MIN_ZOOM = 0.05f
-private const val MAX_ZOOM = 8f
-private const val ZOOM_STEP_IN = 1.1f
-private const val ZOOM_STEP_OUT = 1f / 1.1f
-
+/**
+ * Interactive force-directed graph.
+ *
+ * All visual + behavioural tuning lives on [settings] — see [GraphSettings] for the full
+ * surface and sensible defaults. Pass `GraphSettings.Default` to get started.
+ */
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
+    settings: GraphSettings = GraphSettings.Default,
     engine: IGraphEngine<Id, Data> = remember { UltraFastEngine() },
+
     consume: Boolean,
     userPosition: Offset,
     zoom: Float,
@@ -59,7 +60,6 @@ fun <Id, Data> Graph(
     velocities: Map<Id, Offset>,
     connections: Map<Id, List<Id>>,
 
-    viewSettings: GraphViewSettings,
     onCentralGlobalPosition: (Offset) -> Unit,
     onZoomChange: (Float) -> Unit,
     watchNodeId: Id? = null,
@@ -67,11 +67,6 @@ fun <Id, Data> Graph(
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
     onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
     onVelocitiesUpdate: (Map<Id, Offset>) -> Unit = {},
-    primaryColor: Color,
-    fontColor: Color,
-    circleColor: Color,
-    circleLineColor: Color,
-    textStyle: TextStyle = TextStyle.Default,
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset.Zero) }
@@ -82,12 +77,11 @@ fun <Id, Data> Graph(
     val liveVelocities = remember { HashMap<Id, Offset>() }
 
     val stateMutex = remember { Mutex() }
-
     var lastLayoutKey by remember { mutableStateOf<Int?>(null) }
 
     val latestUserPosition by rememberUpdatedState(userPosition)
     val latestZoom by rememberUpdatedState(zoom)
-    val latestViewSettings by rememberUpdatedState(viewSettings)
+    val latestSettings by rememberUpdatedState(settings)
     val latestNodes by rememberUpdatedState(stateNodes)
     val latestConnections by rememberUpdatedState(connections)
     val latestDragged by rememberUpdatedState(draggedNodeState)
@@ -114,7 +108,7 @@ fun <Id, Data> Graph(
             InitialLayout.compute(
                 nodes = stateNodes,
                 connections = connections,
-                settings = viewSettings,
+                settings = settings.view,
                 existingCoordinates = coordinates
             )
         }
@@ -149,16 +143,15 @@ fun <Id, Data> Graph(
         }
     }
 
-    LaunchedEffect(stateNodes, connections, viewSettings) {
+    LaunchedEffect(stateNodes, connections, settings.view) {
         engine.reheat()
     }
 
     // === PHYSICS LOOP ===
-    LaunchedEffect(engine, latestViewSettings.targetFrameMs) {
+    LaunchedEffect(engine, latestSettings.view.targetFrameMs) {
         launch(io) {
             val coordsScratch = HashMap<Id, Offset>()
             val velsScratch = HashMap<Id, Offset>()
-
             var lastStructureSig = -1
 
             while (isActive) {
@@ -168,14 +161,14 @@ fun <Id, Data> Graph(
                     continue
                 }
 
-                val currentStructureSig = nodes.size * 31 + latestConnections.values.sumOf { it.size }
+                val currentStructureSig =
+                    nodes.size * 31 + latestConnections.values.sumOf { it.size }
                 val structureChanged = currentStructureSig != lastStructureSig
 
                 if (!structureChanged && engine.isAsleep && latestDragged == null) {
                     delay(200L)
                     continue
                 }
-
                 lastStructureSig = currentStructureSig
 
                 withFrameNanos { }
@@ -192,7 +185,7 @@ fun <Id, Data> Graph(
                 engine.step(
                     nodes,
                     latestConnections,
-                    latestViewSettings,
+                    latestSettings.view,
                     coordsScratch, velsScratch, latestDragged
                 )
 
@@ -239,16 +232,27 @@ fun <Id, Data> Graph(
 
     LaunchedEffect(draggedNodeState) {
         if (draggedNodeState == null) {
-            val coordsCopy: HashMap<Id, Offset>
-            val velsCopy: HashMap<Id, Offset>
-
             stateMutex.withLock {
                 if (liveCoordinates.isEmpty()) return@withLock
-                coordsCopy = HashMap(liveCoordinates)
-                velsCopy = HashMap(liveVelocities)
-                onCoordinatesUpdate(coordsCopy)
-                onVelocitiesUpdate(velsCopy)
+                onCoordinatesUpdate(HashMap(liveCoordinates))
+                onVelocitiesUpdate(HashMap(liveVelocities))
             }
+        }
+    }
+
+    // Hit-test helper. Re-evaluated against latest state on every call.
+    fun hitTest(tapOffset: Offset): GraphNode<Id, Data>? {
+        val cameraOffset = -latestUserPosition
+        val circleSize = latestSettings.view.circleSize
+        val multiplier = latestSettings.view.circleSizeMultiplier
+        return latestNodes.lastOrNull { node ->
+            val connCount = latestConnections[node.id]?.size ?: 1
+            isNodeTapped(
+                nodeOffset = liveCoordinates[node.id] ?: Offset.Zero,
+                cameraOffset = cameraOffset,
+                tapOffset = tapOffset,
+                nodeRadius = GraphNode.getCircleSize(circleSize, connCount, multiplier)
+            )
         }
     }
 
@@ -265,31 +269,17 @@ fun <Id, Data> Graph(
                     requisite = PointerRequisite.GreaterThan,
                     onScrollChange = {
                         if (it.y != 0f) {
-                            val factor = if (it.y > 0) ZOOM_STEP_IN else ZOOM_STEP_OUT
-                            val newZoom = (latestZoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                            val zoomCfg = latestSettings.zoom
+                            val factor = if (it.y > 0) zoomCfg.stepIn else zoomCfg.stepOut
+                            val newZoom =
+                                (latestZoom * factor).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
                             if (newZoom != latestZoom) onZoomChange(newZoom)
                         }
                     },
                     onClick = { position ->
                         scope.launch(io) {
                             val tapOffset = (position - centerSizeState) / latestZoom
-                            val cameraOffset = -latestUserPosition
-                            val circleSize = latestViewSettings.circleSize
-
-                            val foundNode = latestNodes.lastOrNull { node ->
-                                val connCount = latestConnections[node.id]?.size ?: 1
-                                isNodeTapped(
-                                    nodeOffset = liveCoordinates[node.id] ?: Offset.Zero,
-                                    cameraOffset = cameraOffset,
-                                    tapOffset = tapOffset,
-                                    nodeRadius = GraphNode.getCircleSize(
-                                        circleSize,
-                                        connCount,
-                                        latestViewSettings.circleSizeMultiplier
-                                    )
-                                )
-                            }
-                            if (foundNode != null) onNodeClick(foundNode)
+                            hitTest(tapOffset)?.let(onNodeClick)
                         }
                     },
                     onCursorMove = { position ->
@@ -299,44 +289,13 @@ fun <Id, Data> Graph(
                                 draggedNodeState =
                                     draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
                             } else {
-                                val cameraOffset = -latestUserPosition
-                                val circleSize = latestViewSettings.circleSize
-
-                                cursorNodeState = latestNodes.lastOrNull { node ->
-                                    val connCount = latestConnections[node.id]?.size ?: 1
-                                    isNodeTapped(
-                                        nodeOffset = liveCoordinates[node.id] ?: Offset.Zero,
-                                        cameraOffset = cameraOffset,
-                                        tapOffset = tapOffset,
-                                        nodeRadius = GraphNode.getCircleSize(
-                                            circleSize,
-                                            connCount,
-                                            latestViewSettings.circleSizeMultiplier
-                                        )
-                                    )
-                                }
+                                cursorNodeState = hitTest(tapOffset)
                             }
                         }
                     },
                     onGestureStart = { pointer ->
                         val tapOffset = (pointer.position - centerSizeState) / latestZoom
-                        val cameraOffset = -latestUserPosition
-                        val circleSize = latestViewSettings.circleSize
-
-                        val foundNode = latestNodes.lastOrNull { node ->
-                            val connCount = latestConnections[node.id]?.size ?: 1
-                            isNodeTapped(
-                                nodeOffset = liveCoordinates[node.id] ?: Offset.Zero,
-                                cameraOffset = cameraOffset,
-                                tapOffset = tapOffset,
-                                nodeRadius = GraphNode.getCircleSize(
-                                    circleSize,
-                                    connCount,
-                                    latestViewSettings.circleSizeMultiplier
-                                )
-                            )
-                        }
-                        if (foundNode != null) draggedNodeState = DragNodeData(foundNode.id)
+                        hitTest(tapOffset)?.let { draggedNodeState = DragNodeData(it.id) }
                     },
                     onGesture = { _, gesturePan, gestureZoom, _, _, pointerList ->
                         if (draggedNodeState == null || pointerList.size != 1) {
@@ -345,12 +304,11 @@ fun <Id, Data> Graph(
                                     onCentralGlobalPosition(gesturePan / latestZoom)
                                 }
                             }
-                            if (pointerList.size == 2) {
-                                if (abs(1f - gestureZoom) > 0.005f) {
-                                    val newScale =
-                                        (latestZoom * gestureZoom).coerceIn(MIN_ZOOM, MAX_ZOOM)
-                                    if (newScale != latestZoom) onZoomChange(newScale)
-                                }
+                            if (pointerList.size == 2 && abs(1f - gestureZoom) > 0.005f) {
+                                val zoomCfg = latestSettings.zoom
+                                val newScale =
+                                    (latestZoom * gestureZoom).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
+                                if (newScale != latestZoom) onZoomChange(newScale)
                             }
                         }
                     },
@@ -360,23 +318,14 @@ fun <Id, Data> Graph(
             }
             .clip(RoundedCornerShape(0.dp)),
 
+        settings = settings,
         nodes = latestNodes,
         coordinates = liveCoordinates,
         connections = latestConnections,
-
         draggedNodeId = draggedNodeState?.id,
         cursorNodeId = cursorNodeState?.id,
-
         movementOffset = userPosition,
         zoom = zoom,
-        circleRadius = viewSettings.circleSize,
         watchNodeId = watchNodeId,
-        primaryColor = primaryColor,
-        circleColor = circleColor,
-        circleLineColor = circleLineColor,
-        fontColor = fontColor,
-        textStyle = textStyle,
-        circleSizeMultiplier = viewSettings.circleSizeMultiplier,
-        maxTextsAtCenterVisible = viewSettings.maxTextsAtCenterVisible
     )
 }

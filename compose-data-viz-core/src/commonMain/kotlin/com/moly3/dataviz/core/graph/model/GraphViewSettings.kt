@@ -3,6 +3,11 @@ package com.moly3.dataviz.core.graph.model
 import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 
+/**
+ * Pure physics / simulation settings. Visual concerns live in [GraphSettings] and its sub-groups.
+ *
+ * Kept @Serializable because physics presets may be persisted to disk.
+ */
 @Serializable
 @Stable
 data class GraphViewSettings(

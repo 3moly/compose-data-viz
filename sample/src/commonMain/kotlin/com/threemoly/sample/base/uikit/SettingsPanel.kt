@@ -27,7 +27,7 @@ fun BoxScope.SettingsPanel(
     onSetSettings: (Boolean) -> Unit,
     content: @Composable () -> Unit
 ) {
-    val settingsWidth by animateDpAsState(if (isShowSettings) 130.dp else 48.dp)
+    val settingsWidth by animateDpAsState(if (isShowSettings) 300.dp else 48.dp)
     Column(
         modifier = Modifier
             .padding(16.dp)
