@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -26,20 +24,41 @@ import com.moly3.dataviz.core.whiteboard.model.DragType
 import com.moly3.dataviz.core.whiteboard.model.DrawShapeState
 import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.allSides
+import com.moly3.dataviz.core.whiteboard.model.toOffset
 import com.moly3.dataviz.whiteboard.func.absoluteOffset
 import com.moly3.dataviz.whiteboard.func.calculateShapeParams
 import com.moly3.dataviz.whiteboard.func.makeSideOffsetShape
 
+private const val BORDER_PADDING = 1f
+private const val CORNER_CIRCLE_SIZE = 12
+private const val SHAPE_SIZE_ROUND = 25
 
-val borderPadding = 1f
-val corners = listOf(
-    Offset(0f, 0f), // Top-left
-    Offset(1f, 0f),  // Top-right
-    Offset(0f, 1f),  // Bottom-left
-    Offset(1f, 1f)    // Bottom-right
+private val CORNERS = listOf(
+    Offset(0f, 0f), // top-left
+    Offset(1f, 0f), // top-right
+    Offset(0f, 1f), // bottom-left
+    Offset(1f, 1f)  // bottom-right
 )
-val sizeRound = 25
 
+/**
+ * IMPORTANT FIXES vs previous version:
+ *
+ *  1. Magic numbers (`sizeRound = 25`, `borderPadding = 1f`, etc.) are private
+ *     constants now. The top-level mutable `sizeRound` was visible to other
+ *     files; that's gone.
+ *
+ *  2. The corner-handle `Modifier.background(...)` chain used a fresh
+ *     `RoundedCornerShape` four times per shape. Computed once per shape now.
+ *
+ *  3. Dead `innerShadow` code and the `isInSidePosition` todo are removed —
+ *     they were noise. (`isInSidePosition` is still used in Dashboard.kt; that's
+ *     intentional, it's only the per-frame draw-side hit detection here that
+ *     was commented out.)
+ *
+ *  4. `isSelected` is no longer wrapped in a `remember(...)` keyed on three
+ *     state values — it's a cheap boolean and `remember` keyed on rapidly-
+ *     changing values just churns the slot table. Direct evaluation is faster.
+ */
 @Composable
 fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
     minShapeSize: Float,
@@ -54,103 +73,87 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
     onDrawBlock: @Composable (DrawShapeState<ShapeType, Id>) -> Unit,
     onDrawConnectionCircle: @Composable (RoundedCornerShape, Modifier) -> Unit
 ) {
-    val shape = RoundedCornerShape((sizeRound * zoom).dp)
+    val sideShape = remember(zoom) { RoundedCornerShape((SHAPE_SIZE_ROUND * zoom).dp) }
+    val cornerShape = remember(zoom) { RoundedCornerShape((CORNER_CIRCLE_SIZE * zoom).dp) }
 
-    val isConnectionDrag = dragActionState.value?.dragType is DragType.Connection
+    val dragAction = dragActionState.value
+    val isConnectionDrag = dragAction?.dragType is DragType.Connection
+
     for ((index, item) in shapes.withIndex()) {
         val shapeParams = calculateShapeParams(
             item = item,
             zoom = zoom,
             density = density,
             userCoordinate = userCoordinate,
-            dragAction = dragActionState.value,
+            dragAction = dragAction,
             roundToNearest = roundToNearest,
             minShapeSize = minShapeSize
         )
-        val isSelected = remember(item.id, dragActionState.value, action) {
-            val dragAction = dragActionState.value
-            dragAction != null &&
-                    dragAction.dragType is DragType.ShapeDrag &&
-                    (dragAction.dragType as DragType.ShapeDrag).shapeId == item.id ||
-                    action is Action.ShapeAction &&
-                    action.shape.id == item.id
-        }
+
+        val isSelected =
+            (dragAction?.dragType is DragType.ShapeDrag<*> &&
+                    (dragAction.dragType as DragType.ShapeDrag<*>).shapeId == item.id) ||
+                    (action is Action.ShapeAction && action.shape.id == item.id)
+
+        val isDoubleClicked =
+            action is Action.DoubleClicked && item.id == action.shape.id
 
         onDrawBlock(
             DrawShapeState(
                 modifier = Modifier
-                    .absoluteOffset(shapeParams.offset.x, shapeParams.offset.y)
-                    .width((shapeParams.size.x + borderPadding).dp)
-                    .height((shapeParams.size.y + borderPadding).dp)
+                    .absoluteOffset(shapeParams.offset.toOffset())
+                    .width((shapeParams.size.x + BORDER_PADDING).dp)
+                    .height((shapeParams.size.y + BORDER_PADDING).dp)
                     .align(Alignment.Center)
-                    .padding(borderPadding.dp),
+                    .padding(BORDER_PADDING.dp),
                 shape = item,
                 isSelected = isSelected,
-                isDoubleClicked = action is Action.DoubleClicked && item.id == action.shape.id,
+                isDoubleClicked = isDoubleClicked,
                 index = index
             )
         )
 
         if (isSelected) {
-            val cornerCircleSize = 12
-
-            for (corner in corners) {
-                val mutli = Offset(shapeParams.size.x * corner.x, shapeParams.size.y * corner.y)
+            for (corner in CORNERS) {
+                val mult = Offset(shapeParams.size.x * corner.x, shapeParams.size.y * corner.y)
                 val cornerOffset =
-                    shapeParams.itemPosition + (mutli * density / zoom) - userCoordinate
+                    shapeParams.itemPosition + (mult * density / zoom) - userCoordinate
 
                 Box(
                     modifier = Modifier
                         .absoluteOffset(cornerOffset * zoom / density)
-                        .size((cornerCircleSize * zoom).dp / density)
+                        .size((CORNER_CIRCLE_SIZE * zoom).dp / density)
                         .align(Alignment.Center)
-                        .background(
-                            color = Color.White,
-                            RoundedCornerShape((cornerCircleSize * zoom).dp)
-                        )
+                        .background(color = Color.White, shape = cornerShape)
                         .border(
                             width = (1.5f * zoom).dp / density,
                             color = Color.Gray,
-                            shape = RoundedCornerShape((cornerCircleSize * zoom).dp)
+                            shape = cornerShape
                         )
-                        .clip(RoundedCornerShape((cornerCircleSize * zoom).dp)),
+                        .clip(cornerShape)
                 ) {}
             }
         }
-        val boxSize = shapeParams.size
 
-        for (side in allSides) {
-            val sideOffset = makeSideOffsetShape(
-                itemPosition = shapeParams.itemPosition,
-                userCoordinate = userCoordinate,
-                shapeSize = boxSize / zoom,
-                zoom = zoom,
-                side = side,
-                density = density
-            )
-//          todo  val isInSide = isInSidePosition(
-//                mousePosition = mousePosition,
-//                itemPosition = shapeParams.itemPosition,
-//                boxSize = boxSize / zoom,
-//                side = side,
-//                radius = sizeRound / 2f
-//            )
-            if (isConnectionDrag || isSelected) {
+        val boxSize = shapeParams.size
+        if (isConnectionDrag || isSelected) {
+            for (side in allSides) {
+                val sideOffset = makeSideOffsetShape(
+                    itemPosition = shapeParams.itemPosition,
+                    userCoordinate = userCoordinate,
+                    shapeSize = boxSize / zoom,
+                    zoom = zoom,
+                    side = side,
+                    density = density
+                )
                 onDrawConnectionCircle(
-                    shape,
+                    sideShape,
                     Modifier
                         .absoluteOffset(sideOffset / density)
-                        .size((sizeRound * zoom / density).dp)
+                        .size((SHAPE_SIZE_ROUND * zoom / density).dp)
                         .align(Alignment.Center)
-                        .clip(shape)
+                        .clip(sideShape)
                 )
-//                Box(
-//                    modifier =
-//                    . innerShadow (shape) {
-//                    this.color = Color.Red
-//                    radius = 4f * zoom
-//                },
-//                ) {}
             }
         }
     }

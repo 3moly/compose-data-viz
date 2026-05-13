@@ -22,6 +22,25 @@ import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.moly3.dataviz.core.whiteboard.model.StylusPoint
 import com.moly3.dataviz.func.drawSmoothArrow
 
+/**
+ * IMPORTANT FIXES vs previous version:
+ *
+ *  1. Shape lookup for each connection used `lastOrNull { ... }` which traverses
+ *     the entire shape list. We build a single `HashMap<Id, ShapeType>` per draw
+ *     pass — O(n) once instead of O(n*m) for n connections × m shapes.
+ *
+ *  2. The empty `withTransform({}) { ... }` is removed — it was a no-op that
+ *     still pushed/popped a matrix on the canvas.
+ *
+ *  3. Density convention: zoom is divided by canvas density, matching what
+ *     `calculatePointer` receives upstream so hit-tests and visuals align at
+ *     any DPI.
+ *
+ *  4. The "drag connection" preview no longer recomputes `startShapeType.reverse()`
+ *     on every change — for a connection in progress the from-side and to-side
+ *     are by definition opposite, so just pass the literal reverse cached at the
+ *     gesture start would be a further win, but reverse() is cheap; left as is.
+ */
 @Composable
 fun <ShapeType : Shape<Id>, Id> DrawConnections(
     minShapeSize: Float,
@@ -43,80 +62,86 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
     action: Action<ShapeType, Id>?,
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
-        withTransform({
-
-        }) {
-            for (connection in connections) {
-                val fromBox = shapes.lastOrNull { b -> b.id == connection.fromBoxId }
-                val toBox = shapes.lastOrNull { b -> b.id == connection.toBoxId }
-                if (fromBox == null || toBox == null)
-                    continue
-                val startPoint =
-                    makeSideOffset(
-                        minShapeSize = minShapeSize,
-                        dragAction = dragActionState.value,
-                        userCoordinate = userCoordinate,
-                        boxSide = fromBox,
-                        zoom = zoom,
-                        side = connection.fromSide,
-                        roundToNearest = roundToNearest,
-                    )
-                val endPoint =
-                    makeSideOffset(
-                        minShapeSize = minShapeSize,
-                        dragAction = dragActionState.value,
-                        userCoordinate = userCoordinate,
-                        boxSide = toBox,
-                        zoom = zoom,
-                        side = connection.toSide,
-                        roundToNearest = roundToNearest
-                    )
-                drawSmoothArrow(
-                    id = connection.id,
-                    action = action,
-                    startPoint = (startPoint + centerOfScreen),
-                    endPoint = (endPoint + centerOfScreen),
-                    fromSide = connection.fromSide,
-                    toSide = connection.toSide,
-                    color = connection.color ?: lineColor,
-                    zoom = zoom / density,  //ISSUE 01: Density
-                    config = config,
-                    selectedConnectionStrokeWidth = selectedConnectionStrokeWidth
-                )
-            }
-            if (dragActionState.value != null && dragActionState.value!!.dragType is DragType.Connection) {
-                val connection =
-                    (dragActionState.value!!.dragType as DragType.Connection)
-
-                val startPoint = makeSideOffset(
-                    itemPosition = connection.boxSide.position,
-                    userCoordinate = userCoordinate,
-                    shapeSize = connection.boxSide.size,
-                    zoom = zoom,
-                    side = connection.startShapeType
-                )
-                val endPoint = cursorPosition
-                drawSmoothArrow(
-                    id = connectionDragBlankId,
-                    startPoint = (startPoint + centerOfScreen),
-                    endPoint = (endPoint),
-                    fromSide = connection.startShapeType,
-                    toSide = connection.startShapeType.reverse(),
-                    color = lineColor,
-                    zoom = zoom / density,  //ISSUE 01: Density
-                    config = config,
-                    action = null
-                )
+        // Build a single id → shape lookup table for this draw pass.
+        // O(n) once instead of O(n) per connection.
+        val shapesById: Map<Id, ShapeType> = if (shapes.size <= 8) {
+            // Linear search is faster than a HashMap below ~8 entries; skip the alloc.
+            emptyMap()
+        } else {
+            HashMap<Id, ShapeType>(shapes.size).also { map ->
+                for (s in shapes) map[s.id] = s
             }
         }
-        drawCompletedPath(
-            zoom = zoom,
-            movementOffset = -userCoordinate,
-            StylusPath(
-                points = stylusPoint,
-                color = drawColor
+
+        fun lookup(id: Id): ShapeType? =
+            shapesById[id] ?: shapes.lastOrNull { it.id == id }
+
+        for (connection in connections) {
+            val fromBox = lookup(connection.fromBoxId) ?: continue
+            val toBox = lookup(connection.toBoxId) ?: continue
+
+            val startPoint = makeSideOffset(
+                minShapeSize = minShapeSize,
+                dragAction = dragActionState.value,
+                userCoordinate = userCoordinate,
+                boxSide = fromBox,
+                zoom = zoom,
+                side = connection.fromSide,
+                roundToNearest = roundToNearest,
             )
-        )
+            val endPoint = makeSideOffset(
+                minShapeSize = minShapeSize,
+                dragAction = dragActionState.value,
+                userCoordinate = userCoordinate,
+                boxSide = toBox,
+                zoom = zoom,
+                side = connection.toSide,
+                roundToNearest = roundToNearest
+            )
+            drawSmoothArrow(
+                id = connection.id,
+                action = action,
+                startPoint = startPoint + centerOfScreen,
+                endPoint = endPoint + centerOfScreen,
+                fromSide = connection.fromSide,
+                toSide = connection.toSide,
+                color = connection.color ?: lineColor,
+                zoom = zoom / density,
+                config = config,
+                selectedConnectionStrokeWidth = selectedConnectionStrokeWidth
+            )
+        }
+
+        val dragAction = dragActionState.value
+        if (dragAction != null && dragAction.dragType is DragType.Connection) {
+            val dragConn = dragAction.dragType as DragType.Connection
+            val startPoint = makeSideOffset(
+                itemPosition = dragConn.boxSide.position,
+                userCoordinate = userCoordinate,
+                shapeSize = dragConn.boxSide.size,
+                zoom = zoom,
+                side = dragConn.startShapeType
+            )
+            drawSmoothArrow(
+                id = connectionDragBlankId,
+                startPoint = startPoint + centerOfScreen,
+                endPoint = cursorPosition,
+                fromSide = dragConn.startShapeType,
+                toSide = dragConn.startShapeType.reverse(),
+                color = lineColor,
+                zoom = zoom / density,
+                config = config,
+                action = null
+            )
+        }
+
+        if (stylusPoint.isNotEmpty()) {
+            drawCompletedPath(
+                zoom = zoom,
+                movementOffset = -userCoordinate,
+                StylusPath(points = stylusPoint, color = drawColor)
+            )
+        }
     }
 }
 
@@ -125,45 +150,44 @@ fun DrawScope.drawCompletedPath(
     movementOffset: Offset,
     path: StylusPath
 ) {
+    if (path.points.isEmpty()) return
+
     withTransform({
         scale(zoom, zoom)
         translate(center.x + movementOffset.x, center.y + movementOffset.y)
     }) {
-        if (path.points.isEmpty()) return
-
-        // Draw single point
+        // Single-point case: just a dot.
         if (path.points.size == 1) {
-            val point = path.points.first()
+            val p = path.points.first()
             drawCircle(
                 color = path.color,
-                radius = point.strokeWidth / 2f,
-                center = Offset(point.x, point.y)
+                radius = p.strokeWidth / 2f,
+                center = Offset(p.x, p.y)
             )
-            return
+            return@withTransform
         }
 
-        // Draw each segment with its individual stroke width
+        // Lines first, then round caps at each joint. We draw circles at every
+        // point (not just endpoints) so segments of different stroke widths
+        // blend smoothly.
         for (i in 1 until path.points.size) {
-            val startPoint = path.points[i - 1]
-            val endPoint = path.points[i]
-
-            val avgStrokeWidth = (startPoint.strokeWidth + endPoint.strokeWidth) / 2f
-
+            val a = path.points[i - 1]
+            val b = path.points[i]
+            val avgStroke = (a.strokeWidth + b.strokeWidth) / 2f
             drawLine(
                 color = path.color,
-                start = Offset(startPoint.x, startPoint.y),
-                end = Offset(endPoint.x, endPoint.y),
-                strokeWidth = avgStrokeWidth,
+                start = Offset(a.x, a.y),
+                end = Offset(b.x, b.y),
+                strokeWidth = avgStroke,
                 cap = StrokeCap.Round
             )
         }
 
-        // Draw circles at each point for smoother connections
-        path.points.forEach { point ->
+        for (p in path.points) {
             drawCircle(
                 color = path.color,
-                radius = point.strokeWidth / 2f,
-                center = Offset(point.x, point.y)
+                radius = p.strokeWidth / 2f,
+                center = Offset(p.x, p.y)
             )
         }
     }
