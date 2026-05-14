@@ -20,7 +20,29 @@ fun generateRandomGraphState(
             data = ObsidianGraphData.File("https://picsum.photos/id/${index}/300/300"),
             colorValue = randomColor().value
         )
-    }
+    }.toMutableList()
+
+    nodes.add(
+        ObsidianGraphNode(
+            id = "Folder",
+            name = "Folder",
+            data = ObsidianGraphData.Tag(1L)
+        )
+    )
+    nodes.add(
+        ObsidianGraphNode(
+            id = "Cat",
+            name = "Cat",
+            data = ObsidianGraphData.Tag(1L)
+        )
+    )
+    nodes.add(
+        ObsidianGraphNode(
+            id = "Share",
+            name = "Share",
+            data = ObsidianGraphData.Tag(1L)
+        )
+    )
 
     val nodeIds = nodes.map { it.id }
 

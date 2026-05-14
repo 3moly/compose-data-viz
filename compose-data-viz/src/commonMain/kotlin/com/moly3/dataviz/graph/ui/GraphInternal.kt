@@ -18,10 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -32,7 +29,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
@@ -42,7 +38,9 @@ import com.moly3.dataviz.func.half
 import com.moly3.dataviz.graph.func.getNodeConnections
 import com.moly3.shaders.buildEffect
 import com.moly3.shaders.drawVertices2
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.Clock
@@ -56,6 +54,37 @@ data class AtlasState(
     val version: Long = Clock.System.now().toEpochMilliseconds()
 )
 
+@Immutable
+data class AtlasLayers(
+    val layers: ImmutableList<AtlasState>
+) {
+    /**
+     * Resolves an icon key across all layers in order.
+     * Returns (layerIndex, tileIndex) for the first layer that contains the key,
+     * or null if not found in any layer.
+     */
+    fun resolve(key: String): AtlasLookup? {
+        for (i in layers.indices) {
+            val idx = layers[i].indexMap[key]
+            if (idx != null) return AtlasLookup(layerIndex = i, tileIndex = idx)
+        }
+        return null
+    }
+
+    val isEmpty: Boolean get() = layers.isEmpty()
+    val combinedVersion: Long get() = layers.fold(0L) { acc, a -> acc * 31 + a.version }
+
+    companion object {
+        val EMPTY = AtlasLayers(persistentListOf())
+    }
+}
+
+@Immutable
+data class AtlasLookup(
+    val layerIndex: Int,
+    val tileIndex: Int
+)
+
 fun approach(current: Float, target: Float, rate: Float, dtSec: Float): Float {
     if (current == target) return target
     val step = rate * dtSec
@@ -67,8 +96,8 @@ fun approach(current: Float, target: Float, rate: Float, dtSec: Float): Float {
 internal fun <Id, Data> GraphInternal(
     modifier: Modifier = Modifier,
     settings: GraphSettings,
-    atlasState: AtlasState? = null,
-    getIconIndex: (Id, Data) -> Int? = { _, _ -> null },
+    atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
+    getIconKey: (Id, Data) -> String? = { _, _ -> null },
     nodes: List<GraphNode<Id, Data>>,
     connections: Map<Id, List<Id>>,
     coordinates: Map<Id, Offset>,
@@ -91,31 +120,35 @@ internal fun <Id, Data> GraphInternal(
     val circleRadius = view.circleSize
     val circleSizeMultiplier = view.circleSizeMultiplier
     val maxTextsAtCenterVisible = textCfg.maxLabelsVisible
-    val fallbackBitmap = remember(atlasState) {
-        ImageBitmap(1, 1)
-    }
+
+    val fallbackBitmap = remember { ImageBitmap(1, 1) }
     val shader = remember { GraphShader }
 
-    val runtimeEffect = remember(shader, atlasState?.version) { buildEffect(shader) }
+    val runtimeEffect = remember(shader, atlasLayers.combinedVersion) { buildEffect(shader) }
 
-    val buildShader =remember(runtimeEffect, atlasState?.version, fallbackBitmap) {
+    val buildShader = remember(runtimeEffect, atlasLayers.combinedVersion, fallbackBitmap) {
         runtimeEffect.apply {
             setFloatUniform("uQuality", view.circleQuality)
             setFloatUniform("uBorderWidth", view.circleBorderWidth)
 
-            if (atlasState != null) {
-                setFloatUniform("uUseAtlas", 1f)
-                setImageUniform("uAtlas", atlasState.bitmap)
-                setFloatUniform("uTileSize", atlasState.tileSizePx.toFloat())
-                setFloatUniform("uColumns", atlasState.columns.toFloat())
+            val count = atlasLayers.layers.size
+            setFloatUniform("uUseAtlas", if (count > 0) 1f else 0f)
+            setFloatUniform("uLayerCount", count.toFloat())
 
-                // Pass texture dimensions if your shader doesn't do normalization internally
-                val atlasSize = atlasState.columns * atlasState.tileSizePx
-                setFloatUniform("uAtlasSize", atlasSize.toFloat())
-            } else {
-                setFloatUniform("uUseAtlas", 0f)
-                setImageUniform("uAtlas", fallbackBitmap)
-            }
+            val layer0 = atlasLayers.layers.getOrNull(0)
+            val layer1 = atlasLayers.layers.getOrNull(1)
+            val layer2 = atlasLayers.layers.getOrNull(2)
+
+            setImageUniform("uAtlas0", layer0?.bitmap ?: fallbackBitmap)
+            setImageUniform("uAtlas1", layer1?.bitmap ?: fallbackBitmap)
+            setImageUniform("uAtlas2", layer2?.bitmap ?: fallbackBitmap)
+
+            setFloatUniform("uTileSize0", layer0?.tileSizePx?.toFloat() ?: 1f)
+            setFloatUniform("uTileSize1", layer1?.tileSizePx?.toFloat() ?: 1f)
+            setFloatUniform("uTileSize2", layer2?.tileSizePx?.toFloat() ?: 1f)
+            setFloatUniform("uColumns0", layer0?.columns?.toFloat() ?: 1f)
+            setFloatUniform("uColumns1", layer1?.columns?.toFloat() ?: 1f)
+            setFloatUniform("uColumns2", layer2?.columns?.toFloat() ?: 1f)
         }.buildShader()
     }
 
@@ -254,7 +287,7 @@ internal fun <Id, Data> GraphInternal(
             }
         }
     }
-    LaunchedEffect(atlasState?.version) {
+    LaunchedEffect(atlasLayers.combinedVersion) {
         animTick++
     }
     val drawText = animZoom > textCfg.visibilityZoomThreshold
@@ -266,7 +299,7 @@ internal fun <Id, Data> GraphInternal(
         Canvas(modifier = Modifier.matchParentSize()) {
             @Suppress("UNUSED_EXPRESSION") animTick
             @Suppress("UNUSED_EXPRESSION") coordinatesVersion // Forces Canvas redraw when HashMap triggers update
-            @Suppress("UNUSED_EXPRESSION") atlasState?.version  // ADD THIS
+            @Suppress("UNUSED_EXPRESSION") atlasLayers.combinedVersion
 
             val canvasW = size.width
             val canvasH = size.height
@@ -309,8 +342,11 @@ internal fun <Id, Data> GraphInternal(
 
                 val r = baseRadius * lerp(1f, selectionCfg.scaleOnHover, activeKoef)
 
-                val iconIndex = getIconIndex(node.id, node.data) ?: -1
-                val hasIcon = iconIndex >= 0 && atlasState != null
+                // Resolve icon across all atlas layers (first hit wins)
+                val iconLookup: AtlasLookup? = if (!atlasLayers.isEmpty) {
+                    getIconKey(node.id, node.data)?.let { key -> atlasLayers.resolve(key) }
+                } else null
+                val hasIcon = iconLookup != null
 
                 val baseColor = node.colorValue?.let { Color(it) } ?: theme.nodeColor
                 val hoverOrDragColor =
@@ -334,9 +370,9 @@ internal fun <Id, Data> GraphInternal(
 
                 // ONLY draw the background circle if there is NO icon
                 if (!hasIcon) {
-                    var vOff = visibleNodeCount * 4
-                    var fOff = vOff * 2
-                    var iOff = visibleNodeCount * 6
+                    val vOff = visibleNodeCount * 4
+                    val fOff = vOff * 2
+                    val iOff = visibleNodeCount * 6
 
                     posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
                     posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
@@ -353,33 +389,28 @@ internal fun <Id, Data> GraphInternal(
                     colArray[vOff + 2] = nodeColorInt
                     colArray[vOff + 3] = nodeColorInt
 
-                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] =
-                        (vOff + 1).toShort()
-                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] =
-                        (vOff + 0).toShort()
-                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] =
-                        (vOff + 3).toShort()
+                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
+                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
+                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
 
                     visibleNodeCount++
                 }
 
-                // Draw the icon as usual (the shader will handle the square rendering without clipping)
-                if (hasIcon && atlasState != null) {
-//                    val atlasCols = atlasState.columns
-                    val tileSize = atlasState.tileSizePx.toFloat()
-
-                    // Look up in the map ATTACHED to the atlas instance
-//                    val iconIndex = atlasState.indexMap["image_${data.fullPath}"] ?: -1
-//                    if (iconIndex >= 0) {
-//                        val texU = (iconIndex % atlasCols) * tileSize
-//                        val texV = (iconIndex / atlasCols) * tileSize
-                    val atlasCols = atlasState.columns.toFloat()
-                    val atlasTileSize = atlasState.tileSizePx.toFloat()
+                // Icon: shader uses layer-encoded tex coords to pick the right atlas
+                if (hasIcon && iconLookup != null) {
+                    val layer = atlasLayers.layers[iconLookup.layerIndex]
+                    val atlasCols = layer.columns
+                    val atlasTileSize = layer.tileSizePx.toFloat()
                     val inset = 0.5f
 
-                    val texU = (iconIndex % atlasCols.toInt()) * atlasTileSize + inset
-                    val texV = (iconIndex / atlasCols.toInt()) * atlasTileSize + inset
+                    val rawU = (iconLookup.tileIndex % atlasCols) * atlasTileSize + inset
+                    val rawV = (iconLookup.tileIndex / atlasCols) * atlasTileSize + inset
                     val texSpan = atlasTileSize - (inset * 2f)
+
+                    // Layer encoding: shift U by +100000 for layer 1 so the shader picks uAtlas1
+                    val layerShift = iconLookup.layerIndex * 100000f
+                    val texU = rawU + layerShift
+                    val texV = rawV
 
                     val vOff = visibleNodeCount * 4
                     val fOff = vOff * 2
@@ -390,22 +421,19 @@ internal fun <Id, Data> GraphInternal(
                     posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
                     posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
 
-                    texArray[fOff + 0] = texU; texArray[fOff + 1] = texV
+                    texArray[fOff + 0] = texU;           texArray[fOff + 1] = texV
                     texArray[fOff + 2] = texU + texSpan; texArray[fOff + 3] = texV
                     texArray[fOff + 4] = texU + texSpan; texArray[fOff + 5] = texV + texSpan
-                    texArray[fOff + 6] = texU; texArray[fOff + 7] = texV + texSpan
+                    texArray[fOff + 6] = texU;           texArray[fOff + 7] = texV + texSpan
 
                     colArray[vOff + 0] = iconFadedColorInt
                     colArray[vOff + 1] = iconFadedColorInt
                     colArray[vOff + 2] = iconFadedColorInt
                     colArray[vOff + 3] = iconFadedColorInt
 
-                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] =
-                        (vOff + 1).toShort()
-                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] =
-                        (vOff + 0).toShort()
-                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] =
-                        (vOff + 3).toShort()
+                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] = (vOff + 1).toShort()
+                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] = (vOff + 0).toShort()
+                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] = (vOff + 3).toShort()
 
                     visibleNodeCount++
                 }
@@ -431,9 +459,9 @@ internal fun <Id, Data> GraphInternal(
                             val tId = conns[j]
                             val tPos = coordinates[tId] ?: continue
 
-                            val minX = min(sPos.x, tPos.x);
+                            val minX = min(sPos.x, tPos.x)
                             val maxX = max(sPos.x, tPos.x)
-                            val minY = min(sPos.y, tPos.y);
+                            val minY = min(sPos.y, tPos.y)
                             val maxY = max(sPos.y, tPos.y)
                             if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
 
@@ -517,7 +545,6 @@ internal fun <Id, Data> GraphInternal(
                     val dys = screenY - centerY
                     val distSq = dxs * dxs + dys * dys
 
-                    // Pull from the memory pool instead of allocating Trisha/ArrayList
                     if (visibleTextCount >= visibleTextsPool.size) {
                         visibleTextsPool.add(VisibleTextData())
                     }
@@ -528,7 +555,6 @@ internal fun <Id, Data> GraphInternal(
                     data.screenY = screenY
                 }
 
-                // Sort only the active subset without extra allocations
                 val activeVisibleTexts = visibleTextsPool.subList(0, visibleTextCount)
                 activeVisibleTexts.sortBy { it.distSq }
 

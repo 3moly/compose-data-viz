@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.rememberAsyncImagePainter
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.func.rememberPainterFromComposable
+import com.moly3.dataviz.graph.ui.AtlasLayers
 import com.moly3.dataviz.graph.ui.AtlasState
 import com.moly3.dataviz.graph.ui.Graph
 import com.moly3.dataviz.graph.ui.createSvgAtlas
@@ -43,6 +44,10 @@ import kotlin.random.Random
 
 private val random = Random(124)
 
+// Stable keys for atlas tile lookup
+private const val KEY_FOLDER = "icon_folder"
+private const val KEY_SHARE = "icon_share"
+private const val KEY_CAT = "icon_cat"
 
 @Composable
 fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Float>) {
@@ -58,54 +63,90 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
         }
     }
 
-    val atlas = remember(catty, scale, share, density) {
-
-        val state = createSvgAtlas(
+    // ---- Layer 0: primary atlas (bundled / always-present icons) ----
+    val primaryAtlas = remember(catty, scale, share, density) {
+        val built = createSvgAtlas(
             painters = listOf(catty ?: scale, share),
             density = density,
             tileSizePx = 64
         )
         AtlasState(
-            bitmap = state.imageBitmap,
-            indexMap = persistentMapOf(),
-            columns = state.columns,
-            tileSizePx = state.tileSizePx,
+            bitmap = built.imageBitmap,
+            // Map each painter's slot in `painters` list to a stable key
+            indexMap = persistentMapOf(
+                KEY_FOLDER to 0, // catty (or scale fallback) lives at index 0
+                KEY_SHARE to 1,  // share lives at index 1
+            ),
+            columns = built.columns,
+            tileSizePx = built.tileSizePx,
+        )
+    }
+
+    // ---- Layer 1: fallback / dynamic atlas (example: a secondary atlas) ----
+    // For now this is just a placeholder example — wire your real 2nd atlas here.
+    // If you don't have one yet, just omit it from the layers list.
+    val fallbackAtlas: AtlasState? = remember(catPainter, density) {
+        val built = createSvgAtlas(
+            painters = listOf(catPainter),
+            density = density,
+            tileSizePx = 64
+        )
+        AtlasState(
+            bitmap = built.imageBitmap,
+            indexMap = persistentMapOf(
+                KEY_CAT to 0,
+            ),
+            columns = built.columns,
+            tileSizePx = built.tileSizePx,
+        )
+    }
+
+    // Compose the layers — order matters: layer 0 is checked first
+    val atlasLayers = remember(primaryAtlas, fallbackAtlas) {
+        AtlasLayers(
+            layers = if (fallbackAtlas != null) {
+                persistentListOf(primaryAtlas, fallbackAtlas)
+            } else {
+                persistentListOf(primaryAtlas)
+            }
         )
     }
 
     val counter = remember { mutableStateOf(0) }
+
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.White.darker(0.5f))
     ) {
         Graph(
-            getNodeGroups = { _, _ ->
-                listOf("")
-            },
+            getNodeGroups = { _, _ -> listOf("") },
             simpleCanvas = false,
             isImmediateReheatOnUpdate = true,
             customPopup = {
-                val catPainter =
-                    rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
+                val cp = rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
                 Image(
-                    painter = catPainter,
+                    painter = cp,
                     contentDescription = null,
                     modifier = Modifier.size(100.dp)
                 )
             },
-            atlas = atlas,
-            settings = s.graphSettings,
-            consume = false,
-            getIconIndex = { nodeId, data ->
+
+            atlasLayers = atlasLayers,
+            getIconKey = { nodeId, data ->
                 counter.value += 1
                 val node = s.graphNodes.find { it.id == nodeId }
                 when {
-                    node?.name?.contains("Folder") == true -> 0 // Index of folder icon in painters list
-                    node?.name?.contains("Node") == true -> null  // Index of image icon
-                    else -> 0 // No icon
+                    node?.name?.contains("Folder") == true -> KEY_FOLDER  // resolves in layer 0
+                    node?.name?.contains("Cat") == true    -> KEY_CAT     // resolves in layer 1 (fallback)
+                    node?.name?.contains("Share") == true  -> KEY_SHARE   // resolves in layer 0
+                    else -> null  // no icon -> background circle is drawn
                 }
             },
+
+            settings = s.graphSettings,
+            consume = false,
+
             connections = s.connections,
             stateNodes = s.graphNodes,
             coordinates = s.coordinates,
@@ -135,15 +176,22 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             },
             io = io,
         )
-        atlas?.let {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+        // Debug preview: show both atlas bitmaps side-by-side
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(
+                modifier = Modifier.padding(16.dp).size(100.dp),
+                bitmap = primaryAtlas.bitmap,
+                contentDescription = "layer 0"
+            )
+            fallbackAtlas?.let {
                 Image(
                     modifier = Modifier.padding(16.dp).size(100.dp),
                     bitmap = it.bitmap,
-                    contentDescription = ""
+                    contentDescription = "layer 1"
                 )
-                Text(text = counter.value.toString())
             }
+            Text(text = counter.value.toString())
         }
 
         // -------------- Settings panel --------------
@@ -160,9 +208,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
                 onChange = { state.value = state.value.copy(graphSettings = it) },
                 zoom = s.zoom,
                 nodeCount = s.graphNodes.size,
-                onNodeCountChange = {
-                    nodeCountState.value = it.toFloat()
-                }
+                onNodeCountChange = { nodeCountState.value = it.toFloat() }
             )
         }
     }

@@ -55,12 +55,13 @@ fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
     settings: GraphSettings = GraphSettings.Default,
     engine: IGraphEngine<Id, Data> = remember { UltraFastEngine() },
-    atlas: AtlasState? = null,
     consume: Boolean,
     userPosition: Offset,
     zoom: Float,
 
-    getIconIndex: (Id, Data) -> Int? = { _, _ -> null },
+    atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
+    getIconKey: (Id, Data) -> String? = { _, _ -> null },
+
     getNodeGroups: (Id, Data) -> List<String> = { _, _ -> emptyList() },
     // NEW: Map a group ID to a color. Use transparency (e.g., alpha = 0.3f)
     getGroupColor: (String) -> Color = { Color(0x4D00BFFF) },
@@ -368,44 +369,45 @@ fun <Id, Data> Graph(
             )
         }
         .clip(RoundedCornerShape(0.dp))
-    if (simpleCanvas) {
-        GraphInternal2(
-            atlas = atlas,
-            customPopup = customPopup,
-            getIconIndex = getIconIndex,
-            getNodeGroups = getNodeGroups,
-            getGroupColor = getGroupColor,
-            modifier = graphModifier,
+//    if (simpleCanvas) {
+//        GraphInternal2(
+//            atlas = atlas,
+//            customPopup = customPopup,
+//            getIconIndex = getIconIndex,
+//            getNodeGroups = getNodeGroups,
+//            getGroupColor = getGroupColor,
+//            modifier = graphModifier,
+//
+//            settings = settings,
+//            nodes = latestNodes,
+//            coordinates = liveCoordinates,
+//            coordinatesVersion = mapVersion,
+//            connections = latestConnections,
+//            draggedNodeId = draggedNodeState?.id,
+//            cursorNodeId = cursorNodeState?.id,
+//            movementOffset = userPosition,
+//            zoom = zoom,
+//            watchNodeId = watchNodeId,
+//        )
+//    } else {
+//
+//    }
+    GraphInternal(
+        atlasLayers = atlasLayers,
+        getIconKey = getIconKey,
 
-            settings = settings,
-            nodes = latestNodes,
-            coordinates = liveCoordinates,
-            coordinatesVersion = mapVersion,
-            connections = latestConnections,
-            draggedNodeId = draggedNodeState?.id,
-            cursorNodeId = cursorNodeState?.id,
-            movementOffset = userPosition,
-            zoom = zoom,
-            watchNodeId = watchNodeId,
-        )
-    } else {
-        GraphInternal(
-            atlasState = atlas,
-            customPopup = customPopup,
-            getIconIndex = getIconIndex,
-            modifier = graphModifier,
-
-            settings = settings,
-            nodes = latestNodes,
-            coordinates = liveCoordinates,
-            coordinatesVersion = mapVersion,
-            connections = latestConnections,
-            draggedNodeId = draggedNodeState?.id,
-            cursorNodeId = cursorNodeState?.id,
-            movementOffset = userPosition,
-            zoom = zoom,
-            watchNodeId = watchNodeId,
-        )
-    }
+        customPopup = customPopup,
+        modifier = graphModifier,
+        settings = settings,
+        nodes = latestNodes,
+        coordinates = liveCoordinates,
+        coordinatesVersion = mapVersion,
+        connections = latestConnections,
+        draggedNodeId = draggedNodeState?.id,
+        cursorNodeId = cursorNodeState?.id,
+        movementOffset = userPosition,
+        zoom = zoom,
+        watchNodeId = watchNodeId,
+    )
 
 }
