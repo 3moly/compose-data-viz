@@ -5,13 +5,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,7 +24,6 @@ import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.graph.func.InitialLayout
-import com.moly3.dataviz.graph.func.isNodeTapped
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +43,12 @@ import kotlin.math.abs
  * All visual + behavioural tuning lives on [settings] — see [GraphSettings] for the full
  * surface and sensible defaults. Pass `GraphSettings.Default` to get started.
  */
+/**
+ * Interactive force-directed graph.
+ *
+ * All visual + behavioural tuning lives on [settings] — see [GraphSettings] for the full
+ * surface and sensible defaults. Pass `GraphSettings.Default` to get started.
+ */
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
@@ -55,7 +59,7 @@ fun <Id, Data> Graph(
     userPosition: Offset,
     zoom: Float,
 
-    getIconIndex: (Id) -> Int? = { null }, // New Lambda
+    getIconIndex: (Id, Data) -> Int? = { _, _ -> null },
 
     isImmediateReheatOnUpdate: Boolean = false,
 
@@ -71,15 +75,18 @@ fun <Id, Data> Graph(
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
     onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
     onVelocitiesUpdate: (Map<Id, Offset>) -> Unit = {},
-    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
+    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null,
+    simpleCanvas: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset.Zero) }
     var draggedNodeState by remember { mutableStateOf<DragNodeData<Id>?>(null) }
     var cursorNodeState by remember { mutableStateOf<GraphNode<Id, Data>?>(null) }
 
-    val liveCoordinates = remember { mutableStateMapOf<Id, Offset>() }
+    val liveCoordinates = remember { HashMap<Id, Offset>() }
     val liveVelocities = remember { HashMap<Id, Offset>() }
+
+    var mapVersion by remember { mutableIntStateOf(0) }
 
     val stateMutex = remember { Mutex() }
     var lastLayoutKey by remember { mutableStateOf<Int?>(null) }
@@ -91,20 +98,22 @@ fun <Id, Data> Graph(
     val latestConnections by rememberUpdatedState(connections)
     val latestDragged by rememberUpdatedState(draggedNodeState)
 
-    // === INITIAL LAYOUT ===
     LaunchedEffect(stateNodes) {
         if (stateNodes.isEmpty()) return@LaunchedEffect
 
         val key = stateNodes.size xor stateNodes.fold(0) { acc, n -> acc xor n.id.hashCode() }
         if (key == lastLayoutKey) {
             stateMutex.withLock {
+                var updated = false
                 for (i in stateNodes.indices) {
                     val id = stateNodes[i].id
                     if (id !in liveCoordinates) {
                         liveCoordinates[id] = coordinates[id] ?: Offset.Zero
                         liveVelocities[id] = velocities[id] ?: Offset.Zero
+                        updated = true
                     }
                 }
+                if (updated) mapVersion++
             }
             return@LaunchedEffect
         }
@@ -119,19 +128,23 @@ fun <Id, Data> Graph(
         }
 
         stateMutex.withLock {
-            Snapshot.withMutableSnapshot {
-                val newIds = stateNodes.map { it.id }.toHashSet()
-                liveCoordinates.keys.retainAll(newIds)
-                liveVelocities.keys.retainAll(newIds)
+            val newIds = stateNodes.map { it.id }.toHashSet()
+            liveCoordinates.keys.retainAll(newIds)
+            liveVelocities.keys.retainAll(newIds)
 
-                for (i in stateNodes.indices) {
-                    val id = stateNodes[i].id
-                    liveCoordinates[id] = seeded[id] ?: Offset.Zero
-                    if (id !in liveVelocities) {
-                        liveVelocities[id] = Offset.Zero
-                    }
+            var updated = false
+            for (i in stateNodes.indices) {
+                val id = stateNodes[i].id
+                val seedOffset = seeded[id] ?: Offset.Zero
+                if (liveCoordinates[id] != seedOffset) {
+                    liveCoordinates[id] = seedOffset
+                    updated = true
+                }
+                if (id !in liveVelocities) {
+                    liveVelocities[id] = Offset.Zero
                 }
             }
+            if (updated) mapVersion++
         }
         lastLayoutKey = key
     }
@@ -154,8 +167,6 @@ fun <Id, Data> Graph(
         }
     }
 
-
-    // === PHYSICS LOOP ===
     LaunchedEffect(engine, latestSettings.view.targetFrameMs) {
         launch(io) {
             val coordsScratch = HashMap<Id, Offset>()
@@ -198,18 +209,20 @@ fun <Id, Data> Graph(
                 )
 
                 stateMutex.withLock {
-                    Snapshot.withMutableSnapshot {
-                        for ((id, off) in coordsScratch) {
-                            val prev = liveCoordinates[id]
-                            if (prev == null ||
-                                abs(prev.x - off.x) > 0.05f ||
-                                abs(prev.y - off.y) > 0.05f
-                            ) {
-                                liveCoordinates[id] = off
-                            }
+                    var updated = false
+                    for ((id, off) in coordsScratch) {
+                        val prev = liveCoordinates[id]
+                        if (prev == null ||
+                            abs(prev.x - off.x) > 0.05f ||
+                            abs(prev.y - off.y) > 0.05f
+                        ) {
+                            liveCoordinates[id] = off
+                            updated = true
                         }
                     }
                     for ((id, vel) in velsScratch) liveVelocities[id] = vel
+
+                    if (updated) mapVersion++
                 }
             }
         }
@@ -248,98 +261,145 @@ fun <Id, Data> Graph(
         }
     }
 
-    // Hit-test helper. Re-evaluated against latest state on every call.
+    // FIX 1: Corrected Hit Test Math
     fun hitTest(tapOffset: Offset): GraphNode<Id, Data>? {
-        val cameraOffset = -latestUserPosition
+        // Removed the negative sign. Rendering ADDS userPosition, so bounds testing must as well.
+        val cameraOffset = latestUserPosition
         val circleSize = latestSettings.view.circleSize
         val multiplier = latestSettings.view.circleSizeMultiplier
+
         return latestNodes.lastOrNull { node ->
+            val pos = liveCoordinates[node.id] ?: return@lastOrNull false
             val connCount = latestConnections[node.id]?.size ?: 1
-            isNodeTapped(
-                nodeOffset = liveCoordinates[node.id] ?: Offset.Zero,
-                cameraOffset = cameraOffset,
-                tapOffset = tapOffset,
-                nodeRadius = GraphNode.getCircleSize(circleSize, connCount, multiplier)
-            )
+            val radius = GraphNode.getCircleSize(circleSize, connCount, multiplier)
+
+            val adjustedX = pos.x + cameraOffset.x
+            val adjustedY = pos.y + cameraOffset.y
+
+            // Fast AABB check
+            if (abs(tapOffset.x - adjustedX) > radius || abs(tapOffset.y - adjustedY) > radius) {
+                return@lastOrNull false
+            }
+
+            // Replaced black-box `isNodeTapped` with explicit geometric circle intersection
+            val dx = tapOffset.x - adjustedX
+            val dy = tapOffset.y - adjustedY
+            (dx * dx + dy * dy) <= (radius * radius)
         }
     }
 
-    GraphInternal(
-        atlas = atlas,
-        customPopup = customPopup,
-        getIconIndex = getIconIndex,
-        modifier = modifier
-            .fillMaxSize()
-            .onGloballyPositioned {
-                centerSizeState = Offset(it.size.width.toFloat(), it.size.height.toFloat()) / 2f
-            }
-            .pointerInput(watchNodeId) {
-                detectPointerTransformGestures(
-                    consume = consume,
-                    numberOfPointers = 0,
-                    requisite = PointerRequisite.GreaterThan,
-                    onScrollChange = {
-                        if (it.y != 0f) {
-                            val zoomCfg = latestSettings.zoom
-                            val factor = if (it.y > 0) zoomCfg.stepIn else zoomCfg.stepOut
-                            val newZoom =
-                                (latestZoom * factor).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
-                            if (newZoom != latestZoom) onZoomChange(newZoom)
-                        }
-                    },
-                    onClick = { position ->
-                        scope.launch(io) {
-                            val tapOffset = (position - centerSizeState) / latestZoom
-                            hitTest(tapOffset)?.let(onNodeClick)
-                        }
-                    },
-                    onCursorMove = { position ->
-                        scope.launch(io) {
-                            val tapOffset = (position - centerSizeState) / latestZoom
-                            if (draggedNodeState != null) {
-                                draggedNodeState =
-                                    draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
-                            } else {
-                                cursorNodeState = hitTest(tapOffset)
-                            }
-                        }
-                    },
-                    onGestureStart = { pointer ->
-                        val tapOffset = (pointer.position - centerSizeState) / latestZoom
-                        hitTest(tapOffset)?.let { draggedNodeState = DragNodeData(it.id) }
-                    },
-                    onGesture = { _, gesturePan, gestureZoom, _, _, pointerList ->
-                        if (draggedNodeState == null || pointerList.size != 1) {
-                            if (watchNodeId == null) {
-                                if (abs(gesturePan.x) > 0.5f || abs(gesturePan.y) > 0.5f) {
-                                    onCentralGlobalPosition(gesturePan / latestZoom)
-                                }
-                            }
-                            if (pointerList.size == 2 && abs(1f - gestureZoom) > 0.005f) {
-                                val zoomCfg = latestSettings.zoom
-                                val newScale =
-                                    (latestZoom * gestureZoom).coerceIn(
-                                        zoomCfg.minZoom,
-                                        zoomCfg.maxZoom
-                                    )
-                                if (newScale != latestZoom) onZoomChange(newScale)
-                            }
-                        }
-                    },
-                    onGestureEnd = { draggedNodeState = null },
-                    onGestureCancel = { draggedNodeState = null }
-                )
-            }
-            .clip(RoundedCornerShape(0.dp)),
+    val graphModifier = modifier
+        .fillMaxSize()
+        .onGloballyPositioned {
+            centerSizeState = Offset(it.size.width.toFloat(), it.size.height.toFloat()) / 2f
+        }
+        .pointerInput(watchNodeId) {
+            var localSyncZoom = latestZoom
 
-        settings = settings,
-        nodes = latestNodes,
-        coordinates = liveCoordinates,
-        connections = latestConnections,
-        draggedNodeId = draggedNodeState?.id,
-        cursorNodeId = cursorNodeState?.id,
-        movementOffset = userPosition,
-        zoom = zoom,
-        watchNodeId = watchNodeId,
-    )
+            detectPointerTransformGestures(
+                consume = consume,
+                numberOfPointers = 0,
+                requisite = PointerRequisite.GreaterThan,
+                onScrollChange = {
+                    if (it.y != 0f) {
+                        val zoomCfg = latestSettings.zoom
+                        val factor = if (it.y > 0) zoomCfg.stepIn else zoomCfg.stepOut
+                        localSyncZoom =
+                            (localSyncZoom * factor).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
+                        onZoomChange(localSyncZoom)
+                    }
+                },
+                onClick = { position ->
+                    scope.launch(io) {
+                        val tapOffset = (position - centerSizeState) / latestZoom
+                        hitTest(tapOffset)?.let(onNodeClick)
+                    }
+                },
+                onCursorMove = { position ->
+                    scope.launch(io) {
+                        val tapOffset = (position - centerSizeState) / latestZoom
+                        if (draggedNodeState != null) {
+                            draggedNodeState =
+                                draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
+                        } else {
+                            cursorNodeState = hitTest(tapOffset)
+                        }
+                    }
+                },
+                onGestureStart = { pointer ->
+                    localSyncZoom = latestZoom
+                    val tapOffset = (pointer.position - centerSizeState) / latestZoom
+
+                    // Seed the node state with the initial offset immediately upon touch
+                    hitTest(tapOffset)?.let {
+                        draggedNodeState =
+                            DragNodeData(it.id).copy(offset = tapOffset - latestUserPosition)
+                    }
+                },
+                onGesture = { centroid, gesturePan, gestureZoom, _, _, pointerList ->
+                    // FIX 2: Intercept the drag pan and route it to the node, instead of the camera
+                    if (draggedNodeState != null && pointerList.size == 1) {
+                        // Calculates exact position rather than relying on deltas to prevent slippage
+                        val tapOffset = (centroid - centerSizeState) / localSyncZoom
+                        draggedNodeState =
+                            draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
+                    } else {
+                        if (watchNodeId == null && pointerList.size == 1) {
+                            if (abs(gesturePan.x) > 0.5f || abs(gesturePan.y) > 0.5f) {
+                                onCentralGlobalPosition(gesturePan / localSyncZoom) // Keep localZoom here!
+                            }
+                        }
+                        if (pointerList.size == 2 && abs(1f - gestureZoom) > 0.005f) {
+                            val zoomCfg = latestSettings.zoom
+                            localSyncZoom = (localSyncZoom * gestureZoom).coerceIn(
+                                zoomCfg.minZoom,
+                                zoomCfg.maxZoom
+                            )
+                            onZoomChange(localSyncZoom)
+                        }
+                    }
+                },
+                onGestureEnd = { draggedNodeState = null },
+                onGestureCancel = { draggedNodeState = null }
+            )
+        }
+        .clip(RoundedCornerShape(0.dp))
+    if (simpleCanvas) {
+        GraphInternal2(
+            atlas = atlas,
+            customPopup = customPopup,
+            getIconIndex = getIconIndex,
+            modifier = graphModifier,
+
+            settings = settings,
+            nodes = latestNodes,
+            coordinates = liveCoordinates,
+            coordinatesVersion = mapVersion,
+            connections = latestConnections,
+            draggedNodeId = draggedNodeState?.id,
+            cursorNodeId = cursorNodeState?.id,
+            movementOffset = userPosition,
+            zoom = zoom,
+            watchNodeId = watchNodeId,
+        )
+    } else {
+        GraphInternal(
+            atlas = atlas,
+            customPopup = customPopup,
+            getIconIndex = getIconIndex,
+            modifier = graphModifier,
+
+            settings = settings,
+            nodes = latestNodes,
+            coordinates = liveCoordinates,
+            coordinatesVersion = mapVersion,
+            connections = latestConnections,
+            draggedNodeId = draggedNodeState?.id,
+            cursorNodeId = cursorNodeState?.id,
+            movementOffset = userPosition,
+            zoom = zoom,
+            watchNodeId = watchNodeId,
+        )
+    }
+
 }

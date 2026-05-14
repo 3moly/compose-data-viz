@@ -596,22 +596,5 @@ fun CanvasSample(
                     })
             }
         }
-//        LazyColumn(Modifier.width(200.dp).fillMaxHeight()) {
-//            items(
-//                items = shapes,
-//                key = { it.id } // or any unique identifier
-//            ) { shape ->
-//                Column(
-//                    Modifier.fillMaxWidth(),
-//                    verticalArrangement = Arrangement.spacedBy(8.dp)
-//                ) {
-//                    ObsText(text = "Shap #" + shape.id.toString())
-//                    ObsText(text = "size: ${shape.size.x.toInt()}:${shape.size.y.toInt()}")
-//                    ObsText(text = "position: ${shape.position.x.toInt()}:${shape.position.y.toInt()}")
-//                    ObsText(text = "data: ${shape.data}")
-//                }
-//                // your item composable
-//            }
-//        }
     }
 }

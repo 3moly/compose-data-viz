@@ -1,4 +1,4 @@
-package com.threemoly.sample.base.graph
+package com.threemoly.sample
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
@@ -32,12 +32,16 @@ fun GraphSettingsContent(
     onChange: (GraphSettings) -> Unit,
     zoom: Float,
     nodeCount: Int,
+    onNodeCountChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         ObsText("zoom: %.3f".format(zoom))
         ObsText("nodes: $nodeCount")
-
+        IntSliderRow(
+            "Center force", nodeCount, valueRange = 1 until 1_000) {
+            onNodeCountChange(it)
+        }
         SettingsSection(title = "Theme", accentColor = Color(0xFF7E57C2)) {
             ThemeSection(
                 theme = settings.theme,
@@ -80,7 +84,11 @@ fun GraphSettingsContent(
             )
         }
 
-        SettingsSection(title = "Physics — Forces", accentColor = Color(0xFFFF7043), initiallyExpanded = true) {
+        SettingsSection(
+            title = "Physics — Forces",
+            accentColor = Color(0xFFFF7043),
+            initiallyExpanded = true
+        ) {
             PhysicsForcesSection(
                 view = settings.view,
                 onChange = { onChange(settings.copy(view = it)) },
@@ -102,14 +110,26 @@ fun GraphSettingsContent(
 
 @Composable
 private fun ThemeSection(theme: GraphTheme, onChange: (GraphTheme) -> Unit) {
-    ColorRow("Node color",       theme.nodeColor)        { onChange(theme.copy(nodeColor = it)) }
-    ColorRow("Edge color",       theme.resolvedEdgeColor) { onChange(theme.copy(edgeColor = it)) }
-    ColorRow("Accent (selected)", theme.accentColor)     { onChange(theme.copy(accentColor = it)) }
-    ColorRow("Text color",       theme.textColor)        { onChange(theme.copy(textColor = it)) }
-    ColorRow("Dragged node",     theme.draggedNodeColor) { onChange(theme.copy(draggedNodeColor = it)) }
-    ColorRow("Hovered node",     theme.hoveredNodeColor) { onChange(theme.copy(hoveredNodeColor = it)) }
-    ColorRow("Pill bg (dark)",   theme.activeLabelBackgroundDark)  { onChange(theme.copy(activeLabelBackgroundDark = it)) }
-    ColorRow("Pill bg (light)",  theme.activeLabelBackgroundLight) { onChange(theme.copy(activeLabelBackgroundLight = it)) }
+    ColorRow("Node color", theme.nodeColor) { onChange(theme.copy(nodeColor = it)) }
+    ColorRow("Edge color", theme.resolvedEdgeColor) { onChange(theme.copy(edgeColor = it)) }
+    ColorRow("Accent (selected)", theme.accentColor) { onChange(theme.copy(accentColor = it)) }
+    ColorRow("Text color", theme.textColor) { onChange(theme.copy(textColor = it)) }
+    ColorRow("Dragged node", theme.draggedNodeColor) { onChange(theme.copy(draggedNodeColor = it)) }
+    ColorRow("Hovered node", theme.hoveredNodeColor) { onChange(theme.copy(hoveredNodeColor = it)) }
+    ColorRow("Pill bg (dark)", theme.activeLabelBackgroundDark) {
+        onChange(
+            theme.copy(
+                activeLabelBackgroundDark = it
+            )
+        )
+    }
+    ColorRow("Pill bg (light)", theme.activeLabelBackgroundLight) {
+        onChange(
+            theme.copy(
+                activeLabelBackgroundLight = it
+            )
+        )
+    }
 }
 
 // =====================================================================================
@@ -127,7 +147,11 @@ private fun SelectionSection(
     IntSliderRow("Scale anim (ms)", selection.scaleAnimationMs, valueRange = 0..1000) {
         onChange(selection.copy(scaleAnimationMs = it))
     }
-    IntSliderRow("Selection anim (ms)", selection.selectionActiveAnimationMs, valueRange = 0..1000) {
+    IntSliderRow(
+        "Selection anim (ms)",
+        selection.selectionActiveAnimationMs,
+        valueRange = 0..1000
+    ) {
         onChange(selection.copy(selectionActiveAnimationMs = it))
     }
     SliderRow("Faded node alpha", selection.fadedNodeAlpha, valueRange = 0f..1f) {
@@ -173,7 +197,7 @@ private fun EdgeSection(edge: GraphEdgeSettings, onChange: (GraphEdgeSettings) -
     }
 }
 
-fun String.format(value: Float):String{
+fun String.format(value: Float): String {
     return value.toString()
 }
 
@@ -183,19 +207,26 @@ fun String.format(value: Float):String{
 
 @Composable
 private fun TextSection(text: GraphTextSettings, onChange: (GraphTextSettings) -> Unit) {
-    SliderRow("Normal font size (sp)", text.normalFontSize.value, valueRange = 6f..32f,
+    SliderRow(
+        "Normal font size (sp)", text.normalFontSize.value, valueRange = 6f..32f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(text.copy(normalFontSize = it.sp))
     }
-    SliderRow("Active font size (px)", text.activeFontSizePx, valueRange = 12f..96f,
+    SliderRow(
+        "Active font size (px)", text.activeFontSizePx, valueRange = 12f..96f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(text.copy(activeFontSizePx = it))
     }
-    SliderRow("Label padding (dp)", text.labelPaddingDp, valueRange = 0f..64f,
+    SliderRow(
+        "Label padding (dp)", text.labelPaddingDp, valueRange = 0f..64f,
         valueFormatter = { it.roundToInt().toString() }) {
         onChange(text.copy(labelPaddingDp = it))
     }
-    IntSliderRow("Max labels visible", text.maxLabelsVisible.coerceAtMost(500), valueRange = 0..500) {
+    IntSliderRow(
+        "Max labels visible",
+        text.maxLabelsVisible.coerceAtMost(500),
+        valueRange = 0..500
+    ) {
         onChange(text.copy(maxLabelsVisible = it))
     }
     SliderRow("Visibility zoom min", text.visibilityZoomThreshold, valueRange = 0f..2f) {
@@ -204,15 +235,18 @@ private fun TextSection(text: GraphTextSettings, onChange: (GraphTextSettings) -
     SliderRow("Visibility fade width", text.visibilityZoomFadeWidth, valueRange = 0.01f..2f) {
         onChange(text.copy(visibilityZoomFadeWidth = it))
     }
-    SliderRow("Pill padding X", text.activePillPaddingX, valueRange = 0f..64f,
+    SliderRow(
+        "Pill padding X", text.activePillPaddingX, valueRange = 0f..64f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(text.copy(activePillPaddingX = it))
     }
-    SliderRow("Pill padding Y", text.activePillPaddingY, valueRange = 0f..64f,
+    SliderRow(
+        "Pill padding Y", text.activePillPaddingY, valueRange = 0f..64f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(text.copy(activePillPaddingY = it))
     }
-    SliderRow("Pill corner radius", text.activePillCornerRadius, valueRange = 0f..64f,
+    SliderRow(
+        "Pill corner radius", text.activePillCornerRadius, valueRange = 0f..64f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(text.copy(activePillCornerRadius = it))
     }
@@ -230,7 +264,8 @@ private fun ZoomSection(zoomSettings: GraphZoomSettings, onChange: (GraphZoomSet
     SliderRow("Min zoom", zoomSettings.minZoom, valueRange = 0.01f..1f) {
         onChange(zoomSettings.copy(minZoom = it))
     }
-    SliderRow("Max zoom", zoomSettings.maxZoom, valueRange = 1f..32f,
+    SliderRow(
+        "Max zoom", zoomSettings.maxZoom, valueRange = 1f..32f,
         valueFormatter = { "%.1f".format(it) }) {
         onChange(zoomSettings.copy(maxZoom = it))
     }
@@ -249,7 +284,8 @@ private fun WatchSection(watch: GraphWatchSettings, onChange: (GraphWatchSetting
     SliderRow("Radius multiplier", watch.radiusMultiplier, valueRange = 1f..4f) {
         onChange(watch.copy(radiusMultiplier = it))
     }
-    SliderRow("Stroke width", watch.strokeWidth, valueRange = 0.5f..16f,
+    SliderRow(
+        "Stroke width", watch.strokeWidth, valueRange = 0.5f..16f,
         valueFormatter = { "%.1f".format(it) }) {
         onChange(watch.copy(strokeWidth = it))
     }
@@ -261,37 +297,44 @@ private fun WatchSection(watch: GraphWatchSettings, onChange: (GraphWatchSetting
 
 @Composable
 private fun PhysicsForcesSection(view: GraphViewSettings, onChange: (GraphViewSettings) -> Unit) {
-    SliderRow("Center force", view.centerForce, valueRange = 0.001f..1f,
+    SliderRow(
+        "Center force", view.centerForce, valueRange = 0.001f..1f,
         valueFormatter = { "%.4f".format(it) }) {
         onChange(view.copy(centerForce = it))
     }
-    SliderRow("Link force", view.linkForce, valueRange = 0.00001f..10f,
+    SliderRow(
+        "Link force", view.linkForce, valueRange = 0.00001f..10f,
         valueFormatter = { "%.4f".format(it) }) {
         onChange(view.copy(linkForce = it))
     }
-    SliderRow("Link distance", view.linkDistance, valueRange = 1f..500f,
+    SliderRow(
+        "Link distance", view.linkDistance, valueRange = 1f..500f,
         valueFormatter = { "%.1f".format(it) }) {
         onChange(view.copy(linkDistance = it))
     }
-    SliderRow("Repel force", view.repelForce, valueRange = 0.1f..100_000f,
+    SliderRow(
+        "Repel force", view.repelForce, valueRange = 0.1f..100_000f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(view.copy(repelForce = it))
     }
-    SliderRow("Circle size", view.circleSize, valueRange = 0.1f..50f,
+    SliderRow(
+        "Circle size", view.circleSize, valueRange = 0.1f..50f,
         valueFormatter = { "%.1f".format(it) }) {
         onChange(view.copy(circleSize = it))
     }
     SliderRow("Circle size multiplier", view.circleSizeMultiplier ?: 0f, valueRange = 0f..5f) {
         onChange(view.copy(circleSizeMultiplier = if (it == 0f) null else it))
     }
-    SliderRow("Max force", view.maxForce, valueRange = 1f..100f,
+    SliderRow(
+        "Max force", view.maxForce, valueRange = 1f..100f,
         valueFormatter = { "%.1f".format(it) }) {
         onChange(view.copy(maxForce = it))
     }
     SliderRow("Damping", view.dampingFactor, valueRange = 0.5f..1f) {
         onChange(view.copy(dampingFactor = it))
     }
-    SliderRow("Node quality", view.circleQuality, valueRange = 0.01f..1f,
+    SliderRow(
+        "Node quality", view.circleQuality, valueRange = 0.01f..1f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(view.copy(circleQuality = it))
     }
@@ -309,21 +352,35 @@ private fun PhysicsAdvancedSection(view: GraphViewSettings, onChange: (GraphView
     SliderRow("Mutual repulsion ×", view.mutualConnectionRepulsionMultiplier, valueRange = 0f..5f) {
         onChange(view.copy(mutualConnectionRepulsionMultiplier = it))
     }
-    SliderRow("Unconnected repulsion ×", view.unconnectedRepulsionMultiplier, valueRange = 0.1f..10f) {
+    SliderRow(
+        "Unconnected repulsion ×",
+        view.unconnectedRepulsionMultiplier,
+        valueRange = 0.1f..10f
+    ) {
         onChange(view.copy(unconnectedRepulsionMultiplier = it))
     }
-    SliderRow("Long-distance link ×", view.longDistanceLinkMultiplier, valueRange = 1f..1000f,
+    SliderRow(
+        "Long-distance link ×", view.longDistanceLinkMultiplier, valueRange = 1f..1000f,
         valueFormatter = { "%.0f".format(it) }) {
         onChange(view.copy(longDistanceLinkMultiplier = it))
     }
-    SliderRow("Clustering force", view.clusteringForce, valueRange = 0f..50f,
+    SliderRow(
+        "Clustering force", view.clusteringForce, valueRange = 0f..50f,
         valueFormatter = { "%.1f".format(it) }) {
         onChange(view.copy(clusteringForce = it))
     }
-    IntSliderRow("Min mutual for cluster", view.minMutualConnectionsForClustering, valueRange = 1..20) {
+    IntSliderRow(
+        "Min mutual for cluster",
+        view.minMutualConnectionsForClustering,
+        valueRange = 1..20
+    ) {
         onChange(view.copy(minMutualConnectionsForClustering = it))
     }
-    IntSliderRow("Max conn for full proc", view.maxConnectionsForFullProcessing, valueRange = 10..1000) {
+    IntSliderRow(
+        "Max conn for full proc",
+        view.maxConnectionsForFullProcessing,
+        valueRange = 10..1000
+    ) {
         onChange(view.copy(maxConnectionsForFullProcessing = it))
     }
     IntSliderRow("Spatial opt threshold", view.spatialOptimizationThreshold, valueRange = 10..500) {
@@ -332,7 +389,7 @@ private fun PhysicsAdvancedSection(view: GraphViewSettings, onChange: (GraphView
     IntSliderRow("Target frame (ms)", view.targetFrameMs.toInt(), valueRange = 4..100) {
         onChange(view.copy(targetFrameMs = it.toLong()))
     }
-    SliderRow("hubExpansionExponent", view.hubExpansionExponent, valueRange = 0f .. 1f) {
+    SliderRow("hubExpansionExponent", view.hubExpansionExponent, valueRange = 0f..1f) {
         onChange(view.copy(hubExpansionExponent = it))
     }
 }
