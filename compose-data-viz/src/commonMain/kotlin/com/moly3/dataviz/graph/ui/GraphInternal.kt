@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,6 +52,7 @@ data class AtlasState(
     val indexMap: ImmutableMap<String, Int>,
     val columns: Int,
     val tileSizePx: Int,
+    val isCircular: Boolean = true,   // NEW: SVG icons default to circular
     val version: Long = Clock.System.now().toEpochMilliseconds()
 )
 
@@ -121,34 +123,30 @@ internal fun <Id, Data> GraphInternal(
     val circleSizeMultiplier = view.circleSizeMultiplier
     val maxTextsAtCenterVisible = textCfg.maxLabelsVisible
 
-    val fallbackBitmap = remember { ImageBitmap(1, 1) }
-    val shader = remember { GraphShader }
+    val layerCount = atlasLayers.layers.size
 
-    val runtimeEffect = remember(shader, atlasLayers.combinedVersion) { buildEffect(shader) }
+    val fallbackBitmap = remember { ImageBitmap(1, 1) }
+    val shader = remember(layerCount) { GraphShader(layerCount) }
+
+    val runtimeEffect = remember(shader) { buildEffect(shader) }
 
     val buildShader = remember(runtimeEffect, atlasLayers.combinedVersion, fallbackBitmap) {
         runtimeEffect.apply {
             setFloatUniform("uQuality", view.circleQuality)
             setFloatUniform("uBorderWidth", view.circleBorderWidth)
+            setFloatUniform("uUseAtlas", if (layerCount > 0) 1f else 0f)
+            setFloatUniform("uLayerCount", layerCount.toFloat())
 
-            val count = atlasLayers.layers.size
-            setFloatUniform("uUseAtlas", if (count > 0) 1f else 0f)
-            setFloatUniform("uLayerCount", count.toFloat())
-
-            val layer0 = atlasLayers.layers.getOrNull(0)
-            val layer1 = atlasLayers.layers.getOrNull(1)
-            val layer2 = atlasLayers.layers.getOrNull(2)
-
-            setImageUniform("uAtlas0", layer0?.bitmap ?: fallbackBitmap)
-            setImageUniform("uAtlas1", layer1?.bitmap ?: fallbackBitmap)
-            setImageUniform("uAtlas2", layer2?.bitmap ?: fallbackBitmap)
-
-            setFloatUniform("uTileSize0", layer0?.tileSizePx?.toFloat() ?: 1f)
-            setFloatUniform("uTileSize1", layer1?.tileSizePx?.toFloat() ?: 1f)
-            setFloatUniform("uTileSize2", layer2?.tileSizePx?.toFloat() ?: 1f)
-            setFloatUniform("uColumns0", layer0?.columns?.toFloat() ?: 1f)
-            setFloatUniform("uColumns1", layer1?.columns?.toFloat() ?: 1f)
-            setFloatUniform("uColumns2", layer2?.columns?.toFloat() ?: 1f)
+            // Bind each layer's uniforms
+            for (i in 0 until layerCount) {
+//                val layer = atlasLayers.layers[i]
+//                setImageUniform("uAtlas$i", layer.bitmap)
+                val layer = atlasLayers.layers[i]
+                setImageUniform("uAtlas$i", layer.bitmap)
+                setFloatUniform("uTileSize$i", layer.tileSizePx.toFloat())
+                setFloatUniform("uColumns$i", layer.columns.toFloat())
+                setFloatUniform("uCircular$i", if (layer.isCircular) 1f else 0f)  // NEW
+            }
         }.buildShader()
     }
 
@@ -287,8 +285,10 @@ internal fun <Id, Data> GraphInternal(
             }
         }
     }
-    LaunchedEffect(atlasLayers.combinedVersion) {
-        animTick++
+    var atlasTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(atlasLayers, atlasLayers.combinedVersion) {
+        atlasTick++
+        animTick++  // keep the existing redraw nudge too
     }
     val drawText = animZoom > textCfg.visibilityZoomThreshold
     val drawEdges = animZoom > edgeCfg.visibilityZoomThreshold
@@ -298,11 +298,16 @@ internal fun <Id, Data> GraphInternal(
     Box(modifier = modifier.onSizeChanged { boxSize = it }) {
         Canvas(modifier = Modifier.matchParentSize()) {
             @Suppress("UNUSED_EXPRESSION") animTick
-            @Suppress("UNUSED_EXPRESSION") coordinatesVersion // Forces Canvas redraw when HashMap triggers update
-            @Suppress("UNUSED_EXPRESSION") atlasLayers.combinedVersion
+            @Suppress("UNUSED_EXPRESSION") coordinatesVersion
+            @Suppress("UNUSED_EXPRESSION") atlasTick
+
+            val currentAnimTick = animTick
+            val currentMapVer = coordinatesVersion
+            val currentAtlasVer = atlasLayers.combinedVersion
 
             val canvasW = size.width
             val canvasH = size.height
+
             val centerX = canvasW * 0.5f
             val centerY = canvasH * 0.5f
 
@@ -407,8 +412,8 @@ internal fun <Id, Data> GraphInternal(
                     val rawV = (iconLookup.tileIndex / atlasCols) * atlasTileSize + inset
                     val texSpan = atlasTileSize - (inset * 2f)
 
-                    // Layer encoding: shift U by +100000 for layer 1 so the shader picks uAtlas1
-                    val layerShift = iconLookup.layerIndex * 100000f
+                    // Layer encoding: shift U by layerIndex * STRIDE so the shader picks the right uAtlasN
+                    val layerShift = iconLookup.layerIndex * GraphShader.STRIDE.toFloat()
                     val texU = rawU + layerShift
                     val texV = rawV
 

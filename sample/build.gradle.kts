@@ -89,7 +89,13 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material)
             implementation(compose.material3)
+            implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
+
+            implementation("io.coil-kt.coil3:coil:3.4.0")
+            implementation("io.coil-kt.coil3:coil-svg:3.4.0")
+            implementation("io.coil-kt.coil3:coil-compose:3.4.0")
+            implementation("io.coil-kt.coil3:coil-network-ktor3:3.4.0")
 
             //noinspection UseTomlInstead
             implementation("dev.chrisbanes.haze:haze:1.7.0")

@@ -342,16 +342,15 @@ fun <Id, Data> Graph(
                     }
                 },
                 onGesture = { centroid, gesturePan, gestureZoom, _, _, pointerList ->
-                    // FIX 2: Intercept the drag pan and route it to the node, instead of the camera
                     if (draggedNodeState != null && pointerList.size == 1) {
-                        // Calculates exact position rather than relying on deltas to prevent slippage
                         val tapOffset = (centroid - centerSizeState) / localSyncZoom
                         draggedNodeState =
                             draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
                     } else {
                         if (watchNodeId == null && pointerList.size == 1) {
                             if (abs(gesturePan.x) > 0.5f || abs(gesturePan.y) > 0.5f) {
-                                onCentralGlobalPosition(gesturePan / localSyncZoom) // Keep localZoom here!
+                                // FIX: Add the gesture delta to the latest absolute position
+                                onCentralGlobalPosition(latestUserPosition + (gesturePan / localSyncZoom))
                             }
                         }
                         if (pointerList.size == 2 && abs(1f - gestureZoom) > 0.005f) {

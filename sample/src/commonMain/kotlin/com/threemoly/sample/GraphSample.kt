@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -19,7 +23,11 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImagePainter
+import coil3.compose.LocalPlatformContext
 import coil3.compose.rememberAsyncImagePainter
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.func.rememberPainterFromComposable
 import com.moly3.dataviz.graph.ui.AtlasLayers
@@ -57,7 +65,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
     val catPainter = painterResource(Res.drawable.cat)
 
     val density = LocalDensity.current
-    val catty = rememberPainterFromComposable(modifier = Modifier.size(50.dp)) {
+    val catty = rememberPainterFromComposable(modifier = Modifier.size(50.dp), captureKey = "") {
         Box(Modifier.fillMaxSize().background(Color.Magenta)) {
             Image(modifier = Modifier.padding(16.dp), painter = catPainter, contentDescription = "")
         }
@@ -158,7 +166,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             userPosition = s.graphUserPosition,
             onCentralGlobalPosition = {
                 state.value = state.value.copy(
-                    graphUserPosition = state.value.graphUserPosition + it
+                    graphUserPosition =  it
                 )
             },
 

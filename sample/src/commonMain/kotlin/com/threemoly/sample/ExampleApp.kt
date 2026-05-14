@@ -1,5 +1,6 @@
 package com.threemoly.sample
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 
 const val canvasPage = "Canvas"
 const val graphPage = "Graph"
+const val imgGraphPage = "ImgGraph"
 
 @Composable
 fun ExampleApp() {
@@ -125,6 +127,11 @@ fun ExampleApp() {
                         key = graphPage,
                         text = "Graph",
                         icon = Share
+                    ),
+                    Page(
+                        key = imgGraphPage,
+                        text = "ImgGraph",
+                        icon = Share
                     )
                 )
             }
@@ -194,6 +201,9 @@ fun ExampleApp() {
                                 state = graphState,
                                 nodeCountState = nodeCountState
                             )
+                            imgGraphPage -> Box(Modifier.fillMaxSize().background(Color.White)){
+                                GraphSampleWithComposer(graphState)
+                            }
                         }
                     }
                 }
