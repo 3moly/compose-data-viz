@@ -11,7 +11,7 @@ serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref 
 
 [versions]
 
-composedataviz = "0.1.23"
+composedataviz = "0.1.27"
 
 agp = "9.2.1"
 foundation = "1.11.0"
@@ -19,9 +19,11 @@ kotlin = "2.3.21"
 plugin-compose = "1.11.0"
 maven-publish = "0.36.0"
 serialization = "1.11.0"
+immutablelist = "0.4.0"
 
 [libraries]
 
 foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "foundation" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+immutablelist = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "immutablelist" }

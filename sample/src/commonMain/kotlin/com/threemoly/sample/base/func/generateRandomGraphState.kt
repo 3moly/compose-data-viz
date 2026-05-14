@@ -17,7 +17,7 @@ fun generateRandomGraphState(
         ObsidianGraphNode(
             id = "node_$index",
             name = "Node $index",
-            data = ObsidianGraphData.File(""),
+            data = ObsidianGraphData.File("https://picsum.photos/id/${index}/300/300"),
             colorValue = randomColor().value
         )
     }

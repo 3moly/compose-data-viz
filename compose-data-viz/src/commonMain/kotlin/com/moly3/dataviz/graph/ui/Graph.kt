@@ -15,6 +15,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
@@ -54,12 +55,15 @@ fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
     settings: GraphSettings = GraphSettings.Default,
     engine: IGraphEngine<Id, Data> = remember { UltraFastEngine() },
-    atlas: TextureAtlas? = null,
+    atlas: AtlasState? = null,
     consume: Boolean,
     userPosition: Offset,
     zoom: Float,
 
     getIconIndex: (Id, Data) -> Int? = { _, _ -> null },
+    getNodeGroups: (Id, Data) -> List<String> = { _, _ -> emptyList() },
+    // NEW: Map a group ID to a color. Use transparency (e.g., alpha = 0.3f)
+    getGroupColor: (String) -> Color = { Color(0x4D00BFFF) },
 
     isImmediateReheatOnUpdate: Boolean = false,
 
@@ -76,7 +80,7 @@ fun <Id, Data> Graph(
     onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
     onVelocitiesUpdate: (Map<Id, Offset>) -> Unit = {},
     customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null,
-    simpleCanvas: Boolean = false
+    simpleCanvas: Boolean = true
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset.Zero) }
@@ -369,6 +373,8 @@ fun <Id, Data> Graph(
             atlas = atlas,
             customPopup = customPopup,
             getIconIndex = getIconIndex,
+            getNodeGroups = getNodeGroups,
+            getGroupColor = getGroupColor,
             modifier = graphModifier,
 
             settings = settings,
@@ -384,7 +390,7 @@ fun <Id, Data> Graph(
         )
     } else {
         GraphInternal(
-            atlas = atlas,
+            atlasState = atlas,
             customPopup = customPopup,
             getIconIndex = getIconIndex,
             modifier = graphModifier,

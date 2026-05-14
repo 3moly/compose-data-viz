@@ -51,6 +51,7 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.foundation)
             api(projects.composeDataVizCore)
+            implementation(libs.immutablelist)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
