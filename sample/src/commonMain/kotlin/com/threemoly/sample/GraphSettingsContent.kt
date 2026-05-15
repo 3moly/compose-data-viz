@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
+import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphEdgeSettings
 import com.moly3.dataviz.core.graph.model.GraphSelectionSettings
 import com.moly3.dataviz.core.graph.model.GraphSettings
@@ -16,12 +17,6 @@ import com.moly3.dataviz.core.graph.model.GraphZoomSettings
 import com.threemoly.sample.base.uikit.ObsText
 import kotlin.math.roundToInt
 
-/**
- * Top-level panel. Each settings sub-group becomes a collapsible section.
- *
- * Pass `settings` and an `onChange` that produces the updated settings — this composable
- * is fully stateless about settings themselves.
- */
 @Composable
 fun GraphSettingsContent(
     settings: GraphSettings,
@@ -96,6 +91,13 @@ fun GraphSettingsContent(
                 onChange = { onChange(settings.copy(view = it)) },
             )
         }
+
+        SettingsSection(title = "Groups & Hulls", accentColor = Color(0xFF8D6E63)) {
+            GroupSection(
+                groups = settings.groupSettings,
+                onChange = { onChange(settings.copy(groupSettings = it)) },
+            )
+        }
     }
 }
 
@@ -112,18 +114,10 @@ private fun ThemeSection(theme: GraphTheme, onChange: (GraphTheme) -> Unit) {
     ColorRow("Dragged node", theme.draggedNodeColor) { onChange(theme.copy(draggedNodeColor = it)) }
     ColorRow("Hovered node", theme.hoveredNodeColor) { onChange(theme.copy(hoveredNodeColor = it)) }
     ColorRow("Pill bg (dark)", theme.activeLabelBackgroundDark) {
-        onChange(
-            theme.copy(
-                activeLabelBackgroundDark = it
-            )
-        )
+        onChange(theme.copy(activeLabelBackgroundDark = it))
     }
     ColorRow("Pill bg (light)", theme.activeLabelBackgroundLight) {
-        onChange(
-            theme.copy(
-                activeLabelBackgroundLight = it
-            )
-        )
+        onChange(theme.copy(activeLabelBackgroundLight = it))
     }
 }
 
@@ -265,7 +259,6 @@ private fun ZoomSection(zoomSettings: GraphZoomSettings, onChange: (GraphZoomSet
         onChange(zoomSettings.copy(maxZoom = it))
     }
     SliderRow("Step in", zoomSettings.stepIn, valueRange = 1.001f..2f) {
-        // keep stepOut symmetric for usability
         onChange(zoomSettings.copy(stepIn = it, stepOut = 1f / it))
     }
 }
@@ -287,7 +280,7 @@ private fun WatchSection(watch: GraphWatchSettings, onChange: (GraphWatchSetting
 }
 
 // =====================================================================================
-// Physics — Forces (the originally-exposed knobs)
+// Physics — Forces
 // =====================================================================================
 
 @Composable
@@ -386,5 +379,106 @@ private fun PhysicsAdvancedSection(view: GraphViewSettings, onChange: (GraphView
     }
     SliderRow("hubExpansionExponent", view.hubExpansionExponent, valueRange = 0f..1f) {
         onChange(view.copy(hubExpansionExponent = it))
+    }
+}
+
+// =====================================================================================
+// Groups & Hulls
+// =====================================================================================
+
+@Composable
+private fun GroupSection(groups: GroupSettings, onChange: (GroupSettings) -> Unit) {
+    ToggleRow("Enabled", groups.enabled) {
+        onChange(groups.copy(enabled = it))
+    }
+
+    // ---------- Forces ----------
+    SliderRow(
+        "Cohesion force", groups.cohesionForce, valueRange = 0f..5f,
+        valueFormatter = { "%.3f".format(it) }) {
+        onChange(groups.copy(cohesionForce = it))
+    }
+    SliderRow(
+        "Group separation", groups.groupSeparation, valueRange = 0f..500_000f,
+        valueFormatter = { "%.0f".format(it) }) {
+        onChange(groups.copy(groupSeparation = it))
+    }
+    SliderRow(
+        "Separation softening", groups.groupSeparationSoftening, valueRange = 1f..500f,
+        valueFormatter = { "%.0f".format(it) }) {
+        onChange(groups.copy(groupSeparationSoftening = it))
+    }
+
+    // ---------- Hull recompute ----------
+    IntSliderRow(
+        "Hull recompute (ms)", groups.hullRecomputeIntervalMs.toInt(),
+        valueRange = 16..1000
+    ) {
+        onChange(groups.copy(hullRecomputeIntervalMs = it.toLong()))
+    }
+    IntSliderRow(
+        "Hull settled (ms)", groups.hullSettledIntervalMs.toInt(),
+        valueRange = 50..5000
+    ) {
+        onChange(groups.copy(hullSettledIntervalMs = it.toLong()))
+    }
+
+    // ---------- Hull shape ----------
+    IntSliderRow("Hull K (smoothness)", groups.hullK, valueRange = 3..20) {
+        onChange(groups.copy(hullK = it))
+    }
+    SliderRow(
+        "Hull padding (px)", groups.hullPadding, valueRange = 0f..200f,
+        valueFormatter = { "%.0f".format(it) }) {
+        onChange(groups.copy(hullPadding = it))
+    }
+    SliderRow("Hull smoothing", groups.hullSmoothing, valueRange = 0f..1f) {
+        onChange(groups.copy(hullSmoothing = it))
+    }
+    SliderRow(
+        "Hull stroke width", groups.hullStrokeWidth, valueRange = 0f..20f,
+        valueFormatter = { "%.1f".format(it) }) {
+        onChange(groups.copy(hullStrokeWidth = it))
+    }
+
+    // ---------- Hull fill ----------
+    ToggleRow("Hull fill", groups.hullFill) {
+        onChange(groups.copy(hullFill = it))
+    }
+    SliderRow("Hull fill alpha", groups.hullFillAlpha, valueRange = 0f..1f) {
+        onChange(groups.copy(hullFillAlpha = it))
+    }
+
+    // ---------- Hull labels ----------
+    SliderRow(
+        "Label zoom threshold", groups.hullLabelVisibilityZoomThreshold,
+        valueRange = 0f..2f
+    ) {
+        onChange(groups.copy(hullLabelVisibilityZoomThreshold = it))
+    }
+    SliderRow(
+        "Label fade width", groups.hullLabelVisibilityZoomFadeWidth,
+        valueRange = 0.01f..2f
+    ) {
+        onChange(groups.copy(hullLabelVisibilityZoomFadeWidth = it))
+    }
+    SliderRow(
+        "Label font size (sp)", groups.hullLabelFontSizeSp, valueRange = 6f..48f,
+        valueFormatter = { "%.0f".format(it) }) {
+        onChange(groups.copy(hullLabelFontSizeSp = it))
+    }
+    ToggleRow("Label scale with zoom", groups.hullLabelScaleWithZoom) {
+        onChange(groups.copy(hullLabelScaleWithZoom = it))
+    }
+    SliderRow("Label min scale", groups.hullLabelMinScale, valueRange = 0.1f..2f) {
+        onChange(groups.copy(hullLabelMinScale = it))
+    }
+    SliderRow("Label max scale", groups.hullLabelMaxScale, valueRange = 1f..10f) {
+        onChange(groups.copy(hullLabelMaxScale = it))
+    }
+    SliderRow(
+        "Label vertical offset", groups.hullLabelVerticalOffset, valueRange = -100f..100f,
+        valueFormatter = { "%.0f".format(it) }) {
+        onChange(groups.copy(hullLabelVerticalOffset = it))
     }
 }

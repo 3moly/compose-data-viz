@@ -19,16 +19,16 @@ data class GroupSettings(
     val enabled: Boolean = true,
 
     /** Strength of pull toward each group's centroid. Scales with alpha like other forces. */
-    val cohesionForce: Float = 0.06f,
+    val cohesionForce: Float = 1.2f,
 
     /**
      * Repulsion between *centroids* of different groups, so islands stay apart.
      * 0f disables.
      */
-    val groupSeparation: Float = 800f,
+    val groupSeparation: Float = 30000f,
 
     /** Min distance below which inter-group repulsion saturates (avoid blowup). */
-    val groupSeparationSoftening: Float = 80f,
+    val groupSeparationSoftening: Float = 250f,
 
     // ---------- Hull rendering ----------
 

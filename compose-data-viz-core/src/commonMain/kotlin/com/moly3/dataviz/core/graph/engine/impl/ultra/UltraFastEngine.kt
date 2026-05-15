@@ -68,14 +68,48 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
     private var lastNodeCountSignature = 0
 
+    @Volatile
+    private var freezingEnabled: Boolean = true
+
     override val isAsleep: Boolean get() {
-        // Much simpler, more aggressive sleep detection.
+        if (!freezingEnabled) return false
         return alpha <= 0f || (alpha < 0.02f && totalKineticEnergy < sleepEnergyThreshold)
     }
 
     private fun reheat(intensity: Float = reheatAlpha) {
         alpha = max(alpha, intensity)
         alphaTarget = 0f
+    }
+
+    fun setFreezingEnabled(enabled: Boolean) {
+        if (freezingEnabled == enabled) return
+        freezingEnabled = enabled
+        if (!enabled) {
+            // Kick the simulation back to life so the caller sees motion immediately.
+            reheat(reheatAlpha)
+        }
+    }
+
+    /** Returns whether freezing/sleep optimization is currently enabled. */
+    fun isFreezingEnabled(): Boolean = freezingEnabled
+
+    /**
+     * Force the engine into its frozen state immediately, regardless of
+     * current kinetic energy. Useful for pausing the layout for screenshots,
+     * export, or when the view is off-screen.
+     *
+     * Has no effect if freezing is disabled via [setFreezingEnabled].
+     */
+    fun freeze() {
+        if (!freezingEnabled) return
+        alpha = 0f
+        alphaTarget = 0f
+        totalKineticEnergy = 0f
+        // Zero out velocities so nothing drifts on the next non-frozen step.
+        for (i in 0 until nodeCount) {
+            velX[i] = 0f
+            velY[i] = 0f
+        }
     }
 
     override suspend fun step(
@@ -461,12 +495,25 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             velX[draggedIdx] = 0f; velY[draggedIdx] = 0f
         }
 
+//        totalKineticEnergy = chunkEnergy.sum()
+//        alpha += (alphaTarget - alpha) * alphaDecay
+//
+//        // [NEW] Snap-Freeze: Crush the asymptotic tail to instantly kill micro-wobbles
+//        if (alpha < 0.05f) {
+//            alpha = 0f
+//        }
         totalKineticEnergy = chunkEnergy.sum()
         alpha += (alphaTarget - alpha) * alphaDecay
 
-        // [NEW] Snap-Freeze: Crush the asymptotic tail to instantly kill micro-wobbles
-        if (alpha < 0.05f) {
-            alpha = 0f
+        if (freezingEnabled) {
+            // Snap-Freeze: Crush the asymptotic tail to instantly kill micro-wobbles
+            if (alpha < 0.05f) {
+                alpha = 0f
+            }
+        } else {
+            // Keep a minimum "heat" so the physics never completely die
+            // You can tweak this value. 0.05f keeps a gentle ambient movement.
+            alpha = max(alpha, 0.05f)
         }
 
         // Write back to maps
@@ -534,9 +581,15 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
 
         // Dynamic alpha decay scaling
+//        if (nodeCount > 0) {
+//            alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+//                .coerceIn(0.02f, 0.08f)
+//        }
+        // Dynamic alpha decay scaling
         if (nodeCount > 0) {
-            alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
-                .coerceIn(0.02f, 0.08f)
+            // Lowered the base multiplier from 0.05f to 0.015f for a longer, smoother layout time
+            alphaDecay = (0.015f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+                .coerceIn(0.005f, 0.03f)
         }
 
         // [MOVED] Group sync runs LAST so nodeCount is correct and posX/posY are
@@ -779,7 +832,10 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         if (groupsChanged) reheat(0.4f)
     }
 
-
+    fun unfreeze() {
+        if (!freezingEnabled) return
+        reheat(reheatAlpha)
+    }
 // ----------------------------------------------------------------------------
 
 // --- end Phase 1.5 -----------------------------------------------------------

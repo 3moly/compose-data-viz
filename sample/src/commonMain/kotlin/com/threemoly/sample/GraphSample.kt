@@ -12,15 +12,19 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.asImage
@@ -34,9 +38,14 @@ import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.func.rememberPainterFromComposable
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
 import com.moly3.dataviz.graph.features.atlas.AtlasState
+import com.moly3.dataviz.graph.features.atlas.AtlasTier
 import com.moly3.dataviz.graph.features.atlas.func.createAtlasFromUrlsSuspend
 import com.moly3.dataviz.graph.features.atlas.func.createSvgAtlas
+import com.moly3.dataviz.graph.ui.AtlasPainterLoader
 import com.moly3.dataviz.graph.ui.Graph
+import com.moly3.dataviz.graph.ui.TierSelection
+import com.moly3.dataviz.graph.ui.rememberAtlasComposer
+import com.moly3.dataviz.graph.ui.rememberMovementTracker
 import com.moly3.dataviz.sample.resources.Res
 import com.moly3.dataviz.sample.resources.cat
 import com.threemoly.sample.base.graph.GraphState
@@ -67,143 +76,66 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
     val share: Painter = rememberVectorPainter(Share)
     val catPainter = painterResource(Res.drawable.cat)
 
-    val density = LocalDensity.current
-    val catty = rememberPainterFromComposable(modifier = Modifier.size(50.dp), captureKey = "") {
-        Box(Modifier.fillMaxSize().background(Color.Magenta)) {
-            Image(modifier = Modifier.padding(16.dp), painter = catPainter, contentDescription = "")
-        }
-    }
     val context = LocalPlatformContext.current
     val coilImageLoader = remember { ImageLoader(context) }
-    val shittyAtlas = remember { mutableStateOf<AtlasState?>(null) }
-
-    LaunchedEffect(state.value.graphNodes) {
-        // 1. Create the mapped data
-        val urlsPairs = state.value.graphNodes.mapIndexed { index, node ->
-            Pair(index, node) to "https://picsum.photos/id/${index}/300/300"
+    val loader: AtlasPainterLoader<String, ObsidianGraphData> = { node ->
+        val index = state.value.graphNodes.indexOfFirst { it.id == node.id }
+        if (index < 0 || index >= 100) null
+        else {
+            val req = ImageRequest.Builder(context)
+                .data("https://picsum.photos/id/$index/300/300")
+                .size(128)
+                .allowConversionToBitmap(true)
+                .build()
+            coilImageLoader.execute(req).image?.toBitmap()?.asImage()?.asPainter(context)
         }
-
-        val fallback = ColorPainter(Color.Transparent)
-
-        val textureAtlas = createAtlasFromUrlsSuspend(
-            urls = urlsPairs.map { it.second },
-            density = density,
-            tileSizePx = 128,
-            concurrencyLimit = 15,
-            fallbackPainter = fallback,
-            imageLoader = { url ->
-                val request = ImageRequest.Builder(context)
-                    .data(url)
-                    .size(128)
-                    .allowConversionToBitmap(true) // CRITICAL: Hardware bitmaps can't always be drawn onto Canvas
-                    .build()
-
-                val result = coilImageLoader.execute(request)
-                val drawable = result.image?.toBitmap()
-                drawable?.asImage()?.asPainter(context)
-            }
-        )
-
-        // 3. Update State (Now your indices will perfectly match!)
-        shittyAtlas.value = AtlasState(
-            bitmap = textureAtlas.imageBitmap,
-            indexMap = urlsPairs
-                .associate { (pair, _) -> pair.second.id to pair.first }
-                .toPersistentMap(),
-            columns = textureAtlas.columns,
-            tileSizePx = textureAtlas.tileSizePx,
-            isCircular = false
-        )
     }
-
-//    LaunchedEffect(state.value.graphNodes) {
-//        val urlsPairs = state.value.graphNodes.mapIndexed { index, node ->
-//            Pair(index,node) to "https://picsum.photos/id/${index}/300/300"
-//        }
-//        val textureAtlas = createAtlasFromUrlsSuspend(
-//            urls = urlsPairs.map { d -> d.second },
-//            density = density,
-//            tileSizePx = 128,
-//            imageLoader = { url ->
-//                val request = ImageRequest.Builder(context)
-//                    .data(url)
-//                    .size(128)
-//                    .build()
-//                val result = coilImageLoader.execute(request)
-//                val drawable = result.image?.toBitmap()
-//                drawable?.asImage()?.asPainter(context)
-//            }
-//        )
-//
-//        shittyAtlas.value = AtlasState(
-//            bitmap = textureAtlas.imageBitmap,
-//            indexMap = urlsPairs
-//                .associate { (number, _) -> number.second.id to number.first }
-//                .toPersistentMap(),
-//            columns = textureAtlas.columns,
-//            tileSizePx = textureAtlas.tileSizePx,
-//            isCircular = false
-//        )
-//    }
-    // ---- Layer 0: primary atlas (bundled / always-present icons) ----
-    val primaryAtlas = remember(catty, scale, share, density) {
-        val textureAtlas = createSvgAtlas(
-            painters = listOf(catty ?: scale, share),
-            density = density,
-            tileSizePx = 64
-        )
-        AtlasState(
-            bitmap = textureAtlas.imageBitmap,
-            // Map each painter's slot in `painters` list to a stable key
-            indexMap = persistentMapOf(
-                KEY_FOLDER to 0, // catty (or scale fallback) lives at index 0
-                KEY_SHARE to 1,  // share lives at index 1
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    val movement = rememberMovementTracker(idleMillis = 1000)
+    LaunchedEffect(s.velocities) { if (s.velocities.isNotEmpty()) movement.trigger() }
+    LaunchedEffect(s.zoom) { movement.trigger() }
+    LaunchedEffect(s.graphUserPosition) { movement.trigger() }
+    val handle = rememberAtlasComposer(
+        nodes = state.value.graphNodes,
+        tiers = listOf(
+            AtlasTier(
+                name = "hq",
+                tileSizePx = 256,
+                selection = TierSelection.TopByDistance(3),
+                isCircular = false,
+                freezeOnMove = true,   // <-- was false
             ),
-            columns = textureAtlas.columns,
-            tileSizePx = textureAtlas.tileSizePx,
-        )
-    }
+            AtlasTier(
+                name = "lq",
+                tileSizePx = 48,
+                selection = TierSelection.All,
+                isCircular = false,
+                freezeOnMove = false,  // LQ can keep updating; it's cheap
+            )
+        ),
 
-    // ---- Layer 1: fallback / dynamic atlas (example: a secondary atlas) ----
-    // For now this is just a placeholder example — wire your real 2nd atlas here.
-    // If you don't have one yet, just omit it from the layers list.
-    val fallbackAtlas: AtlasState? = remember(catPainter, density) {
-        val built = createSvgAtlas(
-            painters = listOf(catPainter),
-            density = density,
-            tileSizePx = 64
-        )
-        AtlasState(
-            bitmap = built.imageBitmap,
-            indexMap = persistentMapOf(
-                KEY_CAT to 0,
-            ),
-            columns = built.columns,
-            tileSizePx = built.tileSizePx,
-        )
-    }
-
-    // Compose the layers — order matters: layer 0 is checked first
-    val atlasLayers = remember(shittyAtlas.value, primaryAtlas, fallbackAtlas) {
-        val att = shittyAtlas.value
-        AtlasLayers(
-            layers = if (att != null) persistentListOf(att) else persistentListOf()
-//            layers = if (fallbackAtlas != null && att != null) {
-//                persistentListOf(att, primaryAtlas, fallbackAtlas)
-//            } else {
-//                persistentListOf(primaryAtlas)
-//            }
-        )
-    }
-
-    val counter = remember { mutableStateOf(0) }
-
+        viewport = viewport,
+        userPosition = s.graphUserPosition,
+        zoom = s.zoom,
+        coordinates = s.coordinates,
+        loader = loader,
+        loaderKey = state.value.graphNodes.size, // or any token that should invalidate
+        staticIcons = persistentMapOf(
+            KEY_FOLDER to scale,
+            KEY_SHARE to share,
+            KEY_CAT to catPainter
+        ),
+        staticIconKey = { id, data -> /* return KEY_FOLDER / null / etc */ "" },
+        isMoving = movement.isMoving
+    )
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.White.darker(0.5f))
+            .onGloballyPositioned { viewport = it.size }
     ) {
         Graph(
+            atlasLayers = handle.atlasLayers, getIconKey = handle::resolveIconKey,
             getNodeGroups = { _, data ->
                 when (data) {
                     is ObsidianGraphData.Collection -> listOf("collection")
@@ -231,45 +163,25 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
                     modifier = Modifier.size(100.dp)
                 )
             },
-
-            atlasLayers = atlasLayers,
-            getIconKey = { nodeId, data ->
-                nodeId
-//                "https://picsum.photos/id/1/300/300"
-//                counter.value += 1
-//                val node = s.graphNodes.find { it.id == nodeId }
-//                when {
-//                    node?.name?.contains("Folder") == true -> KEY_FOLDER  // resolves in layer 0
-//                    node?.name?.contains("Cat") == true -> KEY_CAT     // resolves in layer 1 (fallback)
-//                    node?.name?.contains("Share") == true -> KEY_SHARE   // resolves in layer 0
-//                    else -> null  // no icon -> background circle is drawn
-//                }
-            },
-
             settings = s.graphSettings,
             consume = false,
-
             connections = s.connections,
             stateNodes = s.graphNodes,
             coordinates = s.coordinates,
             velocities = s.velocities,
-
             zoom = s.zoom,
             onZoomChange = { state.value = state.value.copy(zoom = it) },
-
             userPosition = s.graphUserPosition,
             onCentralGlobalPosition = {
                 state.value = state.value.copy(
                     graphUserPosition = it
                 )
             },
-
             onNodeClick = { node ->
                 for (item in 0 until 50) {
                     state.spawnConnectedNode(node.id)
                 }
             },
-
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())
             },
@@ -278,27 +190,35 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
 
         // Debug preview: show both atlas bitmaps side-by-side
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            shittyAtlas.value?.let {
+            for (atlas in handle.atlasLayers.layers) {
                 Image(
                     modifier = Modifier.padding(16.dp).size(100.dp),
-                    bitmap = it.bitmap,
+                    bitmap = atlas.bitmap,
                     contentDescription = "layer 1"
                 )
             }
-            Image(
-                modifier = Modifier.padding(16.dp).size(100.dp),
-                bitmap = primaryAtlas.bitmap,
-                contentDescription = "layer 0"
-            )
-            fallbackAtlas?.let {
-                Image(
-                    modifier = Modifier.padding(16.dp).size(100.dp),
-                    bitmap = it.bitmap,
-                    contentDescription = "layer 1"
-                )
-            }
-            Text(text = counter.value.toString())
+//            shittyAtlas.value?.let {
+//                Image(
+//                    modifier = Modifier.padding(16.dp).size(100.dp),
+//                    bitmap = it.bitmap,
+//                    contentDescription = "layer 1"
+//                )
+//            }
+//            Image(
+//                modifier = Modifier.padding(16.dp).size(100.dp),
+//                bitmap = primaryAtlas.bitmap,
+//                contentDescription = "layer 0"
+//            )
+//            fallbackAtlas?.let {
+//                Image(
+//                    modifier = Modifier.padding(16.dp).size(100.dp),
+//                    bitmap = it.bitmap,
+//                    contentDescription = "layer 1"
+//                )
+//            }
+//            Text(text = counter.value.toString())
         }
+        Box(Modifier.size(100.dp).background(if (movement.isMoving) Color.Magenta else Color.Green))
 
         // -------------- Settings panel --------------
         SettingsPanel(
