@@ -12,27 +12,30 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImagePainter
+import coil3.ImageLoader
+import coil3.asImage
 import coil3.compose.LocalPlatformContext
+import coil3.compose.asPainter
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
-import coil3.request.crossfade
+import coil3.request.allowConversionToBitmap
+import coil3.toBitmap
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.func.rememberPainterFromComposable
 import com.moly3.dataviz.graph.ui.AtlasLayers
 import com.moly3.dataviz.graph.ui.AtlasState
 import com.moly3.dataviz.graph.ui.Graph
+import com.moly3.dataviz.graph.ui.createAtlasFromUrlsSuspend
 import com.moly3.dataviz.graph.ui.createSvgAtlas
 import com.moly3.dataviz.sample.resources.Res
 import com.moly3.dataviz.sample.resources.cat
@@ -53,8 +56,8 @@ import kotlin.random.Random
 private val random = Random(124)
 
 // Stable keys for atlas tile lookup
-private const val KEY_FOLDER = "icon_folder"
-private const val KEY_SHARE = "icon_share"
+const val KEY_FOLDER = "icon_folder"
+const val KEY_SHARE = "icon_share"
 private const val KEY_CAT = "icon_cat"
 
 @Composable
@@ -70,23 +73,98 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             Image(modifier = Modifier.padding(16.dp), painter = catPainter, contentDescription = "")
         }
     }
+//    val context = LocalPlatformContext.current
+//    val coilImageLoader = remember { ImageLoader(context) }
+//    val shittyAtlas = remember { mutableStateOf<AtlasState?>(null) }
 
+    val context = LocalPlatformContext.current
+    val coilImageLoader = remember { ImageLoader(context) }
+    val shittyAtlas = remember { mutableStateOf<AtlasState?>(null) }
+
+    LaunchedEffect(state.value.graphNodes) {
+        // 1. Create the mapped data
+        val urlsPairs = state.value.graphNodes.mapIndexed { index, node ->
+            Pair(index, node) to "https://picsum.photos/id/${index}/300/300"
+        }
+
+        val fallback = ColorPainter(Color.Transparent)
+
+        val textureAtlas = createAtlasFromUrlsSuspend(
+            urls = urlsPairs.map { it.second },
+            density = density,
+            tileSizePx = 128,
+            concurrencyLimit = 15,
+            fallbackPainter = fallback,
+            imageLoader = { url ->
+                val request = ImageRequest.Builder(context)
+                    .data(url)
+                    .size(128)
+                    .allowConversionToBitmap(true) // CRITICAL: Hardware bitmaps can't always be drawn onto Canvas
+                    .build()
+
+                val result = coilImageLoader.execute(request)
+                val drawable = result.image?.toBitmap()
+                drawable?.asImage()?.asPainter(context)
+            }
+        )
+
+        // 3. Update State (Now your indices will perfectly match!)
+        shittyAtlas.value = AtlasState(
+            bitmap = textureAtlas.imageBitmap,
+            indexMap = urlsPairs
+                .associate { (pair, _) -> pair.second.id to pair.first }
+                .toPersistentMap(),
+            columns = textureAtlas.columns,
+            tileSizePx = textureAtlas.tileSizePx,
+            isCircular = false
+        )
+    }
+
+//    LaunchedEffect(state.value.graphNodes) {
+//        val urlsPairs = state.value.graphNodes.mapIndexed { index, node ->
+//            Pair(index,node) to "https://picsum.photos/id/${index}/300/300"
+//        }
+//        val textureAtlas = createAtlasFromUrlsSuspend(
+//            urls = urlsPairs.map { d -> d.second },
+//            density = density,
+//            tileSizePx = 128,
+//            imageLoader = { url ->
+//                val request = ImageRequest.Builder(context)
+//                    .data(url)
+//                    .size(128)
+//                    .build()
+//                val result = coilImageLoader.execute(request)
+//                val drawable = result.image?.toBitmap()
+//                drawable?.asImage()?.asPainter(context)
+//            }
+//        )
+//
+//        shittyAtlas.value = AtlasState(
+//            bitmap = textureAtlas.imageBitmap,
+//            indexMap = urlsPairs
+//                .associate { (number, _) -> number.second.id to number.first }
+//                .toPersistentMap(),
+//            columns = textureAtlas.columns,
+//            tileSizePx = textureAtlas.tileSizePx,
+//            isCircular = false
+//        )
+//    }
     // ---- Layer 0: primary atlas (bundled / always-present icons) ----
     val primaryAtlas = remember(catty, scale, share, density) {
-        val built = createSvgAtlas(
+        val textureAtlas = createSvgAtlas(
             painters = listOf(catty ?: scale, share),
             density = density,
             tileSizePx = 64
         )
         AtlasState(
-            bitmap = built.imageBitmap,
+            bitmap = textureAtlas.imageBitmap,
             // Map each painter's slot in `painters` list to a stable key
             indexMap = persistentMapOf(
                 KEY_FOLDER to 0, // catty (or scale fallback) lives at index 0
                 KEY_SHARE to 1,  // share lives at index 1
             ),
-            columns = built.columns,
-            tileSizePx = built.tileSizePx,
+            columns = textureAtlas.columns,
+            tileSizePx = textureAtlas.tileSizePx,
         )
     }
 
@@ -110,13 +188,15 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
     }
 
     // Compose the layers — order matters: layer 0 is checked first
-    val atlasLayers = remember(primaryAtlas, fallbackAtlas) {
+    val atlasLayers = remember(shittyAtlas.value, primaryAtlas, fallbackAtlas) {
+        val att = shittyAtlas.value
         AtlasLayers(
-            layers = if (fallbackAtlas != null) {
-                persistentListOf(primaryAtlas, fallbackAtlas)
-            } else {
-                persistentListOf(primaryAtlas)
-            }
+            layers = if (att != null) persistentListOf(att) else persistentListOf()
+//            layers = if (fallbackAtlas != null && att != null) {
+//                persistentListOf(att, primaryAtlas, fallbackAtlas)
+//            } else {
+//                persistentListOf(primaryAtlas)
+//            }
         )
     }
 
@@ -132,7 +212,8 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             simpleCanvas = false,
             isImmediateReheatOnUpdate = true,
             customPopup = {
-                val cp = rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
+                val cp =
+                    rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
                 Image(
                     painter = cp,
                     contentDescription = null,
@@ -142,14 +223,16 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
 
             atlasLayers = atlasLayers,
             getIconKey = { nodeId, data ->
-                counter.value += 1
-                val node = s.graphNodes.find { it.id == nodeId }
-                when {
-                    node?.name?.contains("Folder") == true -> KEY_FOLDER  // resolves in layer 0
-                    node?.name?.contains("Cat") == true    -> KEY_CAT     // resolves in layer 1 (fallback)
-                    node?.name?.contains("Share") == true  -> KEY_SHARE   // resolves in layer 0
-                    else -> null  // no icon -> background circle is drawn
-                }
+                nodeId
+//                "https://picsum.photos/id/1/300/300"
+//                counter.value += 1
+//                val node = s.graphNodes.find { it.id == nodeId }
+//                when {
+//                    node?.name?.contains("Folder") == true -> KEY_FOLDER  // resolves in layer 0
+//                    node?.name?.contains("Cat") == true -> KEY_CAT     // resolves in layer 1 (fallback)
+//                    node?.name?.contains("Share") == true -> KEY_SHARE   // resolves in layer 0
+//                    else -> null  // no icon -> background circle is drawn
+//                }
             },
 
             settings = s.graphSettings,
@@ -166,7 +249,7 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             userPosition = s.graphUserPosition,
             onCentralGlobalPosition = {
                 state.value = state.value.copy(
-                    graphUserPosition =  it
+                    graphUserPosition = it
                 )
             },
 
@@ -187,6 +270,13 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
 
         // Debug preview: show both atlas bitmaps side-by-side
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            shittyAtlas.value?.let {
+                Image(
+                    modifier = Modifier.padding(16.dp).size(100.dp),
+                    bitmap = it.bitmap,
+                    contentDescription = "layer 1"
+                )
+            }
             Image(
                 modifier = Modifier.padding(16.dp).size(100.dp),
                 bitmap = primaryAtlas.bitmap,

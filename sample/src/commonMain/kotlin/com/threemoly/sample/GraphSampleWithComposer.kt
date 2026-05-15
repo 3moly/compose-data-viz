@@ -56,69 +56,71 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
         persistentMapOf("folder" to folder, "tag" to tag)
     }
 
-    val atlas = rememberAtlasComposer(
+    // Heuristic: Are physics active?
+    val isGraphMoving = remember(s.velocities) {
+        s.velocities.values.any { it.getDistance() > 0.5f }
+    }
+
+    val atlasHandle = rememberAtlasComposer(
         nodes = s.graphNodes,
+        isMoving = isGraphMoving,
         tiers = listOf(
-//            AtlasTier("hq", tileSizePx = 256, selection = TierSelection.TopByDistance(2)),
-//            AtlasTier("hq", tileSizePx = 12, selection = TierSelection.TopByDistance(2)),
-            AtlasTier("lq", tileSizePx = 48,  selection = TierSelection.All),
+            // High Quality: Only top 20, freeze during movement to save CPU/GPU
+            AtlasTier("hq", tileSizePx = 128, selection = TierSelection.TopByDistance(20), freezeOnMove = true),
+            // Low Quality: Broad fallback, updates while moving (throttled to 10fps by our LaunchedEffect)
+            AtlasTier("lq", tileSizePx = 32, selection = TierSelection.AllVisible, freezeOnMove = false)
         ),
+        staticIcons = staticIcons,
+        staticIconKey = { id, data ->
+            // Route logic: Return a key for static, return NULL to trigger the async Composable builder
+            when (data) {
+                is ObsidianGraphData.Tag, is ObsidianGraphData.Collection -> "folder"
+                is ObsidianGraphData.Tag -> "tag"
+                is ObsidianGraphData.File -> "" // Tells the composer: "I need a dynamic canvas for this"
+                else -> null
+            }
+        },
         viewport = viewport,
         userPosition = s.graphUserPosition,
         zoom = s.zoom,
         coordinates = s.coordinates,
-        staticIcons = staticIcons,
-        staticIconKey = { _, data ->
-//            when (data) {
-////                is ObsidianGraphData.Folder -> "folder"
-//                is ObsidianGraphData.Tag -> "tag"
-//                is ObsidianGraphData.Collection -> "folder"
-//                is ObsidianGraphData.CollectionRow -> ""
-//                is ObsidianGraphData.File -> null
-//                null -> ""
-//            }
-            ""
-        },
-    ) { node ->
-        // Per-node composable. This is what gets baked into the atlas.
-        when (val d = node.data) {
-            is ObsidianGraphData.File -> {
-                val url = d.fullPath
-                val painter = rememberAsyncImagePainter(
-                    ImageRequest.Builder(LocalPlatformContext.current)
-                        .data(url)
-                        .crossfade(false)
-                        .build()
-                )
-                val coilState by painter.state.collectAsState()
-                // Signal ready exactly when Coil finishes loading.
-                LaunchedEffect(coilState) {
-                    setReady(coilState is AsyncImagePainter.State.Success)
+        content = { node ->
+            when (val d = node.data) {
+                is ObsidianGraphData.File -> {
+                    val url = d.fullPath
+                    val painter = rememberAsyncImagePainter(
+                        ImageRequest.Builder(LocalPlatformContext.current)
+                            .data(url)
+                            .crossfade(false)
+                            .build()
+                    )
+                    val coilState by painter.state.collectAsState()
+
+                    LaunchedEffect(coilState) {
+                        setReady(coilState is AsyncImagePainter.State.Success)
+                    }
+
+                    Image(
+                        painter = painter,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(100.dp))
+                    )
                 }
-                Image(
-                    painter = painter,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(100.dp))
-                )
-                //Box(Modifier.fillMaxSize().background(Color.Red))
-            }
-            else -> {
-                // No custom content for non-file nodes — static icon fallback kicks in.
+                else -> { }
             }
         }
-    }
-
+    )
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.White)
             .onGloballyPositioned { viewport = it.size }
     ) {
-        atlas.MountCaptureHolders()
+        atlasHandle.MountCaptureHolders()
 
         Graph(
-            atlasLayers = atlas.atlasLayers,
-            getIconKey = { id, data -> atlas.resolveIconKey(id, data) },
+            atlasLayers = atlasHandle.atlasLayers,
+            getIconKey = { id, data -> atlasHandle.resolveIconKey(id, data) },
             stateNodes = s.graphNodes,
             connections = s.connections,
             coordinates = s.coordinates,
@@ -127,8 +129,12 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
             onZoomChange = { state.value = state.value.copy(zoom = it) },
             userPosition = s.graphUserPosition,
             onCentralGlobalPosition = { state.value = state.value.copy(graphUserPosition = it) },
-            onCoordinatesUpdate = { state.value = state.value.copy(coordinates = it.toPersistentMap()) },
-            onVelocitiesUpdate = { state.value = state.value.copy(velocities = it.toPersistentMap()) },
+            onCoordinatesUpdate = {
+                state.value = state.value.copy(coordinates = it.toPersistentMap())
+            },
+            onVelocitiesUpdate = {
+                state.value = state.value.copy(velocities = it.toPersistentMap())
+            },
             onNodeClick = { },
             settings = s.graphSettings,
             consume = false,
@@ -140,9 +146,13 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            atlas.atlasLayers.layers.forEachIndexed { i, layer ->
+            atlasHandle.atlasLayers.layers.forEachIndexed { i, layer ->
                 Text("Layer $i (${layer.bitmap.width}×${layer.bitmap.height}, ${layer.indexMap.size} tiles)")
-                Image(bitmap = layer.bitmap, contentDescription = null, modifier = Modifier.size(80.dp))
+                Image(
+                    bitmap = layer.bitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp)
+                )
             }
         }
     }

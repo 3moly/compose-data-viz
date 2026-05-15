@@ -58,6 +58,7 @@ data class AtlasTier(
     val tileSizePx: Int,
     val selection: TierSelection,
     val isCircular: Boolean = false,
+    val freezeOnMove: Boolean = false,
 )
 
 /** How a tier picks which nodes to include. */
@@ -137,15 +138,13 @@ fun <Id, Data> rememberAtlasComposer(
     staticIconKey: (Id, Data?) -> String? = { _, _ -> null },
     captureSizePx: Int = (tiers.maxOfOrNull { it.tileSizePx } ?: 64) * 2,
     visibilityPaddingPx: Float = 50f,
-    visibilityDebounceMs: Long = 150L,
+    isMoving: Boolean = false, // <-- Controlled by Graph velocities
     content: @Composable CaptureScope.(GraphNode<Id, Data>) -> Unit,
 ): AtlasComposerHandle<Id, Data> {
     val density = LocalDensity.current
     val state = remember(density) { AtlasComposerState<Id, Data>(density) }
 
-    // Push every recomposition. Guarded writes — mutableStateOf invalidates
-    // observers on every write, even same-value writes, so we explicitly skip
-    // no-op assignments to avoid spurious flow emissions.
+    // Push states
     if (state.nodes !== nodes) state.nodes = nodes
     if (state.tiers !== tiers) state.tiers = tiers
     if (state.staticIcons !== staticIcons) state.staticIcons = staticIcons
@@ -156,29 +155,33 @@ fun <Id, Data> rememberAtlasComposer(
     if (state.userPosition != userPosition) state.userPosition = userPosition
     if (state.zoom != zoom) state.zoom = zoom
     if (state.viewport != viewport) state.viewport = viewport
-    // Reference compare is enough — upstream produces a fresh map per physics tick.
     if (state.coordinates !== coordinates) state.coordinates = coordinates
 
-    // Visibility recompute loop.
-    //
-    // Reads `nodes` too so adding/removing nodes triggers a recompute even
-    // without pan/zoom. First emission runs immediately (no debounce) so the
-    // initial pass happens as soon as the inputs settle — without requiring
-    // user interaction.
-    LaunchedEffect(state, visibilityDebounceMs) {
-        var firstEmission = true
+    // Pass movement state downward
+    state.isMoving = isMoving
+
+    // Visibility recompute loop with Throttling
+    LaunchedEffect(state) {
+        var lastComputeTime = 0L
         snapshotFlow {
             VisibilityInputs(
                 state.userPosition, state.zoom, state.viewport,
-                state.coordinates, state.nodes.size
+                state.coordinates, state.nodes.size, state.isMoving
             )
-        }.collect {
-            if (firstEmission) {
-                firstEmission = false
+        }.collect { inputs ->
+            val now = Clock.System.now().toEpochMilliseconds()
+            if (!inputs.isMoving) {
+                // If settled, compute instantly for maximum crispness
+                state.recomputeVisibility()
+                lastComputeTime = now
             } else {
-                kotlinx.coroutines.delay(visibilityDebounceMs)
+                // If moving, throttle the heavy distance-sorting to ~10fps.
+                // This allows panning to work, but doesn't starve the CPU.
+                if (now - lastComputeTime > 100L) {
+                    state.recomputeVisibility()
+                    lastComputeTime = now
+                }
             }
-            state.recomputeVisibility()
         }
     }
 
@@ -194,6 +197,7 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
 
     // ----- inputs (snapshot-observable so visibility flow re-emits on change) -----
     var nodes by mutableStateOf<List<GraphNode<Id, Data>>>(emptyList())
+    var isMoving by mutableStateOf(false)
     var tiers by mutableStateOf<List<AtlasTier>>(emptyList())
     var staticIcons by mutableStateOf<ImmutableMap<String, Painter>>(persistentMapOf())
     var staticIconKey: (Id, Data?) -> String? = { _, _ -> null }
@@ -359,6 +363,10 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         // draw from `composableVisibleByDistance` so slots are spent only on
         // nodes that need composable rendering — color/static nodes can't burn
         // an `hq` slot and starve a further-out composable node.
+        if (isMoving && tier.freezeOnMove) {
+            return tierAtlasCache[tier.name]?.atlas
+        }
+
         val candidates: List<Id> = when (val sel = tier.selection) {
             TierSelection.All -> {
                 // Filter the full list to composable nodes (color/static don't
@@ -369,6 +377,7 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
                 }
                 out
             }
+
             TierSelection.AllVisible -> composableVisibleByDistance
             is TierSelection.TopByDistance -> composableVisibleByDistance.take(sel.count)
         }
@@ -493,6 +502,7 @@ private data class VisibilityInputs(
     val viewport: IntSize,
     val coordinates: Map<*, Offset>,
     val nodeCount: Int,
+    val isMoving: Boolean
 )
 
 // =====================================================================
@@ -503,7 +513,9 @@ private data class VisibilityInputs(
 internal class CaptureScopeImpl : CaptureScope {
     private var readyA by mutableStateOf(false)
     override val isReadySignaled: Boolean get() = readyA
-    override fun setReady(ready: Boolean) { this.readyA = ready }
+    override fun setReady(ready: Boolean) {
+        this.readyA = ready
+    }
 }
 
 @Composable
