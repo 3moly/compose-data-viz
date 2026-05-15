@@ -132,13 +132,9 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())
             },
-            onVelocitiesUpdate = {
-                state.value = state.value.copy(velocities = it.toPersistentMap())
-            },
             onNodeClick = { },
             settings = s.graphSettings,
             consume = false,
-            simpleCanvas = false,
             io = io,
         )
 

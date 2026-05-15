@@ -73,10 +73,6 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             Image(modifier = Modifier.padding(16.dp), painter = catPainter, contentDescription = "")
         }
     }
-//    val context = LocalPlatformContext.current
-//    val coilImageLoader = remember { ImageLoader(context) }
-//    val shittyAtlas = remember { mutableStateOf<AtlasState?>(null) }
-
     val context = LocalPlatformContext.current
     val coilImageLoader = remember { ImageLoader(context) }
     val shittyAtlas = remember { mutableStateOf<AtlasState?>(null) }
@@ -209,7 +205,6 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
     ) {
         Graph(
             getNodeGroups = { _, _ -> listOf("") },
-            simpleCanvas = false,
             isImmediateReheatOnUpdate = true,
             customPopup = {
                 val cp =
@@ -261,9 +256,6 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
 
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())
-            },
-            onVelocitiesUpdate = {
-                state.value = state.value.copy(velocities = it.toPersistentMap())
             },
             io = io,
         )

@@ -79,9 +79,7 @@ fun <Id, Data> Graph(
     io: CoroutineContext,
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
     onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
-    onVelocitiesUpdate: (Map<Id, Offset>) -> Unit = {},
-    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null,
-    simpleCanvas: Boolean = true
+    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset.Zero) }
@@ -250,7 +248,6 @@ fun <Id, Data> Graph(
 
                 if (coordsCopy != null && velsCopy != null) {
                     onCoordinatesUpdate(coordsCopy)
-                    onVelocitiesUpdate(velsCopy)
                 }
             }
         }
@@ -261,7 +258,6 @@ fun <Id, Data> Graph(
             stateMutex.withLock {
                 if (liveCoordinates.isEmpty()) return@withLock
                 onCoordinatesUpdate(HashMap(liveCoordinates))
-                onVelocitiesUpdate(HashMap(liveVelocities))
             }
         }
     }
