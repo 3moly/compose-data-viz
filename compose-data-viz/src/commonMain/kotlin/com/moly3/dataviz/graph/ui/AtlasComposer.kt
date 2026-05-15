@@ -23,6 +23,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.func.rememberPainterFromComposable
+import com.moly3.dataviz.graph.features.atlas.AtlasLayers
+import com.moly3.dataviz.graph.features.atlas.AtlasState
+import com.moly3.dataviz.graph.features.atlas.AtlasTier
+import com.moly3.dataviz.graph.features.atlas.func.createSvgAtlas
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
@@ -33,33 +37,6 @@ import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.yield
 import kotlin.time.Clock
 
-// =====================================================================
-//  Public API
-// =====================================================================
-
-/**
- * One quality tier of the atlas pyramid.
- *
- * Tiers are independent atlases stacked into [AtlasLayers]. The graph engine
- * resolves an icon key against layers in declared order — put your highest-
- * quality tier first to make it win when it has the key.
- *
- * Typical setup:
- * ```
- * listOf(
- *   AtlasTier("hq", tileSizePx = 128, selection = TopByDistance(12)),
- *   AtlasTier("lq", tileSizePx = 32,  selection = AllVisible),
- * )
- * ```
- */
-@Immutable
-data class AtlasTier(
-    val name: String,
-    val tileSizePx: Int,
-    val selection: TierSelection,
-    val isCircular: Boolean = false,
-    val freezeOnMove: Boolean = false,
-)
 
 /** How a tier picks which nodes to include. */
 sealed interface TierSelection {

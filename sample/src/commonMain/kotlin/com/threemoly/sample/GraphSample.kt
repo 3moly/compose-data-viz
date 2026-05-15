@@ -32,11 +32,11 @@ import coil3.request.allowConversionToBitmap
 import coil3.toBitmap
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.func.rememberPainterFromComposable
-import com.moly3.dataviz.graph.ui.AtlasLayers
-import com.moly3.dataviz.graph.ui.AtlasState
+import com.moly3.dataviz.graph.features.atlas.AtlasLayers
+import com.moly3.dataviz.graph.features.atlas.AtlasState
+import com.moly3.dataviz.graph.features.atlas.func.createAtlasFromUrlsSuspend
+import com.moly3.dataviz.graph.features.atlas.func.createSvgAtlas
 import com.moly3.dataviz.graph.ui.Graph
-import com.moly3.dataviz.graph.ui.createAtlasFromUrlsSuspend
-import com.moly3.dataviz.graph.ui.createSvgAtlas
 import com.moly3.dataviz.sample.resources.Res
 import com.moly3.dataviz.sample.resources.cat
 import com.threemoly.sample.base.graph.GraphState
@@ -204,7 +204,23 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             .background(Color.White.darker(0.5f))
     ) {
         Graph(
-            getNodeGroups = { _, _ -> listOf("") },
+            getNodeGroups = { _, data ->
+                when (data) {
+                    is ObsidianGraphData.Collection -> listOf("collection")
+                    is ObsidianGraphData.CollectionRow -> listOf("row")
+                    is ObsidianGraphData.File -> listOf("file")
+                    is ObsidianGraphData.Tag -> listOf("tag")
+                }
+            },
+            getGroupColor = { groupName ->
+                when (groupName) {
+                    "collection" -> Color.Black
+                    "row" -> Color.Magenta
+                    "file" -> Color.Blue
+                    "tag" -> Color.Cyan
+                    else -> Color.Red
+                }
+            },
             isImmediateReheatOnUpdate = true,
             customPopup = {
                 val cp =

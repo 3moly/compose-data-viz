@@ -4,9 +4,11 @@ import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.func.avaliableCpuProcessors
+import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
 import kotlinx.coroutines.*
+import kotlin.concurrent.Volatile
 import kotlin.math.*
 
 class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
@@ -185,6 +187,96 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             }
         }
         repelJobs.awaitAll()
+
+        // [ADD] In step(), insert a new PHASE 1.5 between PHASE 1 (repulsion) and
+// PHASE 2 (edges). Group cohesion + group-group separation are cheap, O(N+G²).
+// ----------------------------------------------------------------------------
+
+        // --- Phase 1.5: Group magnetization ------------------------------------------
+        val gs = pendingGroupSettings
+        if (gs.enabled && groupCount > 0 && (gs.cohesionForce > 0f || gs.groupSeparation > 0f)) {
+
+            // 1. Compute centroids (single-thread; tiny work compared to repulsion)
+            for (g in 0 until groupCount) {
+                groupCentroidX[g] = 0f
+                groupCentroidY[g] = 0f
+                groupMemberCount[g] = 0
+            }
+            for (i in 0 until nodeCount) {
+                val from = nodeGroupOffset[i]
+                val to   = nodeGroupOffset[i + 1]
+                val px = posX[i]; val py = posY[i]
+                for (k in from until to) {
+                    val gid = nodeGroupId[k]
+                    groupCentroidX[gid] += px
+                    groupCentroidY[gid] += py
+                    groupMemberCount[gid]++
+                }
+            }
+            for (g in 0 until groupCount) {
+                val c = groupMemberCount[g]
+                if (c > 0) {
+                    val inv = 1f / c
+                    groupCentroidX[g] *= inv
+                    groupCentroidY[g] *= inv
+                }
+            }
+
+            // 2. Inter-group separation: push centroids apart (apply to all members)
+            // Precompute per-group nudge vectors so each member just adds them.
+            val sepX = FloatArray(groupCount)
+            val sepY = FloatArray(groupCount)
+            val sepForce = gs.groupSeparation * alpha
+            if (sepForce > 0f && groupCount > 1) {
+                val soft = gs.groupSeparationSoftening
+                val softSq = soft * soft
+                for (a in 0 until groupCount) {
+                    if (groupMemberCount[a] == 0) continue
+                    for (b in a + 1 until groupCount) {
+                        if (groupMemberCount[b] == 0) continue
+                        var dx = groupCentroidX[a] - groupCentroidX[b]
+                        var dy = groupCentroidY[a] - groupCentroidY[b]
+                        var distSq = dx * dx + dy * dy
+                        if (distSq < 0.01f) {
+                            // Deterministic nudge so identical centroids separate
+                            dx = ((a - b) and 0xF).toFloat() * 0.1f + 0.01f
+                            dy = ((a + b) and 0xF).toFloat() * 0.1f + 0.01f
+                            distSq = dx * dx + dy * dy
+                        }
+                        val mag = sepForce / max(distSq, softSq)
+                        val nx = dx * mag
+                        val ny = dy * mag
+                        sepX[a] += nx; sepY[a] += ny
+                        sepX[b] -= nx; sepY[b] -= ny
+                    }
+                }
+            }
+
+            // 3. Apply cohesion (toward own centroid) + separation (centroid-level) to forces
+            val cohesion = gs.cohesionForce * alpha
+            val drag = draggedIdx     // captured from above
+            for (i in 0 until nodeCount) {
+                if (i == drag) continue
+                val from = nodeGroupOffset[i]
+                val to   = nodeGroupOffset[i + 1]
+                if (from == to) continue
+                val px = posX[i]; val py = posY[i]
+                var fx = 0f; var fy = 0f
+                // Average cohesion vector across all groups this node belongs to.
+                // (For single-group nodes this collapses to the simple case.)
+                val memberships = to - from
+                for (k in from until to) {
+                    val gid = nodeGroupId[k]
+                    fx += (groupCentroidX[gid] - px) * cohesion
+                    fy += (groupCentroidY[gid] - py) * cohesion
+                    fx += sepX[gid]
+                    fy += sepY[gid]
+                }
+                val invM = 1f / memberships
+                forceX[i] += fx * invM
+                forceY[i] += fy * invM
+            }
+        }
 
         // -------------------------------------------------------------
         // PHASE 2: EDGE-PARALLEL spring forces.
@@ -433,6 +525,24 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         ids.clear()
         idToIndex.clear()
 
+
+        nodeCount = n
+
+        // Invalidate hubScale cache on structural change
+        if (structureChanged) {
+            lastHubExponent = Float.NaN
+        }
+
+        // Dynamic alpha decay scaling
+        if (nodeCount > 0) {
+            alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+                .coerceIn(0.02f, 0.08f)
+        }
+
+        // [MOVED] Group sync runs LAST so nodeCount is correct and posX/posY are
+        // already populated. Pass `n` explicitly to be defensive.
+        syncGroupsInternal(graphNodes, n)
+
         for (i in 0 until n) {
             val node = graphNodes[i]
             ids.add(node.id)
@@ -526,5 +636,191 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
                 .coerceIn(0.02f, 0.08f)
         }
+    }
+
+    // ============================================================================
+// PATCH: UltraFastEngine.kt — add group magnetization
+// ============================================================================
+// Add these fields, methods, and code blocks to your existing UltraFastEngine.
+// I've marked every insertion point clearly with // [ADD] comments.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// [ADD] Imports at top of file (alongside existing ones)
+// ----------------------------------------------------------------------------
+// import com.moly3.dataviz.core.graph.model.GroupSettings
+
+
+// ----------------------------------------------------------------------------
+// [ADD] Inside class UltraFastEngine<Id, Data>, with the other SoA fields:
+// ----------------------------------------------------------------------------
+
+    // Group membership stored as flat CSR to support nodes-in-multiple-groups.
+// nodeGroupOffset[i]..nodeGroupOffset[i+1] indexes into nodeGroupId for node i.
+    private var nodeGroupOffset = IntArray(1)
+    private var nodeGroupId    = IntArray(0)   // global integer group ids
+    private var groupCount     = 0
+    private var groupIdToString: Array<String> = emptyArray()   // index -> raw groupId string
+
+    // Per-group running aggregates (rebuilt cheaply each step that uses cohesion)
+    private var groupCentroidX = FloatArray(0)
+    private var groupCentroidY = FloatArray(0)
+    private var groupMemberCount = IntArray(0)
+
+    // Last-seen signature so we know when to rebuild group SoA + reheat.
+    private var lastGroupSignature = 0
+
+
+// ----------------------------------------------------------------------------
+// [ADD] New parameter to step() OR (cleaner) add a setter — pick whichever
+// matches the rest of your engine's API. Below I show the setter approach,
+// which avoids touching IGraphEngine.step's signature.
+// ----------------------------------------------------------------------------
+
+    // Latest group data handed in from Compose layer. Treated as immutable per-step.
+    @Volatile private var pendingGroupResolver: ((Int) -> List<String>)? = null
+    @Volatile
+    private var pendingGroupSettings: GroupSettings = GroupSettings()
+
+    /** Call from the Composable BEFORE step(). Cheap; just swaps references. */
+    fun setGroupData(
+        groupsForNodeIndex: ((Int) -> List<String>)?,   // index in `graphNodes` -> groupIds
+        settings: GroupSettings
+    ) {
+        pendingGroupResolver = groupsForNodeIndex
+        pendingGroupSettings = settings
+    }
+
+
+// ----------------------------------------------------------------------------
+// [ADD] In syncData(...), AFTER the edge list is built and `nodeCount = n`,
+// insert the group sync. (i.e. just before "if (structureChanged)" near the end.)
+// ----------------------------------------------------------------------------
+
+// --- Group SoA sync ---
+
+
+
+// ----------------------------------------------------------------------------
+// [ADD] New private method on the class:
+// ----------------------------------------------------------------------------
+
+    private fun syncGroupsInternal(graphNodes: List<GraphNode<Id, Data>>, n: Int) {
+        val resolver = pendingGroupResolver
+
+        if (resolver == null || !pendingGroupSettings.enabled || n == 0) {
+            // Groups disabled or empty graph — make sure offset array still has
+            // a valid sentinel so Phase 1.5's `nodeGroupOffset[i+1]` read is safe
+            // even if someone re-enables groups mid-run.
+            if (nodeGroupOffset.size < n + 1) {
+                nodeGroupOffset = IntArray((n + 1).coerceAtLeast(1))
+            }
+            for (i in 0..n) nodeGroupOffset[i] = 0   // all empty ranges
+            groupCount = 0
+            return
+        }
+
+        // First pass: collect distinct group ids in stable insertion order,
+        // count membership entries.
+        val nameToId = HashMap<String, Int>()
+        val names = ArrayList<String>()
+        var totalEntries = 0
+        val perNode = arrayOfNulls<List<String>>(n)
+
+        for (i in 0 until n) {
+            val list = resolver(i)
+            perNode[i] = list
+            for (gName in list) {
+                if (gName !in nameToId) { // or !nameToId.containsKey(gName)
+                    nameToId[gName] = names.size
+                    names.add(gName)
+                }
+                totalEntries++
+            }
+        }
+
+        val g = names.size
+
+        // Signature: only reheat if it actually changed.
+        var sig = g * 1_000_003 + totalEntries
+        for (i in 0 until n) sig = sig * 31 + (perNode[i]?.size ?: 0)
+        val groupsChanged = sig != lastGroupSignature
+        lastGroupSignature = sig
+
+        // [FIX] Grow nodeGroupOffset to (n+1), not n.  The previous version
+        // checked `< n + 1` which is correct, but the initial field declaration
+        // is `IntArray(1)`, so the very first call must grow it.  We just make
+        // the growth more aggressive to amortize reallocation.
+        if (nodeGroupOffset.size < n + 1) {
+            nodeGroupOffset = IntArray((n + 1).coerceAtLeast(16))
+        }
+        if (nodeGroupId.size < totalEntries) {
+            nodeGroupId = IntArray(totalEntries.coerceAtLeast(16))
+        }
+        if (groupCentroidX.size < g) {
+            val cap = g.coerceAtLeast(8)
+            groupCentroidX   = FloatArray(cap)
+            groupCentroidY   = FloatArray(cap)
+            groupMemberCount = IntArray(cap)
+        }
+
+        var w = 0
+        for (i in 0 until n) {
+            nodeGroupOffset[i] = w
+            val list = perNode[i] ?: continue
+            for (gName in list) {
+                nodeGroupId[w++] = nameToId[gName]!!
+            }
+        }
+        nodeGroupOffset[n] = w       // sentinel — required for `[i+1]` reads in Phase 1.5
+        groupCount = g
+        groupIdToString = Array(g) { names[it] }
+
+        if (groupsChanged) reheat(0.4f)
+    }
+
+
+// ----------------------------------------------------------------------------
+
+// --- end Phase 1.5 -----------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// [ADD] Public read-only snapshot accessors for the hull builder.
+// These must be lock-free and stable enough for an off-thread reader:
+// we return defensive copies of just what's needed.
+// ----------------------------------------------------------------------------
+
+    /** Snapshot of (groupId, [(x,y) for each member node]) for hull computation. */
+    fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>> {
+        val g = groupCount
+        if (g == 0 || nodeCount == 0) return emptyList()
+
+        // First, count members per group from current CSR
+        val counts = IntArray(g)
+        for (i in 0 until nodeCount) {
+            val from = nodeGroupOffset[i]
+            val to   = nodeGroupOffset[i + 1]
+            for (k in from until to) counts[nodeGroupId[k]]++
+        }
+        val pts = Array(g) { FloatArray(counts[it] * 2) }
+        val wIdx = IntArray(g)
+        for (i in 0 until nodeCount) {
+            val from = nodeGroupOffset[i]
+            val to   = nodeGroupOffset[i + 1]
+            val px = posX[i]; val py = posY[i]
+            for (k in from until to) {
+                val gid = nodeGroupId[k]
+                val w = wIdx[gid]
+                pts[gid][w]     = px
+                pts[gid][w + 1] = py
+                wIdx[gid] = w + 2
+            }
+        }
+        val out = ArrayList<Pair<String, FloatArray>>(g)
+        for (gi in 0 until g) {
+            if (counts[gi] > 0) out.add(groupIdToString[gi] to pts[gi])
+        }
+        return out
     }
 }

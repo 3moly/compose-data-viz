@@ -2,7 +2,6 @@ package com.threemoly.sample.base.graph
 
 import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.graph.model.GraphSettings
-import com.moly3.dataviz.core.graph.model.GraphViewSettings
 import com.moly3.dataviz.graph.func.GraphPresets
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -16,15 +15,7 @@ data class GraphState(
     val connections: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
     val zoom: Float = 1f,
     val graphUserPosition: Offset = Offset.Zero,
-
-    /**
-     * Full graph settings (theme, selection, edges, text, zoom, watch, physics).
-     * Defaults to massive-physics preset + default visuals.
-     */
-    val graphSettings: GraphSettings = GraphSettings.Default.copy(
-        view = GraphPresets.massive()
-    ),
-
+    val graphSettings: GraphSettings = GraphSettings.Default.copy(view = GraphPresets.massive()),
     val coordinates: ImmutableMap<String, Offset> = persistentMapOf(),
     val velocities: ImmutableMap<String, Offset> = persistentMapOf(),
 )

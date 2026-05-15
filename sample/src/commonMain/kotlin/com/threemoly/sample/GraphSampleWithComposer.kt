@@ -1,6 +1,5 @@
 package com.threemoly.sample
 
-import com.moly3.dataviz.graph.ui.AtlasTier
 import com.moly3.dataviz.graph.ui.TierSelection
 import com.moly3.dataviz.graph.ui.rememberAtlasComposer
 import kotlinx.collections.immutable.toPersistentMap
@@ -39,6 +38,7 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.request.transformations
+import com.moly3.dataviz.graph.features.atlas.AtlasTier
 import com.moly3.dataviz.graph.ui.Graph
 import com.threemoly.sample.base.graph.GraphState
 import com.threemoly.sample.base.graph.ObsidianGraphData
@@ -68,7 +68,12 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
             // High Quality: Only top 20, freeze during movement to save CPU/GPU
             AtlasTier("hq", tileSizePx = 128, selection = TierSelection.TopByDistance(20), freezeOnMove = true),
             // Low Quality: Broad fallback, updates while moving (throttled to 10fps by our LaunchedEffect)
-            AtlasTier("lq", tileSizePx = 32, selection = TierSelection.AllVisible, freezeOnMove = false)
+            AtlasTier(
+                "lq",
+                tileSizePx = 32,
+                selection = TierSelection.AllVisible,
+                freezeOnMove = false
+            )
         ),
         staticIcons = staticIcons,
         staticIconKey = { id, data ->

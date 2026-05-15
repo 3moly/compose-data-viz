@@ -2,23 +2,8 @@ package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.text.TextStyle
+import com.moly3.dataviz.core.graph.hull.GroupSettings
 
-/**
- * Top-level container that bundles every customizable aspect of the graph.
- *
- * Each field is a focused settings group, so callers can override one slice
- * (e.g. just colors via [theme]) without touching the rest.
- *
- * Use [Default] for sensible defaults, then `.copy(...)` to tweak.
- *
- * Example:
- * ```
- * GraphSettings.Default.copy(
- *     theme = GraphTheme.Dark,
- *     selection = GraphSelectionSettings.Default.copy(scaleOnHover = 2f)
- * )
- * ```
- */
 @Immutable
 data class GraphSettings(
     val view: GraphViewSettings = GraphViewSettings.Default,
@@ -29,6 +14,7 @@ data class GraphSettings(
     val zoom: GraphZoomSettings = GraphZoomSettings.Default,
     val watch: GraphWatchSettings = GraphWatchSettings.Default,
     val textStyle: TextStyle = TextStyle.Default,
+    val groupSettings: GroupSettings = GroupSettings()
 ) {
     companion object {
         val Default = GraphSettings()

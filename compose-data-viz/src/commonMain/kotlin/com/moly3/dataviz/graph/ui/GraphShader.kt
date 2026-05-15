@@ -2,9 +2,6 @@ package com.moly3.dataviz.graph.ui
 
 import com.moly3.shaders.Shader
 
-/**
- * Builds a node shader for [layerCount] atlas layers.
- */
 class GraphShader(val layerCount: Int) : Shader {
 
     init {

@@ -5,4 +5,5 @@ class VisibleTextData {
     var distSq: Float = 0f
     var screenX: Float = 0f
     var screenY: Float = 0f
+    var forced: Boolean = false
 }

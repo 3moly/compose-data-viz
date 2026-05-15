@@ -52,6 +52,7 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.foundation)
             implementation(libs.serialization)
+            implementation(libs.immutablelist)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

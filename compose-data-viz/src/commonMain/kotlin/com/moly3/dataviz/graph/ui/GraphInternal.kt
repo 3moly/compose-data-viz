@@ -3,7 +3,6 @@ package com.moly3.dataviz.graph.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -32,69 +31,21 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import com.moly3.dataviz.core.graph.hull.GroupHull
+import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.func.half
+import com.moly3.dataviz.graph.features.atlas.AtlasLayers
+import com.moly3.dataviz.graph.features.atlas.AtlasLookup
+import com.moly3.dataviz.graph.features.atlas.NodeStaticData
+import com.moly3.dataviz.graph.func.approach
 import com.moly3.dataviz.graph.func.getNodeConnections
 import com.moly3.shaders.buildEffect
 import com.moly3.shaders.drawVertices2
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.ImmutableMap
-import kotlinx.collections.immutable.persistentListOf
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.time.Clock
-
-@Immutable
-data class AtlasState(
-    val bitmap: ImageBitmap,
-    val indexMap: ImmutableMap<String, Int>,
-    val columns: Int,
-    val tileSizePx: Int,
-    val isCircular: Boolean = true,
-    val version: Long = Clock.System.now().toEpochMilliseconds()
-)
-
-@Immutable
-data class AtlasLayers(
-    val layers: ImmutableList<AtlasState>
-) {
-    fun resolve(key: String): AtlasLookup? {
-        for (i in layers.indices) {
-            val idx = layers[i].indexMap[key]
-            if (idx != null) return AtlasLookup(layerIndex = i, tileIndex = idx)
-        }
-        return null
-    }
-
-    val isEmpty: Boolean get() = layers.isEmpty()
-    val combinedVersion: Long get() = layers.fold(0L) { acc, a -> acc * 31 + a.version }
-
-    companion object {
-        val EMPTY = AtlasLayers(persistentListOf())
-    }
-}
-
-@Immutable
-data class AtlasLookup(
-    val layerIndex: Int,
-    val tileIndex: Int
-)
-
-fun approach(current: Float, target: Float, rate: Float, dtSec: Float): Float {
-    if (current == target) return target
-    val step = rate * dtSec
-    return if (current < target) min(current + step, target)
-    else max(current - step, target)
-}
-
-// NEW: Data class to cache expensive invariants for nodes
-@Immutable
-private class NodeStaticData(
-    val baseRadius: Float,
-    val baseColor: Color,
-    val iconLookup: AtlasLookup?
-)
 
 @Composable
 internal fun <Id, Data> GraphInternal(
@@ -109,6 +60,10 @@ internal fun <Id, Data> GraphInternal(
     draggedNodeId: Id?,
     cursorNodeId: Id?,
     watchNodeId: Id?,
+
+    hulls: ImmutableList<GroupHull>,
+    groupSettings: GroupSettings,
+
     movementOffset: Offset,
     zoom: Float,
     customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
@@ -183,6 +138,24 @@ internal fun <Id, Data> GraphInternal(
         }
     }
 
+    // Cache hull label layouts so we don't re-measure every frame.
+    val hullLabelSignature = remember(hulls) {
+        var h = hulls.size
+        for (i in hulls.indices) {
+            val hull = hulls[i]
+            h = h * 31 xor hull.groupId.hashCode()
+            h = h * 31 xor hull.label.hashCode()
+        }
+        h
+    }
+
+    val hullLabelLayouts = remember(hullLabelSignature, baseTextStyle, textCfg.normalFontSize) {
+        val style = baseTextStyle.copy(fontSize = textCfg.normalFontSize)
+        hulls.associate { hull ->
+            hull.groupId to textMeasurer.measure(text = hull.label, style = style)
+        }
+    }
+
     val activeNodeId: Id? = draggedNodeId ?: cursorNodeId
 
     val activeNodeTextLayout = remember(
@@ -208,7 +181,7 @@ internal fun <Id, Data> GraphInternal(
         while (it.hasNext()) if (it.next() !in currentIds) it.remove()
     }
 
-    // NEW: Pre-calculate static visual data for nodes so we don't recalculate it inside Canvas every frame
+    // Pre-calculate static visual data for nodes so we don't recalculate it inside Canvas every frame
     val staticNodeData =
         remember(nodes, connections, atlasLayers, theme, circleRadius, circleSizeMultiplier) {
             Array(nodes.size) { i ->
@@ -464,6 +437,37 @@ internal fun <Id, Data> GraphInternal(
                 scale(animZoom, animZoom)
                 translate(center.x + movementOffset.x, center.y + movementOffset.y)
             }) {
+                // -------- Group hulls (background layer) -----------------------------
+                if (groupSettings.enabled && hulls.isNotEmpty()) {
+                    val strokePx = (groupSettings.hullStrokeWidth / animZoom).coerceAtLeast(0.5f)
+                    val stroke = Stroke(
+                        width = strokePx,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                    )
+
+                    for (i in hulls.indices) {
+                        val h = hulls[i]
+                        // Fast bounds-cull: skip hulls fully outside the visible rect.
+                        val bounds = h.path.getBounds()
+                        if (bounds.right < cullL || bounds.left > cullR ||
+                            bounds.bottom < cullT || bounds.top > cullB
+                        ) continue
+
+                        if (groupSettings.hullFill) {
+                            drawPath(
+                                path = h.path,
+                                color = h.color.copy(alpha = h.color.alpha * groupSettings.hullFillAlpha),
+                            )
+                        }
+                        drawPath(
+                            path = h.path,
+                            color = h.color,
+                            style = stroke,
+                        )
+                    }
+                }
+
                 if (drawEdges) {
                     val strokeNormal = edgeCfg.strokeWidth / animZoom
                     val strokeHighlight =
@@ -557,12 +561,52 @@ internal fun <Id, Data> GraphInternal(
                 drawCircle(color = theme.accentColor, radius = 1f / animZoom, center = Offset.Zero)
             }
 
+            // -------- Hull labels (screen-space, drawn above nodes) ------------------
+            if (drawText && groupSettings.enabled && hulls.isNotEmpty()) {
+                for (i in hulls.indices) {
+                    val h = hulls[i]
+                    val layout = hullLabelLayouts[h.groupId] ?: continue
+
+                    val sx = (h.labelAnchor.x + movementOffset.x) * animZoom + centerX
+                    val sy = (h.labelAnchor.y + movementOffset.y) * animZoom + centerY - 18f
+
+                    // Cull off-screen labels
+                    if (sx + layout.size.width < 0f || sx - layout.size.width > canvasW ||
+                        sy + layout.size.height < 0f || sy - layout.size.height > canvasH
+                    ) continue
+
+                    val topLeft = Offset(
+                        sx - layout.size.width / 2f,
+                        sy - layout.size.height / 2f
+                    )
+
+                    drawText(
+                        textLayoutResult = layout,
+                        topLeft = topLeft,
+                        color = h.color,
+                    )
+                }
+            }
+
             if (drawText) {
+                // Active node + its direct connections must always render text,
+                // regardless of the maxTextsAtCenterVisible budget.
+                val forceVisibleSet: Set<Id> = if (activeNodeId != null) {
+                    val conns = connections[activeNodeId]
+                    if (conns.isNullOrEmpty()) setOf(activeNodeId)
+                    else HashSet<Id>(conns.size + 1).apply {
+                        add(activeNodeId)
+                        addAll(conns)
+                    }
+                } else emptySet()
+
                 var visibleTextCount = 0
 
                 for (i in nodes.indices) {
                     val node = nodes[i]
+                    // Active node is rendered by the pill/popup path below — skip here.
                     if (activeNodeId == node.id) continue
+
                     val pos = coordinates[node.id] ?: continue
                     if (pos.x < cullL || pos.x > cullR || pos.y < cullT || pos.y > cullB) continue
 
@@ -584,12 +628,20 @@ internal fun <Id, Data> GraphInternal(
                     data.distSq = distSq
                     data.screenX = screenX
                     data.screenY = screenY
+                    data.forced = node.id in forceVisibleSet
                 }
 
                 val activeVisibleTexts = visibleTextsPool.subList(0, visibleTextCount)
-                activeVisibleTexts.sortBy { it.distSq }
+                // Forced labels first, then by distance to center.
+                activeVisibleTexts.sortWith(
+                    compareByDescending<VisibleTextData> { it.forced }.thenBy { it.distSq }
+                )
 
-                val limit = min(visibleTextCount, maxTextsAtCenterVisible)
+                // Honor the forced set even if it exceeds maxTextsAtCenterVisible;
+                // selection clarity beats the cap.
+                val forcedCount = forceVisibleSet.count { it != activeNodeId && it in nodeById }
+                val limit = min(visibleTextCount, max(maxTextsAtCenterVisible, forcedCount))
+
                 val zoomFadeStart = textCfg.visibilityZoomThreshold
                 val zoomFadeWidth = textCfg.visibilityZoomFadeWidth
 
@@ -604,7 +656,10 @@ internal fun <Id, Data> GraphInternal(
                     val nodeRadius = staticNodeData[nodeIndex].baseRadius
                     val nodeTextAlpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
                     val zoomAlpha = ((animZoom - zoomFadeStart) / zoomFadeWidth).coerceIn(0f, 1f)
-                    val finalAlpha = (nodeTextAlpha * zoomAlpha).coerceIn(0f, 1f)
+                    // Forced labels bypass the zoom-fade so they stay visible
+                    // when the user is interacting with a selection.
+                    val effectiveZoomAlpha = if (textData.forced) 1f else zoomAlpha
+                    val finalAlpha = (nodeTextAlpha * effectiveZoomAlpha).coerceIn(0f, 1f)
                     if (finalAlpha < 0.01f) continue
 
                     val pivotX = screenPos.x

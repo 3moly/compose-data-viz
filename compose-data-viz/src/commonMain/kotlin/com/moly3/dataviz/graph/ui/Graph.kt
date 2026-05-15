@@ -3,7 +3,9 @@ package com.moly3.dataviz.graph.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -22,12 +24,17 @@ import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
+import com.moly3.dataviz.core.graph.hull.GroupHullController
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
+import com.moly3.dataviz.graph.features.atlas.AtlasLayers
 import com.moly3.dataviz.graph.func.InitialLayout
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -38,18 +45,6 @@ import kotlin.collections.set
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
 
-/**
- * Interactive force-directed graph.
- *
- * All visual + behavioural tuning lives on [settings] — see [GraphSettings] for the full
- * surface and sensible defaults. Pass `GraphSettings.Default` to get started.
- */
-/**
- * Interactive force-directed graph.
- *
- * All visual + behavioural tuning lives on [settings] — see [GraphSettings] for the full
- * surface and sensible defaults. Pass `GraphSettings.Default` to get started.
- */
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
@@ -63,8 +58,8 @@ fun <Id, Data> Graph(
     getIconKey: (Id, Data) -> String? = { _, _ -> null },
 
     getNodeGroups: (Id, Data) -> List<String> = { _, _ -> emptyList() },
-    // NEW: Map a group ID to a color. Use transparency (e.g., alpha = 0.3f)
     getGroupColor: (String) -> Color = { Color(0x4D00BFFF) },
+    getGroupName: (String) -> String = { "group label" },
 
     isImmediateReheatOnUpdate: Boolean = false,
 
@@ -100,6 +95,47 @@ fun <Id, Data> Graph(
     val latestNodes by rememberUpdatedState(stateNodes)
     val latestConnections by rememberUpdatedState(connections)
     val latestDragged by rememberUpdatedState(draggedNodeState)
+
+    // Hull controller — survives recomposition, ties to a long-lived scope.
+    val hullController = remember { GroupHullController(io) }
+    DisposableEffect(hullController) {
+        val scope = CoroutineScope(SupervisorJob() + io)
+        hullController.start(scope)
+        onDispose {
+            hullController.stop()
+            scope.cancel()
+        }
+    }
+
+    val hulls by hullController.hulls.collectAsState()
+    val groupResolver: (Int) -> List<String> = remember(stateNodes) {
+        { i ->
+            val node = stateNodes[i]
+            getNodeGroups(node.id, node.data)
+        }
+    }
+    val groupSettings = settings.groupSettings
+    // Push group data into the engine BEFORE each step. The engine reads it
+// inside syncData(). Since this is just two reference writes, doing it on
+// recomposition is fine.
+    LaunchedEffect(engine, groupSettings, stateNodes) {
+        (engine as? UltraFastEngine<Id, Data>)?.setGroupData(
+            groupsForNodeIndex = if (groupSettings.enabled) groupResolver else null,
+            settings = groupSettings,
+        )
+    }
+// Drive hull recompute on a configurable cadence.
+// We rebuild more often while the engine is hot, then idle out.
+    LaunchedEffect(hullController, engine, groupSettings, getGroupColor) {
+        if (!groupSettings.enabled) return@LaunchedEffect
+        val ultra = engine as? UltraFastEngine<Id, Data> ?: return@LaunchedEffect
+        while (isActive) {
+            val interval = if (ultra.isAsleep) groupSettings.hullSettledIntervalMs
+            else groupSettings.hullRecomputeIntervalMs
+            hullController.submit(ultra, getGroupName, getGroupColor, groupSettings)
+            delay(interval)
+        }
+    }
 
     LaunchedEffect(stateNodes) {
         if (stateNodes.isEmpty()) return@LaunchedEffect
@@ -262,7 +298,6 @@ fun <Id, Data> Graph(
         }
     }
 
-    // FIX 1: Corrected Hit Test Math
     fun hitTest(tapOffset: Offset): GraphNode<Id, Data>? {
         // Removed the negative sign. Rendering ADDS userPosition, so bounds testing must as well.
         val cameraOffset = latestUserPosition
@@ -380,6 +415,8 @@ fun <Id, Data> Graph(
         movementOffset = userPosition,
         zoom = zoom,
         watchNodeId = watchNodeId,
-    )
 
+        hulls = hulls,
+        groupSettings = groupSettings,
+    )
 }
