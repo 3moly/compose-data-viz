@@ -61,7 +61,7 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
         tiers = listOf(
 //            AtlasTier("hq", tileSizePx = 256, selection = TierSelection.TopByDistance(2)),
 //            AtlasTier("hq", tileSizePx = 12, selection = TierSelection.TopByDistance(2)),
-            AtlasTier("lq", tileSizePx = 256,  selection = TierSelection.All),
+            AtlasTier("lq", tileSizePx = 48,  selection = TierSelection.All),
         ),
         viewport = viewport,
         userPosition = s.graphUserPosition,
