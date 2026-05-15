@@ -1,4 +1,4 @@
-package com.threemoly.sample.base.uikit
+package com.threemoly.sample
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.threemoly.sample.base.uikit.ObsSlider
+import com.threemoly.sample.base.uikit.ObsText
 
 // =====================================================================================
 // Section — collapsible group of settings with a header

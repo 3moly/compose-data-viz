@@ -27,7 +27,4 @@ data class GraphState(
 
     val coordinates: ImmutableMap<String, Offset> = persistentMapOf(),
     val velocities: ImmutableMap<String, Offset> = persistentMapOf(),
-) {
-    /** Convenience accessor for code that only needs physics. */
-    val graphViewSettings: GraphViewSettings get() = graphSettings.view
-}
+)

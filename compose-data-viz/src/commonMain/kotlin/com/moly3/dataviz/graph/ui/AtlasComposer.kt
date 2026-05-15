@@ -23,9 +23,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.func.rememberPainterFromComposable
-import com.moly3.dataviz.graph.ui.AtlasLayers
-import com.moly3.dataviz.graph.ui.AtlasState
-import com.moly3.dataviz.graph.ui.createSvgAtlas
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
@@ -33,7 +30,6 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.yield
 import kotlin.time.Clock
 
@@ -64,9 +60,12 @@ data class AtlasTier(
     val isCircular: Boolean = false,
 )
 
-/** How a tier picks which visible nodes to include. */
+/** How a tier picks which nodes to include. */
 sealed interface TierSelection {
-    /** Include every visible node. Cheap, broad LQ fallback. */
+    /** Include every node in the input list — visible or not. Use for full pre-bake. */
+    data object All : TierSelection
+
+    /** Include every currently-visible node. Cheap, broad LQ fallback. */
     data object AllVisible : TierSelection
 
     /** Include only the [count] closest visible nodes (by squared screen distance to center). */
@@ -103,7 +102,14 @@ class AtlasComposerHandle<Id, Data> internal constructor(
 /**
  * Build a tiered atlas from per-node composable content.
  *
- * @param nodes the full node list (composer culls to viewport internally).
+ * Icon-source classification (per node) is driven by [staticIconKey]:
+ *  - returns `null`         → color-only node, no icon, no capture
+ *  - returns key in [staticIcons] → use that bundled static icon
+ *  - returns key NOT in [staticIcons] → render [content] for the node and
+ *    record it into the tier atlases under that key
+ *
+ * @param nodes the full node list (composer culls to viewport internally,
+ *   except for tiers using [TierSelection.All]).
  * @param tiers ordered quality tiers, highest priority first.
  * @param viewport current laid-out size; pass [IntSize.Zero] until measured.
  * @param userPosition the graph's pan offset.
@@ -111,13 +117,13 @@ class AtlasComposerHandle<Id, Data> internal constructor(
  * @param coordinates current node positions.
  * @param staticIcons keyed painters always present in a bottom-priority layer.
  *   Use for stable bundled icons (folder/tag/note).
- * @param staticIconKey for nodes without per-node content, return their key into [staticIcons].
+ * @param staticIconKey see classification rules above.
  * @param captureSizePx pixel size of off-screen render surface. Should exceed
  *   the largest tier tile size — bigger gives the atlas headroom to downscale.
  * @param visibilityPaddingPx off-viewport buffer kept "visible".
  * @param visibilityDebounceMs debounce on pan/zoom before recomputing visibility.
- * @param content composable rendered off-screen per visible node. Call
- *   `setReady(true)` once async loads inside it finish.
+ * @param content composable rendered off-screen per visible composable-typed
+ *   node. Call `setReady(true)` once async loads inside it finish.
  */
 @Composable
 fun <Id, Data> rememberAtlasComposer(
@@ -204,9 +210,26 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
     // ----- visibility -----
     private var visibleNodeIds by mutableStateOf<ImmutableList<Id>>(persistentListOf())
 
+    // Composable-classified visible nodes, sorted nearest-first. This is the
+    // pool that tier selections (TopByDistance / AllVisible) draw from, so
+    // slots in a small tier like `hq` never get wasted on color-only or
+    // static-icon nodes that don't need a composable capture in the first place.
+    private var composableVisibleByDistance by mutableStateOf<ImmutableList<Id>>(persistentListOf())
+
     // ----- captured painters keyed by node id -----
     private val capturedPainters = mutableStateMapOf<Id, Painter>()
     private var captureVersion by mutableStateOf(0)
+
+    /**
+     * Classify a node's icon source. Centralizing this here keeps capture mounting,
+     * tier inclusion, and key resolution in lockstep — they all must agree about
+     * whether a node is color-only, static, or composable.
+     */
+    private fun classifyNode(node: GraphNode<Id, Data>): NodeIconKind {
+        val key = staticIconKey(node.id, node.data) ?: return NodeIconKind.ColorOnly
+        return if (staticIcons.containsKey(key)) NodeIconKind.Static(key)
+        else NodeIconKind.Composable
+    }
 
     fun recomputeVisibility() {
         val size = viewport
@@ -233,7 +256,7 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         val ids: ImmutableList<Id> = if (scored.isEmpty() && nodes.isNotEmpty()) {
             val maxFallback = (tiers.maxOfOrNull {
                 when (val sel = it.selection) {
-                    TierSelection.AllVisible -> 60
+                    TierSelection.All, TierSelection.AllVisible -> 60
                     is TierSelection.TopByDistance -> sel.count
                 }
             } ?: 60).coerceAtLeast(1)
@@ -244,7 +267,28 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
 
         if (ids != visibleNodeIds) visibleNodeIds = ids
 
-        val keep = ids.toHashSet()
+        // Build the composable-only nearest-first list. Cheap: classifyNode is
+        // O(1) and `ids` is already distance-sorted.
+        val nodesById = nodes.associateBy { it.id }
+        val composables = ArrayList<Id>(ids.size)
+        for (id in ids) {
+            val node = nodesById[id] ?: continue
+            if (classifyNode(node) is NodeIconKind.Composable) composables += id
+        }
+        val composableList = composables.toImmutableList()
+        if (composableList != composableVisibleByDistance) {
+            composableVisibleByDistance = composableList
+        }
+
+        // Retain captures for currently-visible *or* All-tier nodes. If a tier
+        // uses `All`, we still want its capture to survive panning that takes a
+        // node off-screen — otherwise it would vanish from that tier's atlas.
+        val needAllNodes = tiers.any { it.selection is TierSelection.All }
+        val keep: HashSet<Id> = if (needAllNodes) {
+            HashSet<Id>(nodes.size).also { set -> nodes.forEach { set.add(it.id) } }
+        } else {
+            ids.toHashSet()
+        }
         if (capturedPainters.keys.retainAll(keep)) captureVersion++
     }
 
@@ -252,9 +296,28 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
     fun MountCaptureHolders() {
         val contentFn = contentLambda ?: return
         val sizePx = captureSizePx
+
+        // Capture mounts must cover BOTH visible nodes (for visible-only tiers)
+        // and every node referenced by an `All` tier. Only `Composable` nodes
+        // need a capture — color-only and static-icon nodes are handled
+        // elsewhere (color = no atlas, static = staticIcons layer).
+        val hasAllTier = tiers.any { it.selection is TierSelection.All }
+        val mountIds: List<Id> = if (hasAllTier) {
+            // Visible first (so they render sooner under the snapshot scheduler),
+            // then the rest of the list de-duplicated.
+            val seen = HashSet<Id>()
+            buildList {
+                for (id in visibleNodeIds) if (seen.add(id)) add(id)
+                for (node in nodes) if (seen.add(node.id)) add(node.id)
+            }
+        } else {
+            visibleNodeIds
+        }
+
         Box(Modifier.size(0.dp)) {
-            visibleNodeIds.forEach { id ->
+            mountIds.forEach { id ->
                 val node = nodes.firstOrNull { it.id == id } ?: return@forEach
+                if (classifyNode(node) !is NodeIconKind.Composable) return@forEach
                 key(id) {
                     CaptureHolder(
                         node = node,
@@ -272,6 +335,13 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         }
     }
 
+    // Per-tier atlas memoization. Keyed by (selected ids order, painter
+    // identities, tileSize, isCircular). When `nodes` changes but the selected
+    // set + painter references don't, this short-circuits the `createSvgAtlas`
+    // call and returns the previously-built AtlasState — same `version`, same
+    // bitmap reference, so downstream consumers see no change either.
+    private val tierAtlasCache = HashMap<String, TierAtlasCacheEntry>()
+
     val atlasLayers: AtlasLayers by derivedStateOf {
         @Suppress("UNUSED_VARIABLE")
         val v = captureVersion
@@ -285,23 +355,60 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
     }
 
     private fun buildTierAtlas(tier: AtlasTier): AtlasState? {
-        val selected: List<Id> = when (val sel = tier.selection) {
-            TierSelection.AllVisible -> visibleNodeIds
-            is TierSelection.TopByDistance -> visibleNodeIds.take(sel.count)
+        // Pick the candidate id list for this tier. For visible-based tiers we
+        // draw from `composableVisibleByDistance` so slots are spent only on
+        // nodes that need composable rendering — color/static nodes can't burn
+        // an `hq` slot and starve a further-out composable node.
+        val candidates: List<Id> = when (val sel = tier.selection) {
+            TierSelection.All -> {
+                // Filter the full list to composable nodes (color/static don't
+                // belong in tier atlases at all).
+                val out = ArrayList<Id>(nodes.size)
+                for (node in nodes) {
+                    if (classifyNode(node) is NodeIconKind.Composable) out += node.id
+                }
+                out
+            }
+            TierSelection.AllVisible -> composableVisibleByDistance
+            is TierSelection.TopByDistance -> composableVisibleByDistance.take(sel.count)
         }
-        if (selected.isEmpty()) return null
+        if (candidates.isEmpty()) return null
 
-        val indexes = mutableMapOf<String, Int>()
-        val painters = mutableListOf<Painter>()
-        for (id in selected) {
+        // Resolve to (id, painter) pairs. Skip ids whose painter hasn't been
+        // captured yet — they'll appear once their CaptureHolder reports back.
+        val selected = ArrayList<Id>(candidates.size)
+        val painters = ArrayList<Painter>(candidates.size)
+        for (id in candidates) {
             val p = capturedPainters[id] ?: continue
-            indexes[atlasKey(tier.name, id)] = painters.size
+            selected += id
             painters += p
         }
         if (painters.isEmpty()) return null
 
+        // Cache lookup. Identity hash of painter list + ordered ids fully
+        // determines the resulting bitmap, so a hit means we can reuse it
+        // bitmap-and-version-identical.
+        val cached = tierAtlasCache[tier.name]
+        if (cached != null
+            && cached.tileSizePx == tier.tileSizePx
+            && cached.isCircular == tier.isCircular
+            && cached.ids == selected
+            && cached.painterIdentities.size == painters.size
+            && painters.indices.all { cached.painterIdentities[it] === painters[it] }
+        ) {
+            return cached.atlas
+        }
+
+        // Each tier registers its painters under the *same* per-node key. The
+        // layer stack then resolves a node's key against tiers in declared
+        // priority order — hq wins when present, otherwise hq1, otherwise lq.
+        // This is what makes mipmap-style quality fallback work: a single key
+        // walks the pyramid until it hits a layer that has it.
+        val indexes = mutableMapOf<String, Int>()
+        for ((i, id) in selected.withIndex()) indexes[nodeKey(id)] = i
+
         val result = createSvgAtlas(painters, density, tier.tileSizePx)
-        return AtlasState(
+        val atlas = AtlasState(
             bitmap = result.imageBitmap,
             indexMap = indexes.toPersistentMap(),
             columns = result.columns,
@@ -309,6 +416,14 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
             isCircular = tier.isCircular,
             version = Clock.System.now().toEpochMilliseconds(),
         )
+        tierAtlasCache[tier.name] = TierAtlasCacheEntry(
+            ids = selected.toList(),
+            painterIdentities = painters.toList(),
+            tileSizePx = tier.tileSizePx,
+            isCircular = tier.isCircular,
+            atlas = atlas,
+        )
+        return atlas
     }
 
     private var cachedStaticAtlas: Pair<ImmutableMap<String, Painter>, AtlasState>? = null
@@ -335,16 +450,41 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         return atlas
     }
 
+    /**
+     * Three-way resolution:
+     *  1. `staticIconKey` returns null → null (color-only; renderer falls back
+     *     to the node's color).
+     *  2. Key matches a registered static icon → return it (resolved through
+     *     the static layer).
+     *  3. Otherwise return the shared per-node key. All tiers register their
+     *     painters under this same key, so `AtlasLayers.resolve` walks tiers
+     *     in declared priority order (hq → hq1 → lq) and returns whichever
+     *     tier currently carries this node.
+     */
     fun resolveIconKey(nodeId: Id, data: Data?): String? {
-        for (tier in tiers) {
-            val key = atlasKey(tier.name, nodeId)
-            if (atlasLayers.resolve(key) != null) return key
+        val userKey = staticIconKey(nodeId, data) ?: return null
+        if (staticIcons.containsKey(userKey)) {
+            return if (atlasLayers.resolve(userKey) != null) userKey else null
         }
-        val staticKey = staticIconKey(nodeId, data) ?: return null
-        return if (atlasLayers.resolve(staticKey) != null) staticKey else null
+        val key = nodeKey(nodeId)
+        return if (atlasLayers.resolve(key) != null) key else null
     }
 
-    private fun atlasKey(tierName: String, id: Id): String = "tier:${tierName}:${id}"
+    private fun nodeKey(id: Id): String = "node:$id"
+}
+
+private data class TierAtlasCacheEntry(
+    val ids: List<Any?>,
+    val painterIdentities: List<Painter>,
+    val tileSizePx: Int,
+    val isCircular: Boolean,
+    val atlas: AtlasState,
+)
+
+private sealed interface NodeIconKind {
+    data object ColorOnly : NodeIconKind
+    data class Static(val key: String) : NodeIconKind
+    data object Composable : NodeIconKind
 }
 
 private data class VisibilityInputs(

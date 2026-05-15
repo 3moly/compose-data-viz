@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
@@ -26,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -36,6 +38,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.request.transformations
 import com.moly3.dataviz.graph.ui.Graph
 import com.threemoly.sample.base.graph.GraphState
 import com.threemoly.sample.base.graph.ObsidianGraphData
@@ -56,8 +59,9 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
     val atlas = rememberAtlasComposer(
         nodes = s.graphNodes,
         tiers = listOf(
-            AtlasTier("hq", tileSizePx = 128, selection = TierSelection.TopByDistance(12)),
-            AtlasTier("lq", tileSizePx = 32,  selection = TierSelection.AllVisible),
+//            AtlasTier("hq", tileSizePx = 256, selection = TierSelection.TopByDistance(2)),
+//            AtlasTier("hq", tileSizePx = 12, selection = TierSelection.TopByDistance(2)),
+            AtlasTier("lq", tileSizePx = 256,  selection = TierSelection.All),
         ),
         viewport = viewport,
         userPosition = s.graphUserPosition,
@@ -73,7 +77,7 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
 //                is ObsidianGraphData.File -> null
 //                null -> ""
 //            }
-            null
+            ""
         },
     ) { node ->
         // Per-node composable. This is what gets baked into the atlas.
@@ -94,8 +98,9 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
                 Image(
                     painter = painter,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(100.dp))
                 )
+                //Box(Modifier.fillMaxSize().background(Color.Red))
             }
             else -> {
                 // No custom content for non-file nodes — static icon fallback kicks in.
@@ -106,10 +111,9 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(Color.White)
             .onGloballyPositioned { viewport = it.size }
     ) {
-        // Capture holders must be mounted somewhere in composition.
         atlas.MountCaptureHolders()
 
         Graph(

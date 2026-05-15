@@ -13,6 +13,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.compose.AsyncImage
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.request.crossfade
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.BoxSide
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
@@ -35,6 +39,12 @@ const val imgGraphPage = "ImgGraph"
 
 @Composable
 fun ExampleApp() {
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+
+            .crossfade(true)
+            .build()
+    }
     val nodeCountState = remember { mutableStateOf(15f) }
     val density = LocalDensity.current
     val graphState = remember(density) {

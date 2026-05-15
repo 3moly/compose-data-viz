@@ -368,29 +368,6 @@ fun <Id, Data> Graph(
             )
         }
         .clip(RoundedCornerShape(0.dp))
-//    if (simpleCanvas) {
-//        GraphInternal2(
-//            atlas = atlas,
-//            customPopup = customPopup,
-//            getIconIndex = getIconIndex,
-//            getNodeGroups = getNodeGroups,
-//            getGroupColor = getGroupColor,
-//            modifier = graphModifier,
-//
-//            settings = settings,
-//            nodes = latestNodes,
-//            coordinates = liveCoordinates,
-//            coordinatesVersion = mapVersion,
-//            connections = latestConnections,
-//            draggedNodeId = draggedNodeState?.id,
-//            cursorNodeId = cursorNodeState?.id,
-//            movementOffset = userPosition,
-//            zoom = zoom,
-//            watchNodeId = watchNodeId,
-//        )
-//    } else {
-//
-//    }
     GraphInternal(
         atlasLayers = atlasLayers,
         getIconKey = getIconKey,

@@ -13,11 +13,7 @@ import com.moly3.dataviz.core.graph.model.GraphTheme
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
 import com.moly3.dataviz.core.graph.model.GraphWatchSettings
 import com.moly3.dataviz.core.graph.model.GraphZoomSettings
-import com.threemoly.sample.base.uikit.ColorRow
-import com.threemoly.sample.base.uikit.IntSliderRow
 import com.threemoly.sample.base.uikit.ObsText
-import com.threemoly.sample.base.uikit.SettingsSection
-import com.threemoly.sample.base.uikit.SliderRow
 import kotlin.math.roundToInt
 
 /**

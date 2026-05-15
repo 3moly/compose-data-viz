@@ -25,7 +25,7 @@ data class GraphTextSettings(
     /** Maximum scale factor for text to prevent it from covering the screen or pixelating. */
     val maxLabelScale: Float = 2.0f,
 
-    val maxLabelsVisible: Int = Int.MAX_VALUE,
+    val maxLabelsVisible: Int = 30,
     val visibilityZoomThreshold: Float = 0.5f,
     val visibilityZoomFadeWidth: Float = 0.5f,
 

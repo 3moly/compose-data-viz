@@ -112,6 +112,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        iosMain.dependencies {
+            implementation("io.ktor:ktor-client-darwin:3.4.0")
+        }
         androidMain.dependencies {
             //noinspection UseTomlInstead
             implementation("androidx.activity:activity-compose:1.12.0")
