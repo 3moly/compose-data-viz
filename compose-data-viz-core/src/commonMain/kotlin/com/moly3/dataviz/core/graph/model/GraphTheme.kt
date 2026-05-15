@@ -2,6 +2,7 @@ package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import kotlinx.serialization.Serializable
 
 /**
  * All colors used by the graph, grouped in one place.
@@ -16,15 +17,25 @@ import androidx.compose.ui.graphics.Color
  *   The right one is picked automatically based on [textColor] luminance.
  */
 @Immutable
+@Serializable
 data class GraphTheme(
+    @Serializable(with = ComposeColorSerializer::class)
     val nodeColor: Color,
+    @Serializable(with = ComposeColorSerializer::class)
     val nodeOutlineColor: Color,
+    @Serializable(with = ComposeColorSerializer::class)
     val edgeColor: Color?,
+    @Serializable(with = ComposeColorSerializer::class)
     val accentColor: Color,
+    @Serializable(with = ComposeColorSerializer::class)
     val textColor: Color,
+    @Serializable(with = ComposeColorSerializer::class)
     val draggedNodeColor: Color = Color(0xFF4CAF50),
+    @Serializable(with = ComposeColorSerializer::class)
     val hoveredNodeColor: Color = Color(0xFF4CAF50),
+    @Serializable(with = ComposeColorSerializer::class)
     val activeLabelBackgroundLight: Color = Color(0xFFF5F5F5),
+    @Serializable(with = ComposeColorSerializer::class)
     val activeLabelBackgroundDark: Color = Color(0xFF1E1E1E),
 ) {
     /** Resolved edge color (falls back to [nodeOutlineColor] when [edgeColor] is null). */

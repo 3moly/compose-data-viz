@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
  */
 //@Serializable
 @Stable
+@Serializable
 data class GraphViewSettings(
     val targetFrameMs: Long = 16L,
     val cpuCores: Int? = null,
@@ -27,6 +28,7 @@ data class GraphViewSettings(
     val circleBorderWidth: Float = 0.1f,
 
     /** Border color. Null = use node color darkened. */
+    @Serializable(with = ComposeColorSerializer::class)
     val circleBorderColor: Color? = null,
     val connectedRepulsionMultiplier: Float,
     val mutualConnectionRepulsionMultiplier: Float,

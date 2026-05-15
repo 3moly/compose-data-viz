@@ -37,7 +37,6 @@ import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.func.half
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
-import com.moly3.dataviz.graph.features.atlas.AtlasLookup
 import com.moly3.dataviz.graph.features.atlas.NodeStaticData
 import com.moly3.dataviz.graph.func.approach
 import com.moly3.dataviz.graph.func.getNodeConnections
@@ -131,8 +130,8 @@ internal fun <Id, Data> GraphInternal(
         h
     }
 
-    val textLayouts = remember(textSignature, baseTextStyle, textCfg.normalFontSize) {
-        val style = baseTextStyle.copy(fontSize = textCfg.normalFontSize)
+    val textLayouts = remember(textSignature, baseTextStyle, textCfg.normalFontSizeSp) {
+        val style = baseTextStyle.copy(fontSize = textCfg.normalFontSizeSp.sp)
         nodes.associate { node ->
             node.id to textMeasurer.measure(text = node.name, style = style)
         }
@@ -149,8 +148,8 @@ internal fun <Id, Data> GraphInternal(
         h
     }
 
-    val hullLabelLayouts = remember(hullLabelSignature, baseTextStyle, textCfg.normalFontSize) {
-        val style = baseTextStyle.copy(fontSize = textCfg.normalFontSize)
+    val hullLabelLayouts = remember(hullLabelSignature, baseTextStyle, groupSettings.hullLabelFontSizeSp) {
+        val style = baseTextStyle.copy(fontSize = groupSettings.hullLabelFontSizeSp.sp)
         hulls.associate { hull ->
             hull.groupId to textMeasurer.measure(text = hull.label, style = style)
         }
@@ -562,29 +561,65 @@ internal fun <Id, Data> GraphInternal(
             }
 
             // -------- Hull labels (screen-space, drawn above nodes) ------------------
-            if (drawText && groupSettings.enabled && hulls.isNotEmpty()) {
-                for (i in hulls.indices) {
-                    val h = hulls[i]
-                    val layout = hullLabelLayouts[h.groupId] ?: continue
+            val drawHullLabels = groupSettings.enabled &&
+                    hulls.isNotEmpty() &&
+                    animZoom > groupSettings.hullLabelVisibilityZoomThreshold
 
-                    val sx = (h.labelAnchor.x + movementOffset.x) * animZoom + centerX
-                    val sy = (h.labelAnchor.y + movementOffset.y) * animZoom + centerY - 18f
+            if (drawHullLabels) {
+                val hullTextScale = if (groupSettings.hullLabelScaleWithZoom) {
+                    animZoom.coerceIn(groupSettings.hullLabelMinScale, groupSettings.hullLabelMaxScale)
+                } else {
+                    1f
+                }
 
-                    // Cull off-screen labels
-                    if (sx + layout.size.width < 0f || sx - layout.size.width > canvasW ||
-                        sy + layout.size.height < 0f || sy - layout.size.height > canvasH
-                    ) continue
+                val hullZoomAlpha = ((animZoom - groupSettings.hullLabelVisibilityZoomThreshold) /
+                        groupSettings.hullLabelVisibilityZoomFadeWidth.coerceAtLeast(0.0001f))
+                    .coerceIn(0f, 1f)
 
-                    val topLeft = Offset(
-                        sx - layout.size.width / 2f,
-                        sy - layout.size.height / 2f
-                    )
+                if (hullZoomAlpha >= 0.01f) {
+                    for (i in hulls.indices) {
+                        val h = hulls[i]
+                        val layout = hullLabelLayouts[h.groupId] ?: continue
 
-                    drawText(
-                        textLayoutResult = layout,
-                        topLeft = topLeft,
-                        color = h.color,
-                    )
+                        val sx = (h.labelAnchor.x + movementOffset.x) * animZoom + centerX
+                        val sy = (h.labelAnchor.y + movementOffset.y) * animZoom + centerY -
+                                groupSettings.hullLabelVerticalOffset
+
+                        val scaledW = layout.size.width * hullTextScale
+                        val scaledH = layout.size.height * hullTextScale
+                        if (sx + scaledW < 0f || sx - scaledW > canvasW ||
+                            sy + scaledH < 0f || sy - scaledH > canvasH
+                        ) continue
+
+                        val topLeft = Offset(
+                            sx - layout.size.width / 2f,
+                            sy - layout.size.height / 2f
+                        )
+
+                        if (hullTextScale != 1f) {
+                            withTransform({
+                                scale(
+                                    scaleX = hullTextScale,
+                                    scaleY = hullTextScale,
+                                    pivot = Offset(sx, sy)
+                                )
+                            }) {
+                                drawText(
+                                    textLayoutResult = layout,
+                                    topLeft = topLeft,
+                                    color = h.color,
+                                    alpha = hullZoomAlpha,
+                                )
+                            }
+                        } else {
+                            drawText(
+                                textLayoutResult = layout,
+                                topLeft = topLeft,
+                                color = h.color,
+                                alpha = hullZoomAlpha,
+                            )
+                        }
+                    }
                 }
             }
 

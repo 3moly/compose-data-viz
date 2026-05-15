@@ -3,17 +3,19 @@ package com.moly3.dataviz.core.graph.model
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import kotlinx.serialization.Serializable
 
 /**
  * Node label rendering settings.
  *
  * Two label flavours exist:
- * - **normal labels** drawn under each visible node (uses [normalFontSize])
+ * - **normal labels** drawn under each visible node (uses [normalFontSizeSp])
  * - **active label** the prominent pill shown for the currently hovered/dragged node (uses [activeFontSize])
  */
 @Immutable
+@Serializable
 data class GraphTextSettings(
-    val normalFontSize: TextUnit = 12.sp,
+    val normalFontSizeSp: Float = 5f,
     val activeFontSizePx: Float = 24f,
     val labelPaddingDp: Float = 16f,
 

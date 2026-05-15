@@ -1,6 +1,7 @@
 package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
+import kotlinx.serialization.Serializable
 
 /**
  * Zoom range and scroll-wheel zoom step factors.
@@ -10,6 +11,7 @@ import androidx.compose.runtime.Immutable
  * - Pinch zoom is bounded by [minZoom] and [maxZoom]
  */
 @Immutable
+@Serializable
 data class GraphZoomSettings(
     val minZoom: Float = 0.05f,
     val maxZoom: Float = 8f,

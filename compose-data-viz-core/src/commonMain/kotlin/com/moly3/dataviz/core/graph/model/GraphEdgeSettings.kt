@@ -1,6 +1,7 @@
 package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
+import kotlinx.serialization.Serializable
 
 /**
  * Edge (connection line) rendering settings.
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Immutable
  * `1 / zoom` so lines stay visually consistent at any zoom level.
  */
 @Immutable
+@Serializable
 data class GraphEdgeSettings(
     /** Base stroke width for normal (unselected) edges, in world units before zoom compensation. */
     val strokeWidth: Float = 2f,

@@ -4,12 +4,16 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
+import kotlinx.serialization.Serializable
 
 /**
  * Static config controlling group magnetization (cohesion) physics and rendering.
  * Lives inside GraphViewSettings or as its own block — put it wherever your settings tree allows.
  */
 @Immutable
+@Serializable
 data class GroupSettings(
     /** Master switch. */
     val enabled: Boolean = true,
@@ -54,6 +58,14 @@ data class GroupSettings(
 
     /** Multiplier applied to the group color alpha for fill. */
     val hullFillAlpha: Float = 0.10f,
+
+    val hullLabelVisibilityZoomThreshold: Float = 0f, // default: always visible
+    val hullLabelVisibilityZoomFadeWidth: Float = 0.1f,
+    val hullLabelFontSizeSp: Float = 14f,
+    val hullLabelScaleWithZoom: Boolean = false,
+    val hullLabelMinScale: Float = 0.5f,
+    val hullLabelMaxScale: Float = 2f,
+    val hullLabelVerticalOffset: Float = 18f, // was hardcoded as -18f
 )
 
 /**

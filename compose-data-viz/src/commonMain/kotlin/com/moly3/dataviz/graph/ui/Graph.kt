@@ -109,9 +109,14 @@ fun <Id, Data> Graph(
 
     val hulls by hullController.hulls.collectAsState()
     val groupResolver: (Int) -> List<String> = remember(stateNodes) {
+        val snapshot = stateNodes  // capture once
         { i ->
-            val node = stateNodes[i]
-            getNodeGroups(node.id, node.data)
+            if (i in snapshot.indices) {
+                val node = snapshot[i]
+                getNodeGroups(node.id, node.data)
+            } else {
+                emptyList()
+            }
         }
     }
     val groupSettings = settings.groupSettings

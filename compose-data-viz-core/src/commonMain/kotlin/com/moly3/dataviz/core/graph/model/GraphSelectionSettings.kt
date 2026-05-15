@@ -1,6 +1,7 @@
 package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
+import kotlinx.serialization.Serializable
 
 /**
  * Controls how hover/drag selection affects the rest of the graph
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Immutable
  * Animation rates are in units-per-second so transitions stay frame-rate independent.
  */
 @Immutable
+@Serializable
 data class GraphSelectionSettings(
     /** Multiplier applied to the active node's radius (1f = no change). */
     val scaleOnHover: Float = 1.5f,

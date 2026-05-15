@@ -203,9 +203,9 @@ fun String.format(value: Float): String {
 @Composable
 private fun TextSection(text: GraphTextSettings, onChange: (GraphTextSettings) -> Unit) {
     SliderRow(
-        "Normal font size (sp)", text.normalFontSize.value, valueRange = 6f..32f,
+        "Normal font size (sp)", text.normalFontSizeSp.sp.value, valueRange = 1f..32f,
         valueFormatter = { "%.0f".format(it) }) {
-        onChange(text.copy(normalFontSize = it.sp))
+        onChange(text.copy(normalFontSizeSp = it))
     }
     SliderRow(
         "Active font size (px)", text.activeFontSizePx, valueRange = 12f..96f,

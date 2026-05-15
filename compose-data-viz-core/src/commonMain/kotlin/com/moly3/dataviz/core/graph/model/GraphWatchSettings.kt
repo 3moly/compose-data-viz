@@ -1,6 +1,7 @@
 package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
+import kotlinx.serialization.Serializable
 
 /**
  * Appearance of the ring drawn around the "watched" node (the one being focused/followed).
@@ -8,6 +9,7 @@ import androidx.compose.runtime.Immutable
  * The ring uses [GraphTheme.accentColor] as its color.
  */
 @Immutable
+@Serializable
 data class GraphWatchSettings(
     /** Ring radius as a multiplier of the node's own radius. */
     val radiusMultiplier: Float = 1.5f,
