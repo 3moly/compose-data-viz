@@ -3,8 +3,8 @@ package com.moly3.dataviz.core.graph.model
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.text.TextStyle
 import com.moly3.dataviz.core.graph.hull.GroupSettings
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 @Immutable
 @Serializable
@@ -16,8 +16,8 @@ data class GraphSettings(
     val text: GraphTextSettings = GraphTextSettings.Default,
     val zoom: GraphZoomSettings = GraphZoomSettings.Default,
     val watch: GraphWatchSettings = GraphWatchSettings.Default,
-    @Contextual
-    val textStyle: TextStyle = TextStyle.Default,
+//    @Transient
+//    val textStyle: TextStyle = TextStyle.Default,
     val groupSettings: GroupSettings = GroupSettings()
 ) {
     companion object {

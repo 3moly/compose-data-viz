@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
@@ -49,6 +50,7 @@ import kotlin.math.min
 @Composable
 internal fun <Id, Data> GraphInternal(
     modifier: Modifier = Modifier,
+    textStyle: TextStyle,
     settings: GraphSettings,
     atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
     getIconKey: (Id, Data) -> String? = { _, _ -> null },
@@ -73,7 +75,7 @@ internal fun <Id, Data> GraphInternal(
     val edgeCfg = settings.edge
     val textCfg = settings.text
     val watchCfg = settings.watch
-    val baseTextStyle = settings.textStyle
+    val baseTextStyle = textStyle
 
     val circleRadius = view.circleSize
     val circleSizeMultiplier = view.circleSizeMultiplier
@@ -148,12 +150,13 @@ internal fun <Id, Data> GraphInternal(
         h
     }
 
-    val hullLabelLayouts = remember(hullLabelSignature, baseTextStyle, groupSettings.hullLabelFontSizeSp) {
-        val style = baseTextStyle.copy(fontSize = groupSettings.hullLabelFontSizeSp.sp)
-        hulls.associate { hull ->
-            hull.groupId to textMeasurer.measure(text = hull.label, style = style)
+    val hullLabelLayouts =
+        remember(hullLabelSignature, baseTextStyle, groupSettings.hullLabelFontSizeSp) {
+            val style = baseTextStyle.copy(fontSize = groupSettings.hullLabelFontSizeSp.sp)
+            hulls.associate { hull ->
+                hull.groupId to textMeasurer.measure(text = hull.label, style = style)
+            }
         }
-    }
 
     val activeNodeId: Id? = draggedNodeId ?: cursorNodeId
 
@@ -567,7 +570,10 @@ internal fun <Id, Data> GraphInternal(
 
             if (drawHullLabels) {
                 val hullTextScale = if (groupSettings.hullLabelScaleWithZoom) {
-                    animZoom.coerceIn(groupSettings.hullLabelMinScale, groupSettings.hullLabelMaxScale)
+                    animZoom.coerceIn(
+                        groupSettings.hullLabelMinScale,
+                        groupSettings.hullLabelMaxScale
+                    )
                 } else {
                     1f
                 }

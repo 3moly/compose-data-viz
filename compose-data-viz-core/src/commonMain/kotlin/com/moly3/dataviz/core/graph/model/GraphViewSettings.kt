@@ -48,12 +48,15 @@ data class GraphViewSettings(
         val Default = GraphViewSettings(
             centerForce = 0.02f,  // Slightly stronger to keep centered
 
+            linkForce = 8f,        // was 35f — way too strong, causes whip
+                    repelForce = 15000f,   // was 50000f — causes explosion on add
+                    dampingFactor = 0.85f, // was 0.75f — bit more glide, less stiff
             // Stronger links with more "snap"
-            linkForce = 35f,      // Increased for faster convergence
+//            linkForce = 35f,      // Increased for faster convergence
             linkDistance = 30f,   // Tighter connections
 
             // Higher repulsion to prevent sticking
-            repelForce = 50000f,  // Much higher to break apart stuck nodes
+//            repelForce = 50000f,  // Much higher to break apart stuck nodes
 
             circleSize = 8f,      // Slightly smaller circles
 
@@ -69,7 +72,7 @@ data class GraphViewSettings(
             maxForce = 60f,  // Higher to allow faster movement
 
             // IMPORTANT: Higher damping = less bounce, but too high prevents movement
-            dampingFactor = 0.75f,  // Balance between 0.65 (too stiff) and 0.92 (too bouncy)
+//            dampingFactor = 0.75f,  // Balance between 0.65 (too stiff) and 0.92 (too bouncy)
 
             hubExpansionExponent = 0.3f,  // Less aggressive expansion (was 0.5)
 

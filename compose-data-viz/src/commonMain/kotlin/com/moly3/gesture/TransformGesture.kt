@@ -140,14 +140,29 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                         if (pastTouchSlop) {
                             val centroid = event.calculateCentroid(useCurrent = false)
                             val effectiveRotation = if (lockedToPanZoom) 0f else rotationChange
-                            if (effectiveRotation != 0f ||
-                                zoomChange != 1f ||
-                                panChange != Offset.Zero
-                            ) {
+
+                            // Emit accumulated pan on the slop-crossing frame, then per-frame delta after
+                            val panToEmit = if (pan != Offset.Zero) {
+                                val p = pan
+                                pan = Offset.Zero  // consume the accumulated buffer once
+                                p
+                            } else {
+                                panChange
+                            }
+
+                            val zoomToEmit = if (zoom != 1f) {
+                                val z = zoom
+                                zoom = 1f
+                                z
+                            } else {
+                                zoomChange
+                            }
+
+                            if (effectiveRotation != 0f || zoomToEmit != 1f || panToEmit != Offset.Zero) {
                                 onGesture(
                                     centroid,
-                                    panChange, // Note: You might want to pass 'pan' here initially to avoid dropping the first touchSlop pixels
-                                    zoomChange,
+                                    panToEmit,
+                                    zoomToEmit,
                                     effectiveRotation,
                                     pointer,
                                     event.changes
@@ -156,9 +171,7 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
 
                             if (consume) {
                                 event.changes.forEach {
-                                    if (it.positionChanged()) {
-                                        it.consume()
-                                    }
+                                    if (it.positionChanged()) it.consume()
                                 }
                             }
                         }

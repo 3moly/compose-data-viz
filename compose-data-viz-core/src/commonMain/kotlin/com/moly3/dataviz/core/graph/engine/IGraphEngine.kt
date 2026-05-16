@@ -2,6 +2,7 @@ package com.moly3.dataviz.core.graph.engine
 
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.geometry.Offset
+import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
 
@@ -18,4 +19,11 @@ interface IGraphEngine<Id, Data> {
     )
 
     fun reheat()
+    fun nudge()
+    fun setGroupData(
+        groupsForNodeIndex: ((Int) -> List<String>)?,
+        settings: GroupSettings,
+    )
+
+    fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>>
 }

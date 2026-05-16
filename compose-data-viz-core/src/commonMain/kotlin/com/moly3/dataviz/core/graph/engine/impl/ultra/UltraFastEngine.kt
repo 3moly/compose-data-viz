@@ -7,15 +7,34 @@ import com.moly3.dataviz.core.graph.func.avaliableCpuProcessors
 import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlin.concurrent.Volatile
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sqrt
 
-class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
+/**
+ * High-performance force-directed graph engine.
+ *
+ * Behavior is tuned via [config]; physics via the [GraphViewSettings] passed
+ * to [step]. Pass a custom [UltraFastEngineConfig] for non-default heat /
+ * decay / sleep behavior.
+ */
+class UltraFastEngine<Id, Data>(
+    var config: UltraFastEngineConfig = UltraFastEngineConfig.Default
+) : IGraphEngine<Id, Data> {
+
+    // -----------------------------------------------------------------
+    // SoA storage
+    // -----------------------------------------------------------------
     private var nodeCount = 0
     private var edgeCount = 0
 
-    // Node SoA
     private var posX = FloatArray(0)
     private var posY = FloatArray(0)
     private var velX = FloatArray(0)
@@ -24,20 +43,18 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
     private var forceY = FloatArray(0)
     private var degree = IntArray(0)
 
-    // Per-node precomputed cache (rebuilt only when structure changes)
-    private var hubScaleCache = FloatArray(0) // pow(degree, exponent) per node
+    private var hubScaleCache = FloatArray(0)
     private var lastHubExponent = Float.NaN
 
-    // Edge list (CSR is still kept for degree lookups, but main hot path uses edge list)
-    // Each edge appears once (undirected). Pair (a, b) with a < b.
+    // Edge list (each undirected edge once, a < b)
     private var edgeA = IntArray(0)
     private var edgeB = IntArray(0)
 
-    // CSR for legacy use / connection traversal (kept for compatibility w/ rest of pipeline)
+    // CSR for legacy / traversal
     private var connectionsOffset = IntArray(1)
     private var connectionsFlat = IntArray(0)
 
-    // Per-thread force buffers (avoid atomic contention on edge force scatter)
+    // Per-thread force scatter buffers
     private var threadForceX: Array<FloatArray> = emptyArray()
     private var threadForceY: Array<FloatArray> = emptyArray()
     private var lastThreadCount = -1
@@ -49,68 +66,71 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
     private var frameCount = 0
 
+    // -----------------------------------------------------------------
+    // Heat state
+    // -----------------------------------------------------------------
     var alpha = 1f
         private set
     private var alphaTarget = 0f
-
-    // INCREASE base decay to cool the simulation faster
-    private var alphaDecay = 0.035f
-    private val alphaMin = 0.001f
-    private val reheatAlpha = 0.5f
+    private var alphaDecay = config.baseAlphaDecay
 
     private var totalKineticEnergy = 0f
-
-    // INCREASE threshold so it stops calculating micro-movements sooner
-    private val sleepEnergyThreshold = 2.5f
-
-//    private var totalKineticEnergy = 0f
-//    private val sleepEnergyThreshold = 0.5f
-
     private var lastNodeCountSignature = 0
 
     @Volatile
     private var freezingEnabled: Boolean = true
 
-    override val isAsleep: Boolean get() {
-        if (!freezingEnabled) return false
-        return alpha <= 0f || (alpha < 0.02f && totalKineticEnergy < sleepEnergyThreshold)
+    override val isAsleep: Boolean
+        get() {
+            if (!freezingEnabled) return false
+            return alpha <= 0f ||
+                    (alpha < config.asleepAlphaCheck && totalKineticEnergy < config.sleepEnergyThreshold)
+        }
+
+    // -----------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------
+
+    override fun reheat() {
+        reheatInternal(config.reheatAlpha)
     }
 
-    private fun reheat(intensity: Float = reheatAlpha) {
-        alpha = max(alpha, intensity)
-        alphaTarget = 0f
+    /** Soft wake — for settings changes, single-node adds, post-drag settle. */
+    override fun nudge() {
+        reheatInternal(config.nudgeAlpha)
     }
 
     fun setFreezingEnabled(enabled: Boolean) {
         if (freezingEnabled == enabled) return
         freezingEnabled = enabled
-        if (!enabled) {
-            // Kick the simulation back to life so the caller sees motion immediately.
-            reheat(reheatAlpha)
-        }
+        if (!enabled) reheatInternal(config.reheatAlpha)
     }
 
-    /** Returns whether freezing/sleep optimization is currently enabled. */
     fun isFreezingEnabled(): Boolean = freezingEnabled
 
-    /**
-     * Force the engine into its frozen state immediately, regardless of
-     * current kinetic energy. Useful for pausing the layout for screenshots,
-     * export, or when the view is off-screen.
-     *
-     * Has no effect if freezing is disabled via [setFreezingEnabled].
-     */
+    /** Force the engine to its sleeping state; no-op if freezing is disabled. */
     fun freeze() {
         if (!freezingEnabled) return
         alpha = 0f
         alphaTarget = 0f
         totalKineticEnergy = 0f
-        // Zero out velocities so nothing drifts on the next non-frozen step.
         for (i in 0 until nodeCount) {
             velX[i] = 0f
             velY[i] = 0f
         }
     }
+
+    /** Wake the engine if it was frozen. */
+    fun unfreeze() = reheat()
+
+    private fun reheatInternal(intensity: Float) {
+        alpha = max(alpha, intensity)
+        alphaTarget = 0f
+    }
+
+    // -----------------------------------------------------------------
+    // step()
+    // -----------------------------------------------------------------
 
     override suspend fun step(
         graphNodes: List<GraphNode<Id, Data>>,
@@ -118,46 +138,54 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         settings: GraphViewSettings,
         coordinates: MutableMap<Id, Offset>,
         velocities: MutableMap<Id, Offset>,
-        draggedNode: DragNodeData<Id>?
+        draggedNode: DragNodeData<Id>?,
     ) = coroutineScope {
-        // Detect structural change → reheat + invalidate caches
-        val structureSig = graphNodes.size * 31 + (connections.values.sumOf { it.size })
+        // ---- Structural change detection (fixed: no nested duplicate) ----
+        val structureSig = graphNodes.size * 31 + connections.values.sumOf { it.size }
         val structureChanged = structureSig != lastNodeCountSignature
         if (structureChanged) {
-            reheat(0.8f)
+            val prevNodeCount = nodeCount
+            val newNodeCount = graphNodes.size
+            val delta = abs(newNodeCount - prevNodeCount)
+            val bigThreshold = (newNodeCount * config.bigChangeFraction).toInt().coerceAtLeast(1)
+
+            when {
+                prevNodeCount == 0 -> reheatInternal(config.reheatAlpha)   // first load
+                delta <= config.gentleAddThreshold -> nudge()              // 1–2 nodes
+                delta <= bigThreshold -> reheatInternal(config.moderateChangeAlpha)
+                else -> reheatInternal(config.reheatAlpha)                  // big restructure
+            }
             lastNodeCountSignature = structureSig
         }
 
-        if (draggedNode != null) reheat(0.01f)
+        if (draggedNode != null) reheatInternal(config.dragReheatAlpha)
 
-        if (isAsleep && draggedNode == null) {
-            syncData(graphNodes, coordinates, velocities, connections, structureChanged)
+        // Early exit if truly idle and nothing changed
+        if (isAsleep && draggedNode == null && !structureChanged) {
+            syncData(graphNodes, coordinates, velocities, connections, false)
             return@coroutineScope
         }
 
         syncData(graphNodes, coordinates, velocities, connections, structureChanged)
         frameCount++
 
-
-        // Refresh hubScaleCache if exponent setting changed
         if (settings.hubExpansionExponent != lastHubExponent) {
             recomputeHubScale(settings.hubExpansionExponent)
             lastHubExponent = settings.hubExpansionExponent
         }
 
-        // Adaptive QuadTree rebuild: hot = every 2 frames, cool = every 4, very cool = every 8
+        // Adaptive quadtree rebuild
         val rebuildEvery = when {
-            alpha > 0.2f -> 1   // Always rebuild when hot
+            alpha > 0.2f -> 1
             alpha > 0.05f -> 2
-            else -> 4           // Rebuild less often when cool
+            else -> 4
         }
         if (frameCount % rebuildEvery == 0 || frameCount == 1) {
             quadTree.build(posX, posY, nodeCount)
         }
 
-
         val draggedIdx = draggedNode?.id?.let { idToIndex[it] } ?: -1
-        val theta = if (nodeCount > 1000) 1.5f else 1.2f
+        val theta = if (nodeCount > config.bigGraphNodeCount) config.thetaLargeGraph else config.thetaSmallGraph
         val thetaSq = theta * theta
         val softening = settings.circleSize * 0.5f
 
@@ -166,25 +194,17 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         val effectiveCenter = settings.centerForce * alpha
 
         val cores = (avaliableCpuProcessors(settings.cpuCores) - 1).coerceAtLeast(1)
-
-        // Ensure per-thread force buffers exist for this thread count
         ensureThreadBuffers(cores, nodeCount)
-
-        // Zero per-thread force buffers (KMP-safe; stdlib fill is intrinsified on JVM)
         for (t in 0 until cores) {
             threadForceX[t].fill(0f, 0, nodeCount)
             threadForceY[t].fill(0f, 0, nodeCount)
         }
 
-        // Hoist damping outside hot loop
         val damping = settings.dampingFactor.let {
-            if (it == 0f) 0.9f else it.coerceAtMost(0.99f)
+            if (it == 0f) config.fallbackDamping else it.coerceAtMost(config.maxDamping)
         }
 
-        // -------------------------------------------------------------
-        // PHASE 1: NODE-PARALLEL repulsion (QuadTree Barnes-Hut)
-        // Each chunk computes repulsion into its own slice of forceX/Y.
-        // -------------------------------------------------------------
+        // ---- PHASE 1: Repulsion (Barnes-Hut) ----
         val nodeChunkSize = max(32, (nodeCount + cores - 1) / cores)
         val nodeChunks = (nodeCount + nodeChunkSize - 1) / nodeChunkSize
 
@@ -196,9 +216,9 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                 val forceResult = FloatArray(2)
 
                 for (i in start until end) {
-                    if (i == draggedIdx) { forceX[i] = 0f; forceY[i] = 0f; continue }
-
-                    // Repulsion via Barnes-Hut
+                    if (i == draggedIdx) {
+                        forceX[i] = 0f; forceY[i] = 0f; continue
+                    }
                     quadTree.computeRepulsionIterative(
                         posX[i], posY[i], i,
                         effectiveRepel, softening, thetaSq,
@@ -207,14 +227,12 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                     var fx = forceResult[0]
                     var fy = forceResult[1]
 
-                    // Centering
                     val px = posX[i]; val py = posY[i]
                     val distFromCenterSq = px * px + py * py
                     if (distFromCenterSq > 0.01f) {
                         fx -= px * effectiveCenter
                         fy -= py * effectiveCenter
                     }
-
                     forceX[i] = fx
                     forceY[i] = fy
                 }
@@ -222,196 +240,19 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
         repelJobs.awaitAll()
 
-        // [ADD] In step(), insert a new PHASE 1.5 between PHASE 1 (repulsion) and
-// PHASE 2 (edges). Group cohesion + group-group separation are cheap, O(N+G²).
-// ----------------------------------------------------------------------------
-
-        // --- Phase 1.5: Group magnetization ------------------------------------------
+        // ---- PHASE 1.5: Group magnetization ----
         val gs = pendingGroupSettings
         if (gs.enabled && groupCount > 0 && (gs.cohesionForce > 0f || gs.groupSeparation > 0f)) {
-
-            // 1. Compute centroids (single-thread; tiny work compared to repulsion)
-            for (g in 0 until groupCount) {
-                groupCentroidX[g] = 0f
-                groupCentroidY[g] = 0f
-                groupMemberCount[g] = 0
-            }
-            for (i in 0 until nodeCount) {
-                val from = nodeGroupOffset[i]
-                val to   = nodeGroupOffset[i + 1]
-                val px = posX[i]; val py = posY[i]
-                for (k in from until to) {
-                    val gid = nodeGroupId[k]
-                    groupCentroidX[gid] += px
-                    groupCentroidY[gid] += py
-                    groupMemberCount[gid]++
-                }
-            }
-            for (g in 0 until groupCount) {
-                val c = groupMemberCount[g]
-                if (c > 0) {
-                    val inv = 1f / c
-                    groupCentroidX[g] *= inv
-                    groupCentroidY[g] *= inv
-                }
-            }
-
-            // 2. Inter-group separation: push centroids apart (apply to all members)
-            // Precompute per-group nudge vectors so each member just adds them.
-            val sepX = FloatArray(groupCount)
-            val sepY = FloatArray(groupCount)
-            val sepForce = gs.groupSeparation * alpha
-            if (sepForce > 0f && groupCount > 1) {
-                val soft = gs.groupSeparationSoftening
-                val softSq = soft * soft
-                for (a in 0 until groupCount) {
-                    if (groupMemberCount[a] == 0) continue
-                    for (b in a + 1 until groupCount) {
-                        if (groupMemberCount[b] == 0) continue
-                        var dx = groupCentroidX[a] - groupCentroidX[b]
-                        var dy = groupCentroidY[a] - groupCentroidY[b]
-                        var distSq = dx * dx + dy * dy
-                        if (distSq < 0.01f) {
-                            // Deterministic nudge so identical centroids separate
-                            dx = ((a - b) and 0xF).toFloat() * 0.1f + 0.01f
-                            dy = ((a + b) and 0xF).toFloat() * 0.1f + 0.01f
-                            distSq = dx * dx + dy * dy
-                        }
-                        val mag = sepForce / max(distSq, softSq)
-                        val nx = dx * mag
-                        val ny = dy * mag
-                        sepX[a] += nx; sepY[a] += ny
-                        sepX[b] -= nx; sepY[b] -= ny
-                    }
-                }
-            }
-
-            // 3. Apply cohesion (toward own centroid) + separation (centroid-level) to forces
-            val cohesion = gs.cohesionForce * alpha
-            val drag = draggedIdx     // captured from above
-            for (i in 0 until nodeCount) {
-                if (i == drag) continue
-                val from = nodeGroupOffset[i]
-                val to   = nodeGroupOffset[i + 1]
-                if (from == to) continue
-                val px = posX[i]; val py = posY[i]
-                var fx = 0f; var fy = 0f
-                // Average cohesion vector across all groups this node belongs to.
-                // (For single-group nodes this collapses to the simple case.)
-                val memberships = to - from
-                for (k in from until to) {
-                    val gid = nodeGroupId[k]
-                    fx += (groupCentroidX[gid] - px) * cohesion
-                    fy += (groupCentroidY[gid] - py) * cohesion
-                    fx += sepX[gid]
-                    fy += sepY[gid]
-                }
-                val invM = 1f / memberships
-                forceX[i] += fx * invM
-                forceY[i] += fy * invM
-            }
+            applyGroupForces(gs, draggedIdx)
         }
 
-        // -------------------------------------------------------------
-        // PHASE 2: EDGE-PARALLEL spring forces.
-        // Each edge processed ONCE (Newton's third law). Each worker
-        // writes to its own per-thread buffer to avoid contention.
-        // -------------------------------------------------------------
+        // ---- PHASE 2: Edge spring forces ----
         if (edgeCount > 0) {
-            val edgeChunkSize = max(64, (edgeCount + cores - 1) / cores)
-            val edgeChunks = (edgeCount + edgeChunkSize - 1) / edgeChunkSize
+            applyEdgeForces(
+                cores, settings, effectiveLink, effectiveRepel, softening, draggedIdx
+            )
 
-            // Precompute per-edge invariants outside the loop
-            val baseLinkDistance = settings.linkDistance
-            val longMul = settings.longDistanceLinkMultiplier
-            val connRepulsionMul = settings.connectedRepulsionMultiplier
-            val invConnRepulsionMul = 1f - connRepulsionMul
-
-            val linkJobs = (0 until edgeChunks).map { chunkIdx ->
-                async(Dispatchers.Default) {
-                    val start = chunkIdx * edgeChunkSize
-                    val end = min(start + edgeChunkSize, edgeCount)
-                    val tIdx = chunkIdx % cores
-                    val tfx = threadForceX[tIdx]
-                    val tfy = threadForceY[tIdx]
-
-                    for (e in start until end) {
-                        val a = edgeA[e]
-                        val b = edgeB[e]
-                        if (a == draggedIdx && b == draggedIdx) continue
-
-                        var dx = posX[b] - posX[a]
-                        var dy = posY[b] - posY[a]
-
-                        // [NEW] Anti-Singularity: Force separation if exactly overlapped
-                        if (dx == 0f && dy == 0f) {
-                            dx = 0.01f + (a % 5) * 0.005f
-                            dy = 0.01f + (b % 5) * 0.005f
-                        }
-
-                        val distSq = max(dx * dx + dy * dy, 0.01f)
-                        // Fast inverse sqrt avoidance: we need dist for the linear spring
-                        // (linear in displacement, not in 1/r). One sqrt is unavoidable
-                        // unless we accept a less accurate model.
-                        val dist = sqrt(distSq)
-                        val invDist = 1f / dist
-
-                        val degA = degree[a]
-                        val degB = degree[b]
-                        val degSum = (degA + degB).coerceAtLeast(1)
-                        // bias for endpoint a (force ON a TOWARD b): degB / (degA+degB)
-                        val biasA = degB.toFloat() / degSum.toFloat()
-                        val biasB = degA.toFloat() / degSum.toFloat()
-
-                        // Hub expansion: use cached pow values
-                        val hubScale = (hubScaleCache[a] + hubScaleCache[b]) * 0.5f
-//                        val effectiveLinkDistance = baseLinkDistance * hubScale.coerceIn(1f, 3f)
-                        val degreeScale = if (degSum > 20) {
-                            1f - (degSum - 20) * 0.02f  // Gradually reduce distance for very high degree nodes
-                        } else {
-                            1f
-                        }.coerceAtLeast(0.5f)
-
-                        val effectiveLinkDistance = baseLinkDistance * hubScale * degreeScale
-
-                        val distMul = if (dist > effectiveLinkDistance * 1.5f) longMul else 1f
-
-                        // Repulsion compensation
-                        // FIXED - repulsion compensation should REDUCE attraction, not add to it
-                        val repCompensation = (effectiveRepel / max(distSq, softening)) * connRepulsionMul
-
-                        val displacement = dist - effectiveLinkDistance
-                        val baseLinkMag = effectiveLink * displacement * distMul
-
-// Apply to A (pulls toward B if displacement > 0)
-                        val magA = baseLinkMag * biasA * (1f - connRepulsionMul)  // Reduce attraction based on repulsion
-                        val fxA = dx * invDist * magA + dx * invDist * repCompensation  // Add repulsion separately
-                        val fyA = dy * invDist * magA + dy * invDist * repCompensation
-
-// Apply to B (Newton's third law: opposite direction for spring, but repulsion pushes apart)
-                        val magB = baseLinkMag * biasB * (1f - connRepulsionMul)
-                        val fxB = -dx * invDist * magB - dx * invDist * repCompensation  // Repulsion pushes apart
-                        val fyB = -dy * invDist * magB - dy * invDist * repCompensation
-
-                        val antiStickDist = settings.circleSize * 2f  // 2x circle diameter
-                        val antiStickForce = effectiveRepel * 10f  // 10x normal repulsion for very close nodes
-
-                        if (dist < antiStickDist) {
-                            val stickFactor = (1f - dist / antiStickDist) * (1f - dist / antiStickDist)  // Quadratic falloff
-                            val antiFx = dx * invDist * antiStickForce * stickFactor
-                            val antiFy = dy * invDist * antiStickForce * stickFactor
-
-                            tfx[a] -= antiFx; tfy[a] -= antiFy
-                            tfx[b] += antiFx; tfy[b] += antiFy
-                        }
-                        if (a != draggedIdx) { tfx[a] += fxA; tfy[a] += fyA }
-                        if (b != draggedIdx) { tfx[b] += fxB; tfy[b] += fyB }
-                    }
-                }
-            }
-            linkJobs.awaitAll()
-
-            // Reduce per-thread buffers into forceX/Y (node-parallel)
+            // Reduce per-thread buffers
             val reduceJobs = (0 until nodeChunks).map { chunkIdx ->
                 async(Dispatchers.Default) {
                     val start = chunkIdx * nodeChunkSize
@@ -432,19 +273,17 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             reduceJobs.awaitAll()
         }
 
-        // -------------------------------------------------------------
-        // PHASE 3: Force clamp + integrate (node-parallel)
-        // -------------------------------------------------------------
+        // ---- PHASE 3: Clamp + integrate ----
         val maxF = settings.maxForce * (1f + alpha)
         val maxFSq = maxF * maxF
-
         val chunkEnergy = FloatArray(nodeChunks)
         val adaptiveTimestep = when {
-            alpha > 0.5f -> 0.15f   // Faster movement when hot
-            alpha > 0.2f -> 0.12f
-            alpha > 0.1f -> 0.1f
-            else -> 0.08f           // More stable when cool
+            alpha > 0.5f -> config.timestepHot
+            alpha > 0.2f -> config.timestepWarm
+            alpha > 0.1f -> config.timestepCool
+            else -> config.timestepCold
         }
+        val posScale = config.posUpdateBlend + alpha * config.posUpdateAlphaScale
 
         val integrateJobs = (0 until nodeChunks).map { chunkIdx ->
             async(Dispatchers.Default) {
@@ -457,14 +296,12 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                     var fx = forceX[i]
                     var fy = forceY[i]
 
-                    // Clamp force
                     val fMagSq = fx * fx + fy * fy
                     if (fMagSq > maxFSq) {
                         val s = maxF / sqrt(fMagSq)
                         fx *= s; fy *= s
                     }
 
-                    // Use adaptive timestep for velocity integration
                     var vx = (velX[i] + fx * adaptiveTimestep) * damping
                     var vy = (velY[i] + fy * adaptiveTimestep) * damping
 
@@ -476,47 +313,35 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
                     }
 
                     velX[i] = vx; velY[i] = vy
-
-                    // Apply velocity smoothing for stability
-                    posX[i] += vx * (0.4f + alpha * 0.3f)  // Scale position update with alpha
-                    posY[i] += vy * (0.4f + alpha * 0.3f)
+                    posX[i] += vx * posScale
+                    posY[i] += vy * posScale
                 }
                 chunkEnergy[chunkIdx] = localEnergy
             }
         }
         integrateJobs.awaitAll()
 
-        // Handle dragged node
+        // Dragged node override
         if (draggedIdx >= 0 && draggedNode?.offset != null) {
-            draggedNode.offset.let { o ->
-                posX[draggedIdx] = o.x
-                posY[draggedIdx] = o.y
-            }
-            velX[draggedIdx] = 0f; velY[draggedIdx] = 0f
+            posX[draggedIdx] = draggedNode.offset.x
+            posY[draggedIdx] = draggedNode.offset.y
+            velX[draggedIdx] = 0f
+            velY[draggedIdx] = 0f
         }
 
-//        totalKineticEnergy = chunkEnergy.sum()
-//        alpha += (alphaTarget - alpha) * alphaDecay
-//
-//        // [NEW] Snap-Freeze: Crush the asymptotic tail to instantly kill micro-wobbles
-//        if (alpha < 0.05f) {
-//            alpha = 0f
-//        }
+        // Heat decay + snap-freeze
         totalKineticEnergy = chunkEnergy.sum()
         alpha += (alphaTarget - alpha) * alphaDecay
 
         if (freezingEnabled) {
-            // Snap-Freeze: Crush the asymptotic tail to instantly kill micro-wobbles
-            if (alpha < 0.05f) {
+            if (alpha < config.sleepAlphaThreshold && totalKineticEnergy < config.sleepEnergyThreshold) {
                 alpha = 0f
             }
         } else {
-            // Keep a minimum "heat" so the physics never completely die
-            // You can tweak this value. 0.05f keeps a gentle ambient movement.
-            alpha = max(alpha, 0.05f)
+            alpha = max(alpha, config.minAlphaWhenUnfrozen)
         }
 
-        // Write back to maps
+        // Write back
         for (i in 0 until nodeCount) {
             val id = ids[i]
             coordinates[id] = Offset(posX[i], posY[i])
@@ -524,9 +349,171 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
     }
 
-    override fun reheat() {
-        reheat(intensity = reheatAlpha)
+    // -----------------------------------------------------------------
+    // Extracted force phases (for readability)
+    // -----------------------------------------------------------------
+
+    private fun applyGroupForces(gs: GroupSettings, draggedIdx: Int) {
+        for (g in 0 until groupCount) {
+            groupCentroidX[g] = 0f
+            groupCentroidY[g] = 0f
+            groupMemberCount[g] = 0
+        }
+        for (i in 0 until nodeCount) {
+            val from = nodeGroupOffset[i]
+            val to = nodeGroupOffset[i + 1]
+            val px = posX[i]; val py = posY[i]
+            for (k in from until to) {
+                val gid = nodeGroupId[k]
+                groupCentroidX[gid] += px
+                groupCentroidY[gid] += py
+                groupMemberCount[gid]++
+            }
+        }
+        for (g in 0 until groupCount) {
+            val c = groupMemberCount[g]
+            if (c > 0) {
+                val inv = 1f / c
+                groupCentroidX[g] *= inv
+                groupCentroidY[g] *= inv
+            }
+        }
+
+        val sepX = FloatArray(groupCount)
+        val sepY = FloatArray(groupCount)
+        val sepForce = gs.groupSeparation * alpha
+        if (sepForce > 0f && groupCount > 1) {
+            val soft = gs.groupSeparationSoftening
+            val softSq = soft * soft
+            for (a in 0 until groupCount) {
+                if (groupMemberCount[a] == 0) continue
+                for (b in a + 1 until groupCount) {
+                    if (groupMemberCount[b] == 0) continue
+                    var dx = groupCentroidX[a] - groupCentroidX[b]
+                    var dy = groupCentroidY[a] - groupCentroidY[b]
+                    var distSq = dx * dx + dy * dy
+                    if (distSq < 0.01f) {
+                        dx = ((a - b) and 0xF).toFloat() * 0.1f + 0.01f
+                        dy = ((a + b) and 0xF).toFloat() * 0.1f + 0.01f
+                        distSq = dx * dx + dy * dy
+                    }
+                    val mag = sepForce / max(distSq, softSq)
+                    val nx = dx * mag
+                    val ny = dy * mag
+                    sepX[a] += nx; sepY[a] += ny
+                    sepX[b] -= nx; sepY[b] -= ny
+                }
+            }
+        }
+
+        val cohesion = gs.cohesionForce * alpha
+        for (i in 0 until nodeCount) {
+            if (i == draggedIdx) continue
+            val from = nodeGroupOffset[i]
+            val to = nodeGroupOffset[i + 1]
+            if (from == to) continue
+            val px = posX[i]; val py = posY[i]
+            var fx = 0f; var fy = 0f
+            val memberships = to - from
+            for (k in from until to) {
+                val gid = nodeGroupId[k]
+                fx += (groupCentroidX[gid] - px) * cohesion
+                fy += (groupCentroidY[gid] - py) * cohesion
+                fx += sepX[gid]
+                fy += sepY[gid]
+            }
+            val invM = 1f / memberships
+            forceX[i] += fx * invM
+            forceY[i] += fy * invM
+        }
     }
+
+    private suspend fun applyEdgeForces(
+        cores: Int,
+        settings: GraphViewSettings,
+        effectiveLink: Float,
+        effectiveRepel: Float,
+        softening: Float,
+        draggedIdx: Int,
+    ) = coroutineScope {
+        val edgeChunkSize = max(64, (edgeCount + cores - 1) / cores)
+        val edgeChunks = (edgeCount + edgeChunkSize - 1) / edgeChunkSize
+
+        val baseLinkDistance = settings.linkDistance
+        val longMul = settings.longDistanceLinkMultiplier
+        val connRepulsionMul = settings.connectedRepulsionMultiplier
+        val antiStickDist = settings.circleSize * config.antiStickDistanceMultiplier
+        val antiStickForce = effectiveRepel * config.antiStickForceMultiplier
+
+        val linkJobs = (0 until edgeChunks).map { chunkIdx ->
+            async(Dispatchers.Default) {
+                val start = chunkIdx * edgeChunkSize
+                val end = min(start + edgeChunkSize, edgeCount)
+                val tIdx = chunkIdx % cores
+                val tfx = threadForceX[tIdx]
+                val tfy = threadForceY[tIdx]
+
+                for (e in start until end) {
+                    val a = edgeA[e]
+                    val b = edgeB[e]
+                    if (a == draggedIdx && b == draggedIdx) continue
+
+                    var dx = posX[b] - posX[a]
+                    var dy = posY[b] - posY[a]
+                    if (dx == 0f && dy == 0f) {
+                        dx = 0.01f + (a % 5) * 0.005f
+                        dy = 0.01f + (b % 5) * 0.005f
+                    }
+
+                    val distSq = max(dx * dx + dy * dy, 0.01f)
+                    val dist = sqrt(distSq)
+                    val invDist = 1f / dist
+
+                    val degA = degree[a]
+                    val degB = degree[b]
+                    val degSum = (degA + degB).coerceAtLeast(1)
+                    val biasA = degB.toFloat() / degSum.toFloat()
+                    val biasB = degA.toFloat() / degSum.toFloat()
+
+                    val hubScale = (hubScaleCache[a] + hubScaleCache[b]) * 0.5f
+                    val degreeScale = if (degSum > 20) {
+                        (1f - (degSum - 20) * 0.02f).coerceAtLeast(0.5f)
+                    } else 1f
+
+                    val effectiveLinkDistance = baseLinkDistance * hubScale * degreeScale
+                    val distMul = if (dist > effectiveLinkDistance * 1.5f) longMul else 1f
+                    val repCompensation = (effectiveRepel / max(distSq, softening)) * connRepulsionMul
+
+                    val displacement = dist - effectiveLinkDistance
+                    val baseLinkMag = effectiveLink * displacement * distMul
+
+                    val magA = baseLinkMag * biasA * (1f - connRepulsionMul)
+                    val fxA = dx * invDist * magA + dx * invDist * repCompensation
+                    val fyA = dy * invDist * magA + dy * invDist * repCompensation
+
+                    val magB = baseLinkMag * biasB * (1f - connRepulsionMul)
+                    val fxB = -dx * invDist * magB - dx * invDist * repCompensation
+                    val fyB = -dy * invDist * magB - dy * invDist * repCompensation
+
+                    if (dist < antiStickDist) {
+                        val t = 1f - dist / antiStickDist
+                        val stickFactor = t * t
+                        val antiFx = dx * invDist * antiStickForce * stickFactor
+                        val antiFy = dy * invDist * antiStickForce * stickFactor
+                        tfx[a] -= antiFx; tfy[a] -= antiFy
+                        tfx[b] += antiFx; tfy[b] += antiFy
+                    }
+                    if (a != draggedIdx) { tfx[a] += fxA; tfy[a] += fyA }
+                    if (b != draggedIdx) { tfx[b] += fxB; tfy[b] += fyB }
+                }
+            }
+        }
+        linkJobs.awaitAll()
+    }
+
+    // -----------------------------------------------------------------
+    // syncData / setup
+    // -----------------------------------------------------------------
 
     private fun ensureThreadBuffers(cores: Int, n: Int) {
         if (lastThreadCount != cores || threadForceX.isEmpty() || threadForceX[0].size < n) {
@@ -542,8 +529,7 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
         for (i in 0 until nodeCount) {
             val d = degree[i].toFloat()
-            // Cap hub expansion to prevent orbits from becoming too large
-            hubScaleCache[i] = min(d.pow(exponent), 4f)  // Cap at 4x base distance
+            hubScaleCache[i] = min(d.pow(exponent), config.maxHubScale)
         }
     }
 
@@ -552,7 +538,7 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         coordinates: MutableMap<Id, Offset>,
         velocities: MutableMap<Id, Offset>,
         connections: Map<Id, List<Id>>,
-        structureChanged: Boolean
+        structureChanged: Boolean,
     ) {
         val n = graphNodes.size
 
@@ -571,29 +557,20 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
 
         ids.clear()
         idToIndex.clear()
-
-
         nodeCount = n
 
-        // Invalidate hubScale cache on structural change
         if (structureChanged) {
             lastHubExponent = Float.NaN
         }
 
-        // Dynamic alpha decay scaling
-//        if (nodeCount > 0) {
-//            alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
-//                .coerceIn(0.02f, 0.08f)
-//        }
-        // Dynamic alpha decay scaling
-        if (nodeCount > 0) {
-            // Lowered the base multiplier from 0.05f to 0.015f for a longer, smoother layout time
-            alphaDecay = (0.015f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
-                .coerceIn(0.005f, 0.03f)
+        // Adaptive decay — only one location now (was duplicated before).
+        if (config.adaptiveDecayByNodeCount && nodeCount > 0) {
+            alphaDecay = (config.baseAlphaDecay * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+                .coerceIn(config.minAlphaDecay, config.maxAlphaDecay)
+        } else {
+            alphaDecay = config.baseAlphaDecay
         }
 
-        // [MOVED] Group sync runs LAST so nodeCount is correct and posX/posY are
-        // already populated. Pass `n` explicitly to be defensive.
         syncGroupsInternal(graphNodes, n)
 
         for (i in 0 until n) {
@@ -614,23 +591,18 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             velX[i] = vel.x; velY[i] = vel.y
         }
 
-        // Count edges (each undirected edge counted once: only a < b)
-        // First pass: count total directed entries (for CSR sizing)
+        // Count CSR entries
         var totalCsrConns = 0
         for (i in 0 until n) {
-            val conns = connections[graphNodes[i].id]
-            if (conns != null) {
-                for (cId in conns) {
-                    if (idToIndex.containsKey(cId)) totalCsrConns++
-                }
+            val conns = connections[graphNodes[i].id] ?: continue
+            for (cId in conns) {
+                if (idToIndex.containsKey(cId)) totalCsrConns++
             }
         }
-
         if (connectionsFlat.size < totalCsrConns) {
             connectionsFlat = IntArray(totalCsrConns.coerceAtLeast(16))
         }
 
-        // Build CSR + degree
         var write = 0
         for (i in 0 until n) {
             connectionsOffset[i] = write
@@ -649,8 +621,7 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
         connectionsOffset[n] = write
 
-        // Build deduplicated edge list (each undirected edge once: a < b)
-        // Upper bound = total CSR entries / 2 + slack
+        // Deduplicated edge list (a < b)
         val edgeCap = (totalCsrConns / 2 + 16).coerceAtLeast(16)
         if (edgeA.size < edgeCap) {
             edgeA = IntArray(edgeCap)
@@ -662,9 +633,8 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             val to = connectionsOffset[i + 1]
             for (k in from until to) {
                 val j = connectionsFlat[k]
-                if (j > i) { // dedupe undirected
+                if (j > i) {
                     if (eWrite >= edgeA.size) {
-                        // very rare: grow
                         edgeA = edgeA.copyOf(edgeA.size * 2)
                         edgeB = edgeB.copyOf(edgeB.size * 2)
                     }
@@ -675,135 +645,82 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
             }
         }
         edgeCount = eWrite
-
-        nodeCount = n
-
-        // Invalidate hubScale cache on structural change
-        if (structureChanged) {
-            lastHubExponent = Float.NaN
-        }
-
-        // Dynamic alpha decay scaling
-        if (nodeCount > 0) {
-            // Correctly apply coerceIn to the FINAL multiplication result
-            alphaDecay = (0.05f * (100f / nodeCount.coerceAtLeast(100).toFloat()))
-                .coerceIn(0.02f, 0.08f)
-        }
     }
 
-    // ============================================================================
-// PATCH: UltraFastEngine.kt — add group magnetization
-// ============================================================================
-// Add these fields, methods, and code blocks to your existing UltraFastEngine.
-// I've marked every insertion point clearly with // [ADD] comments.
-// ============================================================================
+    // -----------------------------------------------------------------
+    // Group data
+    // -----------------------------------------------------------------
 
-// ----------------------------------------------------------------------------
-// [ADD] Imports at top of file (alongside existing ones)
-// ----------------------------------------------------------------------------
-// import com.moly3.dataviz.core.graph.model.GroupSettings
-
-
-// ----------------------------------------------------------------------------
-// [ADD] Inside class UltraFastEngine<Id, Data>, with the other SoA fields:
-// ----------------------------------------------------------------------------
-
-    // Group membership stored as flat CSR to support nodes-in-multiple-groups.
-// nodeGroupOffset[i]..nodeGroupOffset[i+1] indexes into nodeGroupId for node i.
     private var nodeGroupOffset = IntArray(1)
-    private var nodeGroupId    = IntArray(0)   // global integer group ids
-    private var groupCount     = 0
-    private var groupIdToString: Array<String> = emptyArray()   // index -> raw groupId string
+    private var nodeGroupId = IntArray(0)
+    private var groupCount = 0
+    private var groupIdToString: Array<String> = emptyArray()
 
-    // Per-group running aggregates (rebuilt cheaply each step that uses cohesion)
     private var groupCentroidX = FloatArray(0)
     private var groupCentroidY = FloatArray(0)
     private var groupMemberCount = IntArray(0)
 
-    // Last-seen signature so we know when to rebuild group SoA + reheat.
-    private var lastGroupSignature = 0
+    /** -1 means "no signature yet" so the very first sync doesn't fire a fake reheat. */
+    private var lastGroupSignature = -1
 
+    @Volatile
+    private var pendingGroupResolver: ((Int) -> List<String>)? = null
 
-// ----------------------------------------------------------------------------
-// [ADD] New parameter to step() OR (cleaner) add a setter — pick whichever
-// matches the rest of your engine's API. Below I show the setter approach,
-// which avoids touching IGraphEngine.step's signature.
-// ----------------------------------------------------------------------------
-
-    // Latest group data handed in from Compose layer. Treated as immutable per-step.
-    @Volatile private var pendingGroupResolver: ((Int) -> List<String>)? = null
     @Volatile
     private var pendingGroupSettings: GroupSettings = GroupSettings()
 
-    /** Call from the Composable BEFORE step(). Cheap; just swaps references. */
-    fun setGroupData(
-        groupsForNodeIndex: ((Int) -> List<String>)?,   // index in `graphNodes` -> groupIds
-        settings: GroupSettings
+    override fun setGroupData(
+        groupsForNodeIndex: ((Int) -> List<String>)?,
+        settings: GroupSettings,
     ) {
         pendingGroupResolver = groupsForNodeIndex
         pendingGroupSettings = settings
     }
 
-
-// ----------------------------------------------------------------------------
-// [ADD] In syncData(...), AFTER the edge list is built and `nodeCount = n`,
-// insert the group sync. (i.e. just before "if (structureChanged)" near the end.)
-// ----------------------------------------------------------------------------
-
-// --- Group SoA sync ---
-
-
-
-// ----------------------------------------------------------------------------
-// [ADD] New private method on the class:
-// ----------------------------------------------------------------------------
-
     private fun syncGroupsInternal(graphNodes: List<GraphNode<Id, Data>>, n: Int) {
         val resolver = pendingGroupResolver
 
         if (resolver == null || !pendingGroupSettings.enabled || n == 0) {
-            // Groups disabled or empty graph — make sure offset array still has
-            // a valid sentinel so Phase 1.5's `nodeGroupOffset[i+1]` read is safe
-            // even if someone re-enables groups mid-run.
             if (nodeGroupOffset.size < n + 1) {
                 nodeGroupOffset = IntArray((n + 1).coerceAtLeast(1))
             }
-            for (i in 0..n) nodeGroupOffset[i] = 0   // all empty ranges
+            for (i in 0..n) nodeGroupOffset[i] = 0
             groupCount = 0
             return
         }
 
-        // First pass: collect distinct group ids in stable insertion order,
-        // count membership entries.
         val nameToId = HashMap<String, Int>()
         val names = ArrayList<String>()
         var totalEntries = 0
         val perNode = arrayOfNulls<List<String>>(n)
+        val perNodeIds = arrayOfNulls<IntArray>(n)
 
         for (i in 0 until n) {
             val list = resolver(i)
             perNode[i] = list
-            for (gName in list) {
-                if (gName !in nameToId) { // or !nameToId.containsKey(gName)
-                    nameToId[gName] = names.size
+            if (list.isEmpty()) continue
+            val ids = IntArray(list.size)
+            for ((k, gName) in list.withIndex()) {
+                var id = nameToId[gName]
+                if (id == null) {
+                    id = names.size
+                    nameToId[gName] = id
                     names.add(gName)
                 }
+                ids[k] = id
                 totalEntries++
             }
+            perNodeIds[i] = ids
         }
 
         val g = names.size
 
-        // Signature: only reheat if it actually changed.
         var sig = g * 1_000_003 + totalEntries
         for (i in 0 until n) sig = sig * 31 + (perNode[i]?.size ?: 0)
+        val isFirstSync = lastGroupSignature == -1
         val groupsChanged = sig != lastGroupSignature
         lastGroupSignature = sig
 
-        // [FIX] Grow nodeGroupOffset to (n+1), not n.  The previous version
-        // checked `< n + 1` which is correct, but the initial field declaration
-        // is `IntArray(1)`, so the very first call must grow it.  We just make
-        // the growth more aggressive to amortize reallocation.
         if (nodeGroupOffset.size < n + 1) {
             nodeGroupOffset = IntArray((n + 1).coerceAtLeast(16))
         }
@@ -812,63 +729,48 @@ class UltraFastEngine<Id, Data> : IGraphEngine<Id, Data> {
         }
         if (groupCentroidX.size < g) {
             val cap = g.coerceAtLeast(8)
-            groupCentroidX   = FloatArray(cap)
-            groupCentroidY   = FloatArray(cap)
+            groupCentroidX = FloatArray(cap)
+            groupCentroidY = FloatArray(cap)
             groupMemberCount = IntArray(cap)
         }
 
         var w = 0
         for (i in 0 until n) {
             nodeGroupOffset[i] = w
-            val list = perNode[i] ?: continue
-            for (gName in list) {
-                nodeGroupId[w++] = nameToId[gName]!!
-            }
+            val gids = perNodeIds[i] ?: continue
+            for (id in gids) nodeGroupId[w++] = id
         }
-        nodeGroupOffset[n] = w       // sentinel — required for `[i+1]` reads in Phase 1.5
+        nodeGroupOffset[n] = w
         groupCount = g
         groupIdToString = Array(g) { names[it] }
 
-        if (groupsChanged) reheat(0.4f)
+        // Only reheat if the group set ACTUALLY changed (not on first init).
+        if (groupsChanged && !isFirstSync && config.groupChangeReheatAlpha > 0f) {
+            reheatInternal(config.groupChangeReheatAlpha)
+        }
     }
 
-    fun unfreeze() {
-        if (!freezingEnabled) return
-        reheat(reheatAlpha)
-    }
-// ----------------------------------------------------------------------------
-
-// --- end Phase 1.5 -----------------------------------------------------------
-
-
-// ----------------------------------------------------------------------------
-// [ADD] Public read-only snapshot accessors for the hull builder.
-// These must be lock-free and stable enough for an off-thread reader:
-// we return defensive copies of just what's needed.
-// ----------------------------------------------------------------------------
-
-    /** Snapshot of (groupId, [(x,y) for each member node]) for hull computation. */
-    fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>> {
+    /** Snapshot of (groupId, [(x,y)...]) for hull computation. */
+    override fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>> {
         val g = groupCount
         if (g == 0 || nodeCount == 0) return emptyList()
 
-        // First, count members per group from current CSR
         val counts = IntArray(g)
         for (i in 0 until nodeCount) {
             val from = nodeGroupOffset[i]
-            val to   = nodeGroupOffset[i + 1]
+            val to = nodeGroupOffset[i + 1]
             for (k in from until to) counts[nodeGroupId[k]]++
         }
         val pts = Array(g) { FloatArray(counts[it] * 2) }
         val wIdx = IntArray(g)
         for (i in 0 until nodeCount) {
             val from = nodeGroupOffset[i]
-            val to   = nodeGroupOffset[i + 1]
+            val to = nodeGroupOffset[i + 1]
             val px = posX[i]; val py = posY[i]
             for (k in from until to) {
                 val gid = nodeGroupId[k]
                 val w = wIdx[gid]
-                pts[gid][w]     = px
+                pts[gid][w] = px
                 pts[gid][w + 1] = py
                 wIdx[gid] = w + 2
             }

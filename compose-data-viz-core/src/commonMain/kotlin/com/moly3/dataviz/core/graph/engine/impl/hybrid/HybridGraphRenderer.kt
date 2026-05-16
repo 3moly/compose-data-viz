@@ -3,6 +3,7 @@ package com.moly3.dataviz.core.graph.engine.impl.hybrid
 import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
+import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
 
@@ -30,6 +31,21 @@ class HybridGraphRenderer<Id, Data> : IGraphEngine<Id, Data> {
 
     override fun reheat() {
 
+    }
+
+    override fun nudge() {
+
+    }
+
+    override fun setGroupData(
+        groupsForNodeIndex: ((Int) -> List<String>)?,
+        settings: GroupSettings
+    ) {
+
+    }
+
+    override fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>> {
+        return listOf()
     }
 
     /** True when the simulation has settled - caller can skip frames to save battery. */

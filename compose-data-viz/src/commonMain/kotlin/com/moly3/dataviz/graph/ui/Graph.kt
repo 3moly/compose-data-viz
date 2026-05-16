@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
@@ -48,6 +49,7 @@ import kotlin.math.abs
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
+    textStyle: TextStyle = TextStyle.Default,
     settings: GraphSettings = GraphSettings.Default,
     engine: IGraphEngine<Id, Data> = remember { UltraFastEngine() },
     consume: Boolean,
@@ -124,7 +126,7 @@ fun <Id, Data> Graph(
 // inside syncData(). Since this is just two reference writes, doing it on
 // recomposition is fine.
     LaunchedEffect(engine, groupSettings, stateNodes) {
-        (engine as? UltraFastEngine<Id, Data>)?.setGroupData(
+        engine.setGroupData(
             groupsForNodeIndex = if (groupSettings.enabled) groupResolver else null,
             settings = groupSettings,
         )
@@ -133,7 +135,8 @@ fun <Id, Data> Graph(
 // We rebuild more often while the engine is hot, then idle out.
     LaunchedEffect(hullController, engine, groupSettings, getGroupColor) {
         if (!groupSettings.enabled) return@LaunchedEffect
-        val ultra = engine as? UltraFastEngine<Id, Data> ?: return@LaunchedEffect
+//        val ultra = engine as? UltraFastEngine<Id, Data> ?: return@LaunchedEffect
+        val ultra = engine
         while (isActive) {
             val interval = if (ultra.isAsleep) groupSettings.hullSettledIntervalMs
             else groupSettings.hullRecomputeIntervalMs
@@ -249,7 +252,9 @@ fun <Id, Data> Graph(
                     nodes,
                     latestConnections,
                     latestSettings.view,
-                    coordsScratch, velsScratch, latestDragged
+                    coordsScratch,
+                    velsScratch,
+                    latestDragged
                 )
 
                 stateMutex.withLock {
@@ -377,19 +382,21 @@ fun <Id, Data> Graph(
                             DragNodeData(it.id).copy(offset = tapOffset - latestUserPosition)
                     }
                 },
-                onGesture = { centroid, gesturePan, gestureZoom, _, _, pointerList ->
+                onGesture = { centroid, gesturePan, gestureZoom, _, pointer, pointerList ->
+                    println("gestureZoom: ${pointer.type} ${gestureZoom} ${localSyncZoom}")
                     if (draggedNodeState != null && pointerList.size == 1) {
                         val tapOffset = (centroid - centerSizeState) / localSyncZoom
-                        draggedNodeState =
-                            draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
+                        draggedNodeState = draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
                     } else {
                         if (watchNodeId == null && pointerList.size == 1) {
-                            if (abs(gesturePan.x) > 0.5f || abs(gesturePan.y) > 0.5f) {
-                                // FIX: Add the gesture delta to the latest absolute position
+                            // FIX: Removed the 0.5f threshold. Let the sub-pixel trackpad deltas pass through.
+                            if (gesturePan != Offset.Zero) {
                                 onCentralGlobalPosition(latestUserPosition + (gesturePan / localSyncZoom))
                             }
                         }
-                        if (pointerList.size == 2 && abs(1f - gestureZoom) > 0.005f) {
+
+                        // FIX: Removed the 0.005f threshold to allow smooth pinch-to-zoom on trackpads.
+                        if (pointerList.size == 2 && gestureZoom != 1f) {
                             val zoomCfg = latestSettings.zoom
                             localSyncZoom = (localSyncZoom * gestureZoom).coerceIn(
                                 zoomCfg.minZoom,
@@ -408,6 +415,7 @@ fun <Id, Data> Graph(
         atlasLayers = atlasLayers,
         getIconKey = getIconKey,
 
+        textStyle = textStyle,
         customPopup = customPopup,
         modifier = graphModifier,
         settings = settings,

@@ -1,15 +1,17 @@
 package com.moly3.dataviz.core.graph.hull
 
-import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
-import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
+import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -60,7 +62,7 @@ class GroupHullController(
      * the expensive hull math to the worker. Last submission wins.
      */
     fun submit(
-        engine: UltraFastEngine<*, *>,
+        engine: IGraphEngine<*, *>,
         groupLabelOf: (String) -> String,
         groupColorOf: (String) -> Color,
         settings: GroupSettings
