@@ -35,6 +35,11 @@ data class GraphTextSettings(
     val activePillPaddingY: Float = 12f,
     val activePillCornerRadius: Float = 24f,
     val activePillBackgroundAlpha: Float = 0.85f,
+
+    val labelMaxWidth: Int = Int.MAX_VALUE,
+    val labelMaxLines: Int = Int.MAX_VALUE,
+
+
 ) {
     companion object {
         val Default = GraphTextSettings()

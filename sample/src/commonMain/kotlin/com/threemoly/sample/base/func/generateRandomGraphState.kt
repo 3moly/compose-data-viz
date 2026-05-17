@@ -22,6 +22,17 @@ fun generateRandomGraphState(
         )
     }.toMutableList()
 
+
+    val singlers = (1..nodeCount).map { index ->
+        ObsidianGraphNode(
+            id = "node_single_$index",
+            name = "Node sababaababab $index",
+            data = ObsidianGraphData.File("https://picsum.photos/id/${index}/300/300"),
+            colorValue = randomColor().value
+        )
+    }.toMutableList()
+    nodes.addAll(singlers)
+
     nodes.add(
         ObsidianGraphNode(
             id = "Folder",

@@ -16,8 +16,6 @@ data class GraphSettings(
     val text: GraphTextSettings = GraphTextSettings.Default,
     val zoom: GraphZoomSettings = GraphZoomSettings.Default,
     val watch: GraphWatchSettings = GraphWatchSettings.Default,
-//    @Transient
-//    val textStyle: TextStyle = TextStyle.Default,
     val groupSettings: GroupSettings = GroupSettings()
 ) {
     companion object {

@@ -32,6 +32,7 @@ import com.moly3.dataviz.graph.features.atlas.AtlasLayers
 import com.moly3.dataviz.graph.func.InitialLayout
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
+import kotlinx.collections.immutable.toPersistentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +46,7 @@ import kotlinx.coroutines.withContext
 import kotlin.collections.set
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
+import kotlin.random.Random
 
 @Composable
 fun <Id, Data> Graph(
@@ -70,7 +72,7 @@ fun <Id, Data> Graph(
     velocities: Map<Id, Offset>,
     connections: Map<Id, List<Id>>,
 
-    onCentralGlobalPosition: (Offset) -> Unit,
+    onCentralGlobalPosition: (Boolean, Offset) -> Unit,
     onZoomChange: (Float) -> Unit,
     watchNodeId: Id? = null,
     io: CoroutineContext,
@@ -83,7 +85,7 @@ fun <Id, Data> Graph(
     var draggedNodeState by remember { mutableStateOf<DragNodeData<Id>?>(null) }
     var cursorNodeState by remember { mutableStateOf<GraphNode<Id, Data>?>(null) }
 
-    val liveCoordinates = remember { HashMap<Id, Offset>() }
+    val liveCoordinates = remember<HashMap<Id, Offset>> { HashMap() }
     val liveVelocities = remember { HashMap<Id, Offset>() }
 
     var mapVersion by remember { mutableIntStateOf(0) }
@@ -145,18 +147,32 @@ fun <Id, Data> Graph(
         }
     }
 
-    LaunchedEffect(stateNodes) {
+    LaunchedEffect(stateNodes, coordinates) {
         if (stateNodes.isEmpty()) return@LaunchedEffect
 
+        // --- one-shot seed from saved coordinates, the moment they're available ---
+//        if (liveCoordinates.isEmpty() && coordinates.values.any { it != Offset.Zero }) {
+//            stateMutex.withLock {
+//                for (node in stateNodes) {
+//                    liveCoordinates[node.id] = coordinates[node.id] ?: Offset.Zero
+//                    liveVelocities[node.id] = velocities[node.id] ?: Offset.Zero
+//                }
+//                mapVersion++
+//            }
+//            lastLayoutKey = stateNodes.size xor stateNodes.fold(0) { a, n -> a xor n.id.hashCode() }
+//            engine.nudge()          // wake it so the seeded layout actually renders/settles
+//            return@LaunchedEffect
+//        }
+
+        // --- existing path: no saved positions, compute a fresh layout ---
         val key = stateNodes.size xor stateNodes.fold(0) { acc, n -> acc xor n.id.hashCode() }
         if (key == lastLayoutKey) {
             stateMutex.withLock {
                 var updated = false
-                for (i in stateNodes.indices) {
-                    val id = stateNodes[i].id
-                    if (id !in liveCoordinates) {
-                        liveCoordinates[id] = coordinates[id] ?: Offset.Zero
-                        liveVelocities[id] = velocities[id] ?: Offset.Zero
+                for (node in stateNodes) {
+                    if (node.id !in liveCoordinates) {
+                        liveCoordinates[node.id] = coordinates[node.id] ?: Offset.Zero
+                        liveVelocities[node.id] = velocities[node.id] ?: Offset.Zero
                         updated = true
                     }
                 }
@@ -166,30 +182,30 @@ fun <Id, Data> Graph(
         }
 
         val seeded = withContext(Dispatchers.Default) {
-            InitialLayout.compute(
-                nodes = stateNodes,
-                connections = connections,
-                settings = settings.view,
-                existingCoordinates = coordinates
-            )
+            if (coordinates.isEmpty()) {
+                // loose scatter — give physics something to untangle
+                stateNodes.associate {
+                    it.id to Offset(
+                        (Random.nextFloat() - 0.5f) * 800f,
+                        (Random.nextFloat() - 0.5f) * 800f,
+                    )
+                }
+            } else {
+                InitialLayout.compute(stateNodes, connections, settings.view, coordinates)
+            }
         }
-
         stateMutex.withLock {
             val newIds = stateNodes.map { it.id }.toHashSet()
             liveCoordinates.keys.retainAll(newIds)
             liveVelocities.keys.retainAll(newIds)
-
             var updated = false
-            for (i in stateNodes.indices) {
-                val id = stateNodes[i].id
-                val seedOffset = seeded[id] ?: Offset.Zero
-                if (liveCoordinates[id] != seedOffset) {
-                    liveCoordinates[id] = seedOffset
+            for (node in stateNodes) {
+                val seedOffset = seeded[node.id] ?: Offset.Zero
+                if (liveCoordinates[node.id] != seedOffset) {
+                    liveCoordinates[node.id] = seedOffset
                     updated = true
                 }
-                if (id !in liveVelocities) {
-                    liveVelocities[id] = Offset.Zero
-                }
+                if (node.id !in liveVelocities) liveVelocities[node.id] = Offset.Zero
             }
             if (updated) mapVersion++
         }
@@ -201,7 +217,7 @@ fun <Id, Data> Graph(
             launch(io) {
                 while (isActive) {
                     val foundOffset = liveCoordinates[watchNodeId]
-                    if (foundOffset != null) onCentralGlobalPosition(foundOffset)
+                    if (foundOffset != null) onCentralGlobalPosition(true, foundOffset)
                     delay(16L)
                 }
             }
@@ -239,7 +255,8 @@ fun <Id, Data> Graph(
 
                 withFrameNanos { }
 
-                coordsScratch.clear(); velsScratch.clear()
+                coordsScratch.clear();
+                velsScratch.clear()
                 stateMutex.withLock {
                     for (i in nodes.indices) {
                         val id = nodes[i].id
@@ -340,19 +357,18 @@ fun <Id, Data> Graph(
             centerSizeState = Offset(it.size.width.toFloat(), it.size.height.toFloat()) / 2f
         }
         .pointerInput(watchNodeId) {
-            var localSyncZoom = latestZoom
-
+//            var localSyncZoom = latestZoom
             detectPointerTransformGestures(
                 consume = consume,
                 numberOfPointers = 0,
                 requisite = PointerRequisite.GreaterThan,
                 onScrollChange = {
                     if (it.y != 0f) {
-                        val zoomCfg = latestSettings.zoom
-                        val factor = if (it.y > 0) zoomCfg.stepIn else zoomCfg.stepOut
-                        localSyncZoom =
-                            (localSyncZoom * factor).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
-                        onZoomChange(localSyncZoom)
+//                        val zoomCfg = latestSettings.zoom
+//                        val factor = if (it.y > 0) zoomCfg.stepIn else zoomCfg.stepOut
+//                        localSyncZoom =
+//                            (localSyncZoom * factor).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
+                        onZoomChange(it.y)
                     }
                 },
                 onClick = { position ->
@@ -373,7 +389,7 @@ fun <Id, Data> Graph(
                     }
                 },
                 onGestureStart = { pointer ->
-                    localSyncZoom = latestZoom
+//                    localSyncZoom = latestZoom
                     val tapOffset = (pointer.position - centerSizeState) / latestZoom
 
                     // Seed the node state with the initial offset immediately upon touch
@@ -383,26 +399,21 @@ fun <Id, Data> Graph(
                     }
                 },
                 onGesture = { centroid, gesturePan, gestureZoom, _, pointer, pointerList ->
-                    println("gestureZoom: ${pointer.type} ${gestureZoom} ${localSyncZoom}")
+//                    println("gestureZoom: ${pointer.type} ${gestureZoom} ${localSyncZoom}")
                     if (draggedNodeState != null && pointerList.size == 1) {
-                        val tapOffset = (centroid - centerSizeState) / localSyncZoom
-                        draggedNodeState = draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
+//                        val tapOffset = (centroid - centerSizeState) / localSyncZoom
+//                        draggedNodeState = draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
                     } else {
                         if (watchNodeId == null && pointerList.size == 1) {
-                            // FIX: Removed the 0.5f threshold. Let the sub-pixel trackpad deltas pass through.
-                            if (gesturePan != Offset.Zero) {
-                                onCentralGlobalPosition(latestUserPosition + (gesturePan / localSyncZoom))
-                            }
+                            onCentralGlobalPosition(false, gesturePan)
                         }
-
-                        // FIX: Removed the 0.005f threshold to allow smooth pinch-to-zoom on trackpads.
                         if (pointerList.size == 2 && gestureZoom != 1f) {
-                            val zoomCfg = latestSettings.zoom
-                            localSyncZoom = (localSyncZoom * gestureZoom).coerceIn(
-                                zoomCfg.minZoom,
-                                zoomCfg.maxZoom
-                            )
-                            onZoomChange(localSyncZoom)
+//                            val zoomCfg = latestSettings.zoom
+//                            localSyncZoom = (localSyncZoom * gestureZoom).coerceIn(
+//                                zoomCfg.minZoom,
+//                                zoomCfg.maxZoom
+//                            )
+//                            onZoomChange(localSyncZoom)
                         }
                     }
                 },

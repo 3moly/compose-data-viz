@@ -26,7 +26,7 @@ data class GraphSelectionSettings(
     /** Text alpha for the active node + its connected neighbours. */
     val selectedTextAlpha: Float = 1.0f,
     /** Text alpha for nodes unrelated to the active selection. */
-    val unrelatedTextAlpha: Float = 0.0f,
+    val unrelatedTextAlpha: Float = 0.3f,
 
     /** Per-second rate for fade-in animations. */
     val fadeInRatePerSec: Float = 6.0f,

@@ -29,6 +29,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
@@ -133,9 +135,15 @@ internal fun <Id, Data> GraphInternal(
     }
 
     val textLayouts = remember(textSignature, baseTextStyle, textCfg.normalFontSizeSp) {
-        val style = baseTextStyle.copy(fontSize = textCfg.normalFontSizeSp.sp)
+        val style =
+            baseTextStyle.copy(fontSize = textCfg.normalFontSizeSp.sp, textAlign = TextAlign.Center)
         nodes.associate { node ->
-            node.id to textMeasurer.measure(text = node.name, style = style)
+            node.id to textMeasurer.measure(
+                text = node.name,
+                maxLines = textCfg.labelMaxLines,
+                constraints = Constraints(maxWidth = textCfg.labelMaxWidth),
+                style = style
+            )
         }
     }
 

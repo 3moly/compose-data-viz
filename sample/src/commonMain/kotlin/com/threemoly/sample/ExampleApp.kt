@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -17,6 +18,7 @@ import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.request.crossfade
+import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.BoxSide
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
@@ -27,6 +29,7 @@ import com.threemoly.sample.base.block.CustomShape
 import com.threemoly.sample.base.block.ShapeData
 import com.threemoly.sample.base.func.generateRandomGraphState
 import com.threemoly.sample.base.func.openUrl
+import com.threemoly.sample.base.graph.ObsidianGraphData
 import com.threemoly.sample.base.io
 import com.threemoly.sample.base.uikit.icons.GithubSvgrepoCom
 import com.threemoly.sample.base.uikit.icons.Scale
@@ -39,6 +42,7 @@ const val imgGraphPage = "ImgGraph"
 
 @Composable
 fun ExampleApp() {
+    val engine = rememberSaveable("huh") { UltraFastEngine<String, ObsidianGraphData>() }
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
 
@@ -187,7 +191,7 @@ fun ExampleApp() {
                                 },
                                 icon = {
                                     Icon(
-                                       GithubSvgrepoCom,
+                                        GithubSvgrepoCom,
                                         contentDescription = null,
                                         modifier = Modifier.size(24.dp),
                                     )
@@ -208,10 +212,12 @@ fun ExampleApp() {
                             )
 
                             graphPage -> GraphSample(
+                                engine = engine,
                                 state = graphState,
                                 nodeCountState = nodeCountState
                             )
-                            imgGraphPage -> Box(Modifier.fillMaxSize().background(Color.White)){
+
+                            imgGraphPage -> Box(Modifier.fillMaxSize().background(Color.White)) {
                                 GraphSampleWithComposer(graphState)
                             }
                         }

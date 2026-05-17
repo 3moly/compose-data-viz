@@ -27,6 +27,7 @@ data class UltraFastEngineConfig(
      * change or explicit reheat() call). Higher = bigger reshuffling.
      * Obsidian-like: ~0.3
      */
+    val startAlpha: Float = 0.2f,
     val reheatAlpha: Float = 0.3f,
 
     /**

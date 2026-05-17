@@ -22,10 +22,10 @@ data class GraphViewSettings(
     val circleSize: Float,
     val circleSizeMultiplier: Float?,
     /** Circle edge quality: 0f = pixelated/hard, 1f = smooth. Controls AA width. */
-    val circleQuality: Float = 0.001f,
+    val circleQuality: Float = 1f,
 
     /** Border thickness as fraction of radius (0f = no border, 0.1f = 10% border). */
-    val circleBorderWidth: Float = 0.1f,
+    val circleBorderWidth: Float = 0.02f,
 
     /** Border color. Null = use node color darkened. */
     @Serializable(with = ComposeColorSerializer::class)
@@ -46,7 +46,7 @@ data class GraphViewSettings(
 ) {
     companion object {
         val Default = GraphViewSettings(
-            centerForce = 0.02f,  // Slightly stronger to keep centered
+            centerForce = 0.7f,  // Slightly stronger to keep centered
 
             linkForce = 8f,        // was 35f — way too strong, causes whip
                     repelForce = 15000f,   // was 50000f — causes explosion on add

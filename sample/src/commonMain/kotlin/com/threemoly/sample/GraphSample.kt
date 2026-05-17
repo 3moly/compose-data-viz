@@ -15,6 +15,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +35,8 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.allowConversionToBitmap
 import coil3.toBitmap
+import com.moly3.dataviz.core.graph.engine.IGraphEngine
+import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.func.rememberPainterFromComposable
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
@@ -70,7 +73,12 @@ const val KEY_SHARE = "icon_share"
 private const val KEY_CAT = "icon_cat"
 
 @Composable
-fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Float>) {
+fun GraphSample(
+    engine: UltraFastEngine<String, ObsidianGraphData>,
+    state: MutableState<GraphState>,
+    nodeCountState: MutableState<Float>
+) {
+
     val s = state.value
     val scale: Painter = rememberVectorPainter(Scale)
     val share: Painter = rememberVectorPainter(Share)
@@ -128,6 +136,9 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
         staticIconKey = { id, data -> /* return KEY_FOLDER / null / etc */ "" },
         isMoving = movement.isMoving
     )
+
+    val watchNodeState = remember { mutableStateOf<String?>(null) }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -135,7 +146,10 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             .onGloballyPositioned { viewport = it.size }
     ) {
         Graph(
-            atlasLayers = handle.atlasLayers, getIconKey = handle::resolveIconKey,
+            engine = engine,
+            atlasLayers = handle.atlasLayers,
+            watchNodeId = watchNodeState.value,
+            getIconKey = handle::resolveIconKey,
             getNodeGroups = { _, data ->
                 when (data) {
                     is ObsidianGraphData.Collection -> listOf("collection")
@@ -153,16 +167,16 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
                     else -> Color.Red
                 }
             },
-            isImmediateReheatOnUpdate = true,
-            customPopup = {
-                val cp =
-                    rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
-                Image(
-                    painter = cp,
-                    contentDescription = null,
-                    modifier = Modifier.size(100.dp)
-                )
-            },
+            isImmediateReheatOnUpdate = false,
+//            customPopup = {
+//                val cp =
+//                    rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
+//                Image(
+//                    painter = cp,
+//                    contentDescription = null,
+//                    modifier = Modifier.size(100.dp)
+//                )
+//            },
             settings = s.graphSettings,
             consume = false,
             connections = s.connections,
@@ -170,16 +184,27 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             coordinates = s.coordinates,
             velocities = s.velocities,
             zoom = s.zoom,
-            onZoomChange = { state.value = state.value.copy(zoom = it) },
+            onZoomChange = {
+                state.value =
+                    state.value.copy(zoom = it * state.value.zoom * 0.05f + state.value.zoom)
+            },
             userPosition = s.graphUserPosition,
-            onCentralGlobalPosition = {
-                state.value = state.value.copy(
-                    graphUserPosition = it
-                )
+            onCentralGlobalPosition = { isWatch, position ->
+                if (isWatch) {
+
+                    state.value = state.value.copy(graphUserPosition = position)
+                } else {
+                    val off = position / state.value.zoom
+                    state.value =
+                        state.value.copy(graphUserPosition = off + state.value.graphUserPosition)
+                }
+//                state.value = state.value.copy(
+//                    graphUserPosition = it / state.value.zoom + state.value.graphUserPosition
+//                )
             },
             onNodeClick = { node ->
-                state.spawnConnectedNode(node.id)
-
+//                watchNodeState.value = node.id
+//                state.spawnConnectedNode(node.id)
             },
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())
@@ -189,6 +214,9 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
 
         // Debug preview: show both atlas bitmaps side-by-side
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.background(Color.White).padding(8.dp)) {
+                Text(text = state.value.zoom.toString())
+            }
             for (atlas in handle.atlasLayers.layers) {
                 Image(
                     modifier = Modifier.padding(16.dp).size(100.dp),
@@ -196,28 +224,8 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
                     contentDescription = "layer 1"
                 )
             }
-//            shittyAtlas.value?.let {
-//                Image(
-//                    modifier = Modifier.padding(16.dp).size(100.dp),
-//                    bitmap = it.bitmap,
-//                    contentDescription = "layer 1"
-//                )
-//            }
-//            Image(
-//                modifier = Modifier.padding(16.dp).size(100.dp),
-//                bitmap = primaryAtlas.bitmap,
-//                contentDescription = "layer 0"
-//            )
-//            fallbackAtlas?.let {
-//                Image(
-//                    modifier = Modifier.padding(16.dp).size(100.dp),
-//                    bitmap = it.bitmap,
-//                    contentDescription = "layer 1"
-//                )
-//            }
-//            Text(text = counter.value.toString())
         }
-        Box(Modifier.size(100.dp).background(if (movement.isMoving) Color.Magenta else Color.Green))
+//        Box(Modifier.size(100.dp).background(if (movement.isMoving) Color.Magenta else Color.Green))
 
         // -------------- Settings panel --------------
         SettingsPanel(
@@ -225,12 +233,16 @@ fun GraphSample(state: MutableState<GraphState>, nodeCountState: MutableState<Fl
             isShowSettings = s.isShowSettings,
             onSetSettings = {
                 state.value = state.value.copy(isShowSettings = !state.value.isShowSettings)
+
             },
         ) {
             GraphSettingsContent(
                 modifier = Modifier,
                 settings = s.graphSettings,
-                onChange = { state.value = state.value.copy(graphSettings = it) },
+                onChange = {
+                    state.value = state.value.copy(graphSettings = it)
+                    engine.nudge()
+                },
                 zoom = s.zoom,
                 nodeCount = s.graphNodes.size,
                 onNodeCountChange = { nodeCountState.value = it.toFloat() }

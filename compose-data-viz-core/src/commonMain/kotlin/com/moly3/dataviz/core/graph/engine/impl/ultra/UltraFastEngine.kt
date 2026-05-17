@@ -69,7 +69,7 @@ class UltraFastEngine<Id, Data>(
     // -----------------------------------------------------------------
     // Heat state
     // -----------------------------------------------------------------
-    var alpha = 1f
+    var alpha = config.startAlpha
         private set
     private var alphaTarget = 0f
     private var alphaDecay = config.baseAlphaDecay
@@ -100,29 +100,6 @@ class UltraFastEngine<Id, Data>(
         reheatInternal(config.nudgeAlpha)
     }
 
-    fun setFreezingEnabled(enabled: Boolean) {
-        if (freezingEnabled == enabled) return
-        freezingEnabled = enabled
-        if (!enabled) reheatInternal(config.reheatAlpha)
-    }
-
-    fun isFreezingEnabled(): Boolean = freezingEnabled
-
-    /** Force the engine to its sleeping state; no-op if freezing is disabled. */
-    fun freeze() {
-        if (!freezingEnabled) return
-        alpha = 0f
-        alphaTarget = 0f
-        totalKineticEnergy = 0f
-        for (i in 0 until nodeCount) {
-            velX[i] = 0f
-            velY[i] = 0f
-        }
-    }
-
-    /** Wake the engine if it was frozen. */
-    fun unfreeze() = reheat()
-
     private fun reheatInternal(intensity: Float) {
         alpha = max(alpha, intensity)
         alphaTarget = 0f
@@ -150,8 +127,12 @@ class UltraFastEngine<Id, Data>(
             val bigThreshold = (newNodeCount * config.bigChangeFraction).toInt().coerceAtLeast(1)
 
             when {
-                prevNodeCount == 0 -> reheatInternal(config.reheatAlpha)   // first load
-                delta <= config.gentleAddThreshold -> nudge()              // 1–2 nodes
+                prevNodeCount == 0 -> {
+//                    //reheatInternal(config.reheatAlpha)
+                }   // first load
+                delta <= config.gentleAddThreshold ->{
+                    nudge()
+                }            // 1–2 nodes
                 delta <= bigThreshold -> reheatInternal(config.moderateChangeAlpha)
                 else -> reheatInternal(config.reheatAlpha)                  // big restructure
             }
@@ -306,9 +287,7 @@ class UltraFastEngine<Id, Data>(
                     var vy = (velY[i] + fy * adaptiveTimestep) * damping
 
                     val vMagSq = vx * vx + vy * vy
-                    if (vMagSq < 1e-3f) {
-                        vx = 0f; vy = 0f
-                    } else {
+                    if (vMagSq < 1e-5f) { vx = 0f; vy = 0f } else {
                         localEnergy += vMagSq
                     }
 
@@ -564,11 +543,18 @@ class UltraFastEngine<Id, Data>(
         }
 
         // Adaptive decay — only one location now (was duplicated before).
-        if (config.adaptiveDecayByNodeCount && nodeCount > 0) {
-            alphaDecay = (config.baseAlphaDecay * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+//        if (config.adaptiveDecayByNodeCount && nodeCount > 0) {
+//            alphaDecay = (config.baseAlphaDecay * (100f / nodeCount.coerceAtLeast(100).toFloat()))
+//                .coerceIn(config.minAlphaDecay, config.maxAlphaDecay)
+//        } else {
+//            alphaDecay = config.baseAlphaDecay
+//        }
+        // "more nodes → slower decay" — actually do that, symmetric around N=300
+        alphaDecay = if (config.adaptiveDecayByNodeCount && nodeCount > 0) {
+            (config.baseAlphaDecay * (300f / nodeCount.coerceAtLeast(1)))
                 .coerceIn(config.minAlphaDecay, config.maxAlphaDecay)
         } else {
-            alphaDecay = config.baseAlphaDecay
+            config.baseAlphaDecay
         }
 
         syncGroupsInternal(graphNodes, n)
