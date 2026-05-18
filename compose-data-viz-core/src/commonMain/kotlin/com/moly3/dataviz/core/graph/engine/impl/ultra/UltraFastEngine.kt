@@ -254,6 +254,9 @@ class UltraFastEngine<Id, Data>(
             reduceJobs.awaitAll()
         }
 
+        // ---- PHASE 2.5: Short-range separation (un-stick overlapping nodes) ----
+        applySeparationForces(settings, draggedIdx)
+
         // ---- PHASE 3: Clamp + integrate ----
         val maxF = settings.maxForce * (1f + alpha)
         val maxFSq = maxF * maxF
@@ -287,7 +290,12 @@ class UltraFastEngine<Id, Data>(
                     var vy = (velY[i] + fy * adaptiveTimestep) * damping
 
                     val vMagSq = vx * vx + vy * vy
-                    if (vMagSq < 1e-5f) { vx = 0f; vy = 0f } else {
+                    // Never freeze a node that is still overlapping a neighbor —
+                    // otherwise tiny separation velocities get zeroed forever.
+                    val isOverlapping = i < overlapping.size && overlapping[i]
+                    if (vMagSq < 1e-5f && !isOverlapping) {
+                        vx = 0f; vy = 0f
+                    } else {
                         localEnergy += vMagSq
                     }
 
@@ -512,6 +520,148 @@ class UltraFastEngine<Id, Data>(
         }
     }
 
+    // -----------------------------------------------------------------
+// Short-range pairwise separation (catches overlaps Barnes-Hut misses)
+// -----------------------------------------------------------------
+
+    /** Marks which nodes are currently overlapping someone — used to veto freeze. */
+    private var overlapping = BooleanArray(0)
+
+    private fun applySeparationForces(
+        settings: GraphViewSettings,
+        draggedIdx: Int,
+    ) {
+        if (nodeCount < 2) return
+
+        // Minimum spacing we want between any two node centers.
+        val minDist = settings.circleSize * config.separationDistanceMultiplier
+        val minDistSq = minDist * minDist
+        val sepStrength = settings.repelForce * alpha * config.separationForceMultiplier
+
+        if (overlapping.size < nodeCount) overlapping = BooleanArray(nodeCount)
+        overlapping.fill(false, 0, nodeCount)
+
+        // Build a uniform grid sized to the separation radius so each node
+        // only checks its 9 neighboring cells.
+        var minX = posX[0]; var maxX = posX[0]
+        var minY = posY[0]; var maxY = posY[0]
+        for (i in 1 until nodeCount) {
+            val x = posX[i]; val y = posY[i]
+            if (x < minX) minX = x else if (x > maxX) maxX = x
+            if (y < minY) minY = y else if (y > maxY) maxY = y
+        }
+
+        val cell = max(minDist, 1f)
+        val cols = (((maxX - minX) / cell).toInt() + 1).coerceAtLeast(1)
+        val rows = (((maxY - minY) / cell).toInt() + 1).coerceAtLeast(1)
+
+        // Guard against pathologically huge grids on spread-out graphs.
+        val cellCount = cols.toLong() * rows.toLong()
+        if (cellCount > 4_000_000L) {
+            // Fallback: nodes are very spread out, overlaps are rare — skip grid.
+            applySeparationBruteForceSmall(minDistSq, minDist, sepStrength, draggedIdx)
+            return
+        }
+
+        val cellHead = IntArray(cols * rows) { -1 }
+        val nextInCell = IntArray(nodeCount)
+
+        for (i in 0 until nodeCount) {
+            val cx = (((posX[i] - minX) / cell).toInt()).coerceIn(0, cols - 1)
+            val cy = (((posY[i] - minY) / cell).toInt()).coerceIn(0, rows - 1)
+            val c = cy * cols + cx
+            nextInCell[i] = cellHead[c]
+            cellHead[c] = i
+        }
+
+        for (i in 0 until nodeCount) {
+            val cx = (((posX[i] - minX) / cell).toInt()).coerceIn(0, cols - 1)
+            val cy = (((posY[i] - minY) / cell).toInt()).coerceIn(0, rows - 1)
+            val px = posX[i]; val py = posY[i]
+
+            for (gy in (cy - 1)..(cy + 1)) {
+                if (gy < 0 || gy >= rows) continue
+                for (gx in (cx - 1)..(cx + 1)) {
+                    if (gx < 0 || gx >= cols) continue
+                    var j = cellHead[gy * cols + gx]
+                    while (j != -1) {
+                        // Only handle each unordered pair once.
+                        if (j <= i) { j = nextInCell[j]; continue }
+
+                        var dx = px - posX[j]
+                        var dy = py - posY[j]
+                        var distSq = dx * dx + dy * dy
+
+                        if (distSq < minDistSq) {
+                            // Deterministic separation direction for exact overlaps.
+                            if (distSq < 1e-6f) {
+                                // Spread by stable index-derived angle so it's not random churn.
+                                val ang = ((i * 2654435761L) xor (j * 40503L)).toFloat()
+                                dx = kotlin.math.cos(ang)
+                                dy = kotlin.math.sin(ang)
+                                distSq = 1f
+                            }
+
+                            val dist = sqrt(distSq)
+                            val invDist = 1f / dist
+                            // Penetration depth (0..1): deeper overlap → stronger push.
+                            val penetration = 1f - dist / minDist
+                            val mag = sepStrength * penetration * penetration
+
+                            val fx = dx * invDist * mag
+                            val fy = dy * invDist * mag
+
+                            if (i != draggedIdx) {
+                                forceX[i] += fx; forceY[i] += fy
+                            }
+                            if (j != draggedIdx) {
+                                forceX[j] -= fx; forceY[j] -= fy
+                            }
+                            overlapping[i] = true
+                            overlapping[j] = true
+                        }
+                        j = nextInCell[j]
+                    }
+                }
+            }
+        }
+    }
+
+    /** Used only when the grid would be absurdly large (nodes spread far apart). */
+    private fun applySeparationBruteForceSmall(
+        minDistSq: Float,
+        minDist: Float,
+        sepStrength: Float,
+        draggedIdx: Int,
+    ) {
+        // Spread-out graphs rarely overlap; an O(n^2) scan capped for safety.
+        if (nodeCount > 2000) return
+        for (i in 0 until nodeCount) {
+            val px = posX[i]; val py = posY[i]
+            for (j in i + 1 until nodeCount) {
+                var dx = px - posX[j]
+                var dy = py - posY[j]
+                var distSq = dx * dx + dy * dy
+                if (distSq < minDistSq) {
+                    if (distSq < 1e-6f) {
+                        val ang = ((i * 2654435761L) xor (j * 40503L)).toFloat()
+                        dx = kotlin.math.cos(ang); dy = kotlin.math.sin(ang)
+                        distSq = 1f
+                    }
+                    val dist = sqrt(distSq)
+                    val invDist = 1f / dist
+                    val penetration = 1f - dist / minDist
+                    val mag = sepStrength * penetration * penetration
+                    val fx = dx * invDist * mag
+                    val fy = dy * invDist * mag
+                    if (i != draggedIdx) { forceX[i] += fx; forceY[i] += fy }
+                    if (j != draggedIdx) { forceX[j] -= fx; forceY[j] -= fy }
+                    overlapping[i] = true; overlapping[j] = true
+                }
+            }
+        }
+    }
+
     private fun syncData(
         graphNodes: List<GraphNode<Id, Data>>,
         coordinates: MutableMap<Id, Offset>,
@@ -572,7 +722,13 @@ class UltraFastEngine<Id, Data>(
                 )
                 coordinates[node.id] = pos
             }
-            posX[i] = pos.x; posY[i] = pos.y
+            // Jitter so no two nodes share an exact position (Barnes-Hut and
+            // repulsion both produce zero/undefined force on coincident points).
+            var jx = pos.x
+            var jy = pos.y
+            jx += ((i * 0.61803398f) % 1f - 0.5f) * config.spawnJitter
+            jy += ((i * 0.75487766f) % 1f - 0.5f) * config.spawnJitter
+            posX[i] = jx; posY[i] = jy
             val vel = velocities[node.id] ?: Offset.Zero
             velX[i] = vel.x; velY[i] = vel.y
         }

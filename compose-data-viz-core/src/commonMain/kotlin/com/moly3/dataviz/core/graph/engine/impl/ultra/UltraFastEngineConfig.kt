@@ -177,6 +177,12 @@ data class UltraFastEngineConfig(
 
     /** Force scale for anti-stick relative to base repulsion. */
     val antiStickForceMultiplier: Float = 10f,
+    /** Min center-to-center spacing as a multiple of circleSize. */
+    val separationDistanceMultiplier: Float = 1.2f,
+    /** Strength of the short-range un-sticking push, relative to repelForce. */
+    val separationForceMultiplier: Float = 4.0f,
+    /** Per-node positional jitter applied each sync to break exact overlaps. */
+    val spawnJitter: Float = 0.5f,
 ) {
     companion object {
         /** Drop-in replacement matching the original hardcoded values. */
