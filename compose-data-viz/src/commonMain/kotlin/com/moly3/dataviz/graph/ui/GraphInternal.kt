@@ -502,6 +502,10 @@ internal fun <Id, Data> GraphInternal(
 
                         for (j in conns.indices) {
                             val tId = conns[j]
+
+                            // ADD THIS CHECK: Ensure the target node actually exists
+                            if (tId !in nodeById) continue
+
                             val tPos = coordinates[tId] ?: continue
 
                             val minX = min(sPos.x, tPos.x)

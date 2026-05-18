@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -131,6 +132,7 @@ fun GraphSample(
             .onGloballyPositioned { viewport = it.size }
     ) {
         Graph(
+            textStyle = TextStyle.Default.copy(color = Color.Magenta),
             engine = engine,
             atlasLayers = handle.atlasLayers,
             watchNodeId = watchNodeState.value,
