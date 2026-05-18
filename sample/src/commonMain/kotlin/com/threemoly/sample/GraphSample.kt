@@ -15,35 +15,19 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import coil3.asImage
 import coil3.compose.LocalPlatformContext
-import coil3.compose.asPainter
-import coil3.compose.rememberAsyncImagePainter
-import coil3.request.ImageRequest
-import coil3.request.allowConversionToBitmap
-import coil3.toBitmap
-import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.func.darker
-import com.moly3.dataviz.func.rememberPainterFromComposable
-import com.moly3.dataviz.graph.features.atlas.AtlasLayers
-import com.moly3.dataviz.graph.features.atlas.AtlasState
 import com.moly3.dataviz.graph.features.atlas.AtlasTier
-import com.moly3.dataviz.graph.features.atlas.func.createAtlasFromUrlsSuspend
-import com.moly3.dataviz.graph.features.atlas.func.createSvgAtlas
 import com.moly3.dataviz.graph.ui.AtlasPainterLoader
 import com.moly3.dataviz.graph.ui.Graph
 import com.moly3.dataviz.graph.ui.TierSelection
@@ -87,16 +71,17 @@ fun GraphSample(
     val context = LocalPlatformContext.current
     val coilImageLoader = remember { ImageLoader(context) }
     val loader: AtlasPainterLoader<String, ObsidianGraphData> = { node ->
-        val index = state.value.graphNodes.indexOfFirst { it.id == node.id }
-        if (index < 0 || index >= 100) null
-        else {
-            val req = ImageRequest.Builder(context)
-                .data("https://picsum.photos/id/$index/300/300")
-                .size(128)
-                .allowConversionToBitmap(true)
-                .build()
-            coilImageLoader.execute(req).image?.toBitmap()?.asImage()?.asPainter(context)
-        }
+        null
+//        val index = state.value.graphNodes.indexOfFirst { it.id == node.id }
+//        if (index < 0 || index >= 100) null
+//        else {
+//            val req = ImageRequest.Builder(context)
+//                .data("https://picsum.photos/id/$index/300/300")
+//                .size(128)
+//                .allowConversionToBitmap(true)
+//                .build()
+//            coilImageLoader.execute(req).image?.toBitmap()?.asImage()?.asPainter(context)
+//        }
     }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     val movement = rememberMovementTracker(idleMillis = 1000)
@@ -133,7 +118,7 @@ fun GraphSample(
             KEY_SHARE to share,
             KEY_CAT to catPainter
         ),
-        staticIconKey = { id, data -> /* return KEY_FOLDER / null / etc */ "" },
+        staticIconKey = { id, data -> /* return KEY_FOLDER / null / etc */ null },
         isMoving = movement.isMoving
     )
 
@@ -184,27 +169,30 @@ fun GraphSample(
             coordinates = s.coordinates,
             velocities = s.velocities,
             zoom = s.zoom,
-            onZoomChange = {
-                state.value =
-                    state.value.copy(zoom = it * state.value.zoom * 0.05f + state.value.zoom)
+            onZoomChange = { isGesture, newValue ->
+                val newZoom = if (isGesture) {
+                    newValue * state.value.zoom
+                } else {
+                    newValue * state.value.zoom * 0.05f + state.value.zoom
+                }
+                state.value = state.value.copy(zoom = newZoom)
+//                state.value = if (isGesture) {
+//                    state.value.copy(zoom = newValue * state.value.zoom)
+//                } else {
+//                    state.value.copy(zoom = newValue * state.value.zoom * 0.05f + state.value.zoom)
+//                }
             },
             userPosition = s.graphUserPosition,
-            onCentralGlobalPosition = { isWatch, position ->
-                if (isWatch) {
-
-                    state.value = state.value.copy(graphUserPosition = position)
-                } else {
-                    val off = position / state.value.zoom
-                    state.value =
-                        state.value.copy(graphUserPosition = off + state.value.graphUserPosition)
-                }
-//                state.value = state.value.copy(
-//                    graphUserPosition = it / state.value.zoom + state.value.graphUserPosition
-//                )
+            onPanDelta = { delta ->
+                val off = delta / state.value.zoom
+                state.value =
+                    state.value.copy(graphUserPosition = off + state.value.graphUserPosition)
+            },
+            onWatchPosition = { offset ->
+                state.value = state.value.copy(graphUserPosition = offset)
             },
             onNodeClick = { node ->
-//                watchNodeState.value = node.id
-//                state.spawnConnectedNode(node.id)
+                watchNodeState.value = node.id
             },
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())

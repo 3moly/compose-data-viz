@@ -29,12 +29,9 @@ import com.moly3.dataviz.core.graph.hull.GroupHullController
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
-import com.moly3.dataviz.graph.func.InitialLayout
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
-import kotlinx.collections.immutable.toPersistentHashMap
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -42,12 +39,35 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlin.collections.set
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
-import kotlin.random.Random
 
+/**
+ * True if [incoming] is effectively equal to [emitted] — i.e. the engine's own
+ * physics output round-tripping back through the `coordinates` parameter,
+ * rather than a genuine external (ViewModel-side) coordinate edit.
+ *
+ * A small positional tolerance absorbs float drift from serialization /
+ * persistence round-trips so a save echo is reliably recognized as an echo.
+ */
+private fun <Id> isCoordinatesEcho(
+    incoming: Map<Id, Offset>,
+    emitted: Map<Id, Offset>?,
+): Boolean {
+    if (emitted == null) return false
+    if (incoming === emitted) return true
+    if (incoming.size != emitted.size) return false
+    for ((id, off) in incoming) {
+        val e = emitted[id] ?: return false
+        if (abs(off.x - e.x) > 0.5f || abs(off.y - e.y) > 0.5f) return false
+    }
+    return true
+}
+
+@OptIn(ExperimentalAtomicApi::class)
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
@@ -72,8 +92,9 @@ fun <Id, Data> Graph(
     velocities: Map<Id, Offset>,
     connections: Map<Id, List<Id>>,
 
-    onCentralGlobalPosition: (Boolean, Offset) -> Unit,
-    onZoomChange: (Float) -> Unit,
+    onPanDelta: (Offset) -> Unit,
+    onWatchPosition: (Offset) -> Unit,
+    onZoomChange: (Boolean, Float) -> Unit,
     watchNodeId: Id? = null,
     io: CoroutineContext,
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
@@ -85,13 +106,54 @@ fun <Id, Data> Graph(
     var draggedNodeState by remember { mutableStateOf<DragNodeData<Id>?>(null) }
     var cursorNodeState by remember { mutableStateOf<GraphNode<Id, Data>?>(null) }
 
-    val liveCoordinates = remember<HashMap<Id, Offset>> { HashMap() }
-    val liveVelocities = remember { HashMap<Id, Offset>() }
+    // -----------------------------------------------------------------
+    // Engine scratch buffers.
+    //
+    // These exist ONLY because IGraphEngine.step() physically requires a
+    // MutableMap to write per-frame physics output into — the `coordinates`
+    // parameter is an immutable, ViewModel-owned Map and cannot be that target.
+    //
+    // They hold ZERO authority. `coordinates` is the single source of truth:
+    // whenever it changes for a real (external) reason, these buffers are
+    // rebuilt from it unconditionally (snap behavior). The engine then advances
+    // them; advanced positions are surfaced for rendering and periodically
+    // pushed back out via onCoordinatesUpdate.
+    // -----------------------------------------------------------------
+    val engineCoords = remember<HashMap<Id, Offset>> { HashMap() }
+    val engineVels = remember { HashMap<Id, Offset>() }
+
+    // -----------------------------------------------------------------
+    // Echo guard.
+    //
+    // onCoordinatesUpdate pushes the engine's live positions out for
+    // persistence. The host feeds that back into the `coordinates` parameter,
+    // so it returns here looking like an external edit. Without this guard the
+    // seeding effect would snap every node to it every save cycle — constant
+    // micro-jumps. We record the exact map we last emitted; a matching
+    // `coordinates` is recognized as our own echo and the snap is skipped.
+    // -----------------------------------------------------------------
+    val lastEmittedCoords = remember { AtomicReference<Map<Id, Offset>?>(null) }
+
+    // -----------------------------------------------------------------
+    // Remount gate.
+    //
+    // The engine instance survives navigation (it is remembered above this
+    // composable). The composable does NOT — switching tabs unmounts it, and
+    // on return every remember/LaunchedEffect re-runs from scratch.
+    //
+    // The seeding effect runs on every mount. If it always called
+    // engine.nudge(), re-entering the screen would wake an engine that had
+    // correctly settled to sleep — the "reopen -> unfrozen" bug.
+    //
+    // hasSeededThisMount is false for exactly the first seeding pass of a
+    // mount. That first pass restores state silently and never nudges.
+    // Subsequent passes nudge only if coordinates genuinely changed.
+    // -----------------------------------------------------------------
+    var hasSeededThisMount by remember { mutableStateOf(false) }
 
     var mapVersion by remember { mutableIntStateOf(0) }
 
     val stateMutex = remember { Mutex() }
-    var lastLayoutKey by remember { mutableStateOf<Int?>(null) }
 
     val latestUserPosition by rememberUpdatedState(userPosition)
     val latestZoom by rememberUpdatedState(zoom)
@@ -103,11 +165,11 @@ fun <Id, Data> Graph(
     // Hull controller — survives recomposition, ties to a long-lived scope.
     val hullController = remember { GroupHullController(io) }
     DisposableEffect(hullController) {
-        val scope = CoroutineScope(SupervisorJob() + io)
-        hullController.start(scope)
+        val hullScope = CoroutineScope(SupervisorJob() + io)
+        hullController.start(hullScope)
         onDispose {
             hullController.stop()
-            scope.cancel()
+            hullScope.cancel()
         }
     }
 
@@ -124,20 +186,21 @@ fun <Id, Data> Graph(
         }
     }
     val groupSettings = settings.groupSettings
+
     // Push group data into the engine BEFORE each step. The engine reads it
-// inside syncData(). Since this is just two reference writes, doing it on
-// recomposition is fine.
+    // inside syncData(). Since this is just two reference writes, doing it on
+    // recomposition is fine.
     LaunchedEffect(engine, groupSettings, stateNodes) {
         engine.setGroupData(
             groupsForNodeIndex = if (groupSettings.enabled) groupResolver else null,
             settings = groupSettings,
         )
     }
-// Drive hull recompute on a configurable cadence.
-// We rebuild more often while the engine is hot, then idle out.
+
+    // Drive hull recompute on a configurable cadence.
+    // We rebuild more often while the engine is hot, then idle out.
     LaunchedEffect(hullController, engine, groupSettings, getGroupColor) {
         if (!groupSettings.enabled) return@LaunchedEffect
-//        val ultra = engine as? UltraFastEngine<Id, Data> ?: return@LaunchedEffect
         val ultra = engine
         while (isActive) {
             val interval = if (ultra.isAsleep) groupSettings.hullSettledIntervalMs
@@ -147,77 +210,79 @@ fun <Id, Data> Graph(
         }
     }
 
-    LaunchedEffect(stateNodes, coordinates) {
-        if (stateNodes.isEmpty()) return@LaunchedEffect
-
-        // --- one-shot seed from saved coordinates, the moment they're available ---
-//        if (liveCoordinates.isEmpty() && coordinates.values.any { it != Offset.Zero }) {
-//            stateMutex.withLock {
-//                for (node in stateNodes) {
-//                    liveCoordinates[node.id] = coordinates[node.id] ?: Offset.Zero
-//                    liveVelocities[node.id] = velocities[node.id] ?: Offset.Zero
-//                }
-//                mapVersion++
-//            }
-//            lastLayoutKey = stateNodes.size xor stateNodes.fold(0) { a, n -> a xor n.id.hashCode() }
-//            engine.nudge()          // wake it so the seeded layout actually renders/settles
-//            return@LaunchedEffect
-//        }
-
-        // --- existing path: no saved positions, compute a fresh layout ---
-        val key = stateNodes.size xor stateNodes.fold(0) { acc, n -> acc xor n.id.hashCode() }
-        if (key == lastLayoutKey) {
+    // -----------------------------------------------------------------
+    // Single source of truth: `coordinates`.
+    //
+    // On a real external change the scratch buffers are rebuilt FROM
+    // `coordinates` unconditionally — nodes snap to whatever the host provides.
+    //
+    // Two cases are deliberately silent (no nudge):
+    //  1. An echo of our own save (isCoordinatesEcho) — engine already holds
+    //     these values; re-snapping would only jitter.
+    //  2. The first seeding pass of a fresh mount (hasSeededThisMount == false)
+    //     — this is state restoration after a tab switch; the engine may be
+    //     legitimately asleep and must stay that way.
+    //
+    // A nudge fires only when coordinates genuinely moved AND this is not the
+    // mount's first restorative pass.
+    // -----------------------------------------------------------------
+    LaunchedEffect(stateNodes, coordinates, velocities) {
+        if (stateNodes.isEmpty()) {
             stateMutex.withLock {
-                var updated = false
-                for (node in stateNodes) {
-                    if (node.id !in liveCoordinates) {
-                        liveCoordinates[node.id] = coordinates[node.id] ?: Offset.Zero
-                        liveVelocities[node.id] = velocities[node.id] ?: Offset.Zero
-                        updated = true
-                    }
-                }
-                if (updated) mapVersion++
+                engineCoords.clear()
+                engineVels.clear()
+                mapVersion++
             }
+            hasSeededThisMount = true
             return@LaunchedEffect
         }
 
-        val seeded = withContext(Dispatchers.Default) {
-            if (coordinates.isEmpty()) {
-                // loose scatter — give physics something to untangle
-                stateNodes.associate {
-                    it.id to Offset(
-                        (Random.nextFloat() - 0.5f) * 800f,
-                        (Random.nextFloat() - 0.5f) * 800f,
-                    )
-                }
-            } else {
-                InitialLayout.compute(stateNodes, connections, settings.view, coordinates)
-            }
+        // Our own save round-tripping back — not an external edit. Do not snap.
+        if (isCoordinatesEcho(coordinates, lastEmittedCoords.load())) {
+            hasSeededThisMount = true
+            return@LaunchedEffect
         }
+
+        var changedAnything = false
         stateMutex.withLock {
-            val newIds = stateNodes.map { it.id }.toHashSet()
-            liveCoordinates.keys.retainAll(newIds)
-            liveVelocities.keys.retainAll(newIds)
-            var updated = false
+            val newIds = HashSet<Id>(stateNodes.size)
+            for (node in stateNodes) newIds.add(node.id)
+
+            // Drop any node that no longer exists.
+            engineCoords.keys.retainAll(newIds)
+            engineVels.keys.retainAll(newIds)
+
+            // coordinates wins: every current node snaps to the param value.
             for (node in stateNodes) {
-                val seedOffset = seeded[node.id] ?: Offset.Zero
-                if (liveCoordinates[node.id] != seedOffset) {
-                    liveCoordinates[node.id] = seedOffset
-                    updated = true
+                val incoming = coordinates[node.id] ?: Offset.Zero
+                val prev = engineCoords[node.id]
+                if (prev == null ||
+                    abs(prev.x - incoming.x) > 0.05f ||
+                    abs(prev.y - incoming.y) > 0.05f
+                ) {
+                    changedAnything = true
                 }
-                if (node.id !in liveVelocities) liveVelocities[node.id] = Offset.Zero
+                engineCoords[node.id] = incoming
+                engineVels[node.id] = velocities[node.id] ?: Offset.Zero
             }
-            if (updated) mapVersion++
+            mapVersion++
         }
-        lastLayoutKey = key
+
+        // Wake the engine ONLY for a genuine post-restore coordinate change.
+        // The first pass of a mount is pure restoration and must not nudge,
+        // or re-entering the screen would wake a deliberately-asleep engine.
+        if (changedAnything && hasSeededThisMount) {
+            engine.nudge()
+        }
+        hasSeededThisMount = true
     }
 
     LaunchedEffect(watchNodeId) {
         if (watchNodeId != null) {
             launch(io) {
                 while (isActive) {
-                    val foundOffset = liveCoordinates[watchNodeId]
-                    if (foundOffset != null) onCentralGlobalPosition(true, foundOffset)
+                    val foundOffset = engineCoords[watchNodeId]
+                    if (foundOffset != null) onWatchPosition(-foundOffset)
                     delay(16L)
                 }
             }
@@ -255,13 +320,13 @@ fun <Id, Data> Graph(
 
                 withFrameNanos { }
 
-                coordsScratch.clear();
+                coordsScratch.clear()
                 velsScratch.clear()
                 stateMutex.withLock {
                     for (i in nodes.indices) {
                         val id = nodes[i].id
-                        coordsScratch[id] = liveCoordinates[id] ?: Offset.Zero
-                        velsScratch[id] = liveVelocities[id] ?: Offset.Zero
+                        coordsScratch[id] = engineCoords[id] ?: Offset.Zero
+                        velsScratch[id] = engineVels[id] ?: Offset.Zero
                     }
                 }
 
@@ -277,16 +342,16 @@ fun <Id, Data> Graph(
                 stateMutex.withLock {
                     var updated = false
                     for ((id, off) in coordsScratch) {
-                        val prev = liveCoordinates[id]
+                        val prev = engineCoords[id]
                         if (prev == null ||
                             abs(prev.x - off.x) > 0.05f ||
                             abs(prev.y - off.y) > 0.05f
                         ) {
-                            liveCoordinates[id] = off
+                            engineCoords[id] = off
                             updated = true
                         }
                     }
-                    for ((id, vel) in velsScratch) liveVelocities[id] = vel
+                    for ((id, vel) in velsScratch) engineVels[id] = vel
 
                     if (updated) mapVersion++
                 }
@@ -301,16 +366,17 @@ fun <Id, Data> Graph(
                 if (engine.isAsleep && latestDragged == null) continue
 
                 var coordsCopy: HashMap<Id, Offset>? = null
-                var velsCopy: HashMap<Id, Offset>? = null
 
                 stateMutex.withLock {
-                    if (liveCoordinates.isEmpty()) return@withLock
-                    coordsCopy = HashMap(liveCoordinates)
-                    velsCopy = HashMap(liveVelocities)
+                    if (engineCoords.isEmpty()) return@withLock
+                    coordsCopy = HashMap(engineCoords)
                 }
 
-                if (coordsCopy != null && velsCopy != null) {
-                    onCoordinatesUpdate(coordsCopy)
+                coordsCopy?.let {
+                    // Record before emitting so the echo of this exact map is
+                    // recognized when it round-trips back through `coordinates`.
+                    lastEmittedCoords.store(it)
+                    onCoordinatesUpdate(it)
                 }
             }
         }
@@ -319,20 +385,22 @@ fun <Id, Data> Graph(
     LaunchedEffect(draggedNodeState) {
         if (draggedNodeState == null) {
             stateMutex.withLock {
-                if (liveCoordinates.isEmpty()) return@withLock
-                onCoordinatesUpdate(HashMap(liveCoordinates))
+                if (engineCoords.isEmpty()) return@withLock
+                val snapshot = HashMap(engineCoords)
+                lastEmittedCoords.store(snapshot)
+                onCoordinatesUpdate(snapshot)
             }
         }
     }
 
     fun hitTest(tapOffset: Offset): GraphNode<Id, Data>? {
-        // Removed the negative sign. Rendering ADDS userPosition, so bounds testing must as well.
+        // Rendering ADDS userPosition, so bounds testing must as well.
         val cameraOffset = latestUserPosition
         val circleSize = latestSettings.view.circleSize
         val multiplier = latestSettings.view.circleSizeMultiplier
 
         return latestNodes.lastOrNull { node ->
-            val pos = liveCoordinates[node.id] ?: return@lastOrNull false
+            val pos = engineCoords[node.id] ?: return@lastOrNull false
             val connCount = latestConnections[node.id]?.size ?: 1
             val radius = GraphNode.getCircleSize(circleSize, connCount, multiplier)
 
@@ -344,7 +412,7 @@ fun <Id, Data> Graph(
                 return@lastOrNull false
             }
 
-            // Replaced black-box `isNodeTapped` with explicit geometric circle intersection
+            // Explicit geometric circle intersection
             val dx = tapOffset.x - adjustedX
             val dy = tapOffset.y - adjustedY
             (dx * dx + dy * dy) <= (radius * radius)
@@ -357,18 +425,13 @@ fun <Id, Data> Graph(
             centerSizeState = Offset(it.size.width.toFloat(), it.size.height.toFloat()) / 2f
         }
         .pointerInput(watchNodeId) {
-//            var localSyncZoom = latestZoom
             detectPointerTransformGestures(
                 consume = consume,
                 numberOfPointers = 0,
                 requisite = PointerRequisite.GreaterThan,
                 onScrollChange = {
                     if (it.y != 0f) {
-//                        val zoomCfg = latestSettings.zoom
-//                        val factor = if (it.y > 0) zoomCfg.stepIn else zoomCfg.stepOut
-//                        localSyncZoom =
-//                            (localSyncZoom * factor).coerceIn(zoomCfg.minZoom, zoomCfg.maxZoom)
-                        onZoomChange(it.y)
+                        onZoomChange(false, it.y)
                     }
                 },
                 onClick = { position ->
@@ -389,7 +452,6 @@ fun <Id, Data> Graph(
                     }
                 },
                 onGestureStart = { pointer ->
-//                    localSyncZoom = latestZoom
                     val tapOffset = (pointer.position - centerSizeState) / latestZoom
 
                     // Seed the node state with the initial offset immediately upon touch
@@ -398,22 +460,15 @@ fun <Id, Data> Graph(
                             DragNodeData(it.id).copy(offset = tapOffset - latestUserPosition)
                     }
                 },
-                onGesture = { centroid, gesturePan, gestureZoom, _, pointer, pointerList ->
-//                    println("gestureZoom: ${pointer.type} ${gestureZoom} ${localSyncZoom}")
+                onGesture = { _, gesturePan, gestureZoom, _, _, pointerList ->
                     if (draggedNodeState != null && pointerList.size == 1) {
-//                        val tapOffset = (centroid - centerSizeState) / localSyncZoom
-//                        draggedNodeState = draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
+                        // drag handled via onCursorMove
                     } else {
                         if (watchNodeId == null && pointerList.size == 1) {
-                            onCentralGlobalPosition(false, gesturePan)
+                            onPanDelta(gesturePan)
                         }
                         if (pointerList.size == 2 && gestureZoom != 1f) {
-//                            val zoomCfg = latestSettings.zoom
-//                            localSyncZoom = (localSyncZoom * gestureZoom).coerceIn(
-//                                zoomCfg.minZoom,
-//                                zoomCfg.maxZoom
-//                            )
-//                            onZoomChange(localSyncZoom)
+                            onZoomChange(true, gestureZoom)
                         }
                     }
                 },
@@ -422,6 +477,7 @@ fun <Id, Data> Graph(
             )
         }
         .clip(RoundedCornerShape(0.dp))
+
     GraphInternal(
         atlasLayers = atlasLayers,
         getIconKey = getIconKey,
@@ -431,7 +487,7 @@ fun <Id, Data> Graph(
         modifier = graphModifier,
         settings = settings,
         nodes = latestNodes,
-        coordinates = liveCoordinates,
+        coordinates = engineCoords,
         coordinatesVersion = mapVersion,
         connections = latestConnections,
         draggedNodeId = draggedNodeState?.id,

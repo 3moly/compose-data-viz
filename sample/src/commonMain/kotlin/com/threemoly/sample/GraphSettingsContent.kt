@@ -29,7 +29,7 @@ fun GraphSettingsContent(
     Column(modifier = modifier) {
         ObsText("zoom: %.3f".format(zoom))
         IntSliderRow(
-            "Nodes count", nodeCount, valueRange = 1 until 100_000) {
+            "Nodes count", nodeCount, valueRange = 1 until 20_000) {
             onNodeCountChange(it)
         }
         SettingsSection(title = "Theme", accentColor = Color(0xFF7E57C2)) {

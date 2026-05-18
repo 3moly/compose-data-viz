@@ -22,7 +22,7 @@ data class GraphViewSettings(
     val circleSize: Float,
     val circleSizeMultiplier: Float?,
     /** Circle edge quality: 0f = pixelated/hard, 1f = smooth. Controls AA width. */
-    val circleQuality: Float = 1f,
+    val circleQuality: Float = 0.0001f,
 
     /** Border thickness as fraction of radius (0f = no border, 0.1f = 10% border). */
     val circleBorderWidth: Float = 0.02f,
