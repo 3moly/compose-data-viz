@@ -43,6 +43,7 @@ data class GraphViewSettings(
     val maxTextsAtCenterVisible: Int = Int.MAX_VALUE,
     // Add to GraphViewSettings: val hubExpansionExponent: Float = 0.5f  (0 = off, 0.5 = sqrt, 1 = linear)
     val hubExpansionExponent: Float = 0.5f
+
 ) {
     companion object {
         val Default = GraphViewSettings(

@@ -183,6 +183,12 @@ data class UltraFastEngineConfig(
 
     /** Random spread for nodes that spawn with no position. Was hardcoded 10f. */
     val spawnSpread: Float = 10f,
+    /** Pairs closer than circleSize * this count as "overlapping" (sleep gate). */
+    val overlapDistanceMultiplier: Float = 0.9f,
+    /** Heat floor held while any overlap remains, so cold-stacked nodes still move. */
+    val overlapResolveAlpha: Float = 0.00f,
+    /** Spiral step for separating nodes that loaded on identical positions. */
+    val deStackRadius: Float = 2f,
 ) {
     companion object {
         /** Drop-in replacement matching the original hardcoded values. */

@@ -13,9 +13,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlin.concurrent.Volatile
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -25,10 +27,12 @@ import kotlin.math.sqrt
  * to [step]. Pass a custom [UltraFastEngineConfig] for non-default heat /
  * decay / sleep behavior.
  *
- * Anti-stuck design: short-range repulsion keeps a small alpha-independent
- * floor ([UltraFastEngineConfig.minRepelAlpha]) so overlapping nodes always
- * separate instead of freezing on top of each other. Link/center forces still
- * decay freely with alpha, so the graph still sleeps once nodes are spaced.
+ * Anti-stuck design: ALL forces (repulsion, centering, springs, groups) decay
+ * together with [alpha] — the layout stays balanced and never drifts. The only
+ * stuck-overlap problem is that a slept graph runs no physics at all, so
+ * coincident nodes can never separate. The fix is purely a sleep gate: the
+ * graph is not allowed to fall asleep while any two nodes still overlap. While
+ * awake, the normal balanced physics pushes them apart; once clean, it sleeps.
  */
 class UltraFastEngine<Id, Data>(
     var config: UltraFastEngineConfig = UltraFastEngineConfig.Default
@@ -82,12 +86,22 @@ class UltraFastEngine<Id, Data>(
     private var totalKineticEnergy = 0f
     private var lastNodeCountSignature = 0
 
+    /**
+     * True when at least one pair of nodes is closer than the overlap radius.
+     * Computed cheaply each frame via a uniform grid. Used ONLY as a sleep
+     * gate — it never produces a force, so it cannot fight the layout.
+     */
+    private var hasOverlap = false
+
     @Volatile
     private var freezingEnabled: Boolean = true
 
     override val isAsleep: Boolean
         get() {
             if (!freezingEnabled) return false
+            // Never report asleep while nodes are still stacked — otherwise
+            // step() early-exits and they can never separate.
+            if (hasOverlap) return false
             return alpha <= 0f ||
                     (alpha < config.asleepAlphaCheck && totalKineticEnergy < config.sleepEnergyThreshold)
         }
@@ -146,7 +160,9 @@ class UltraFastEngine<Id, Data>(
 
         if (draggedNode != null) reheatInternal(config.dragReheatAlpha)
 
-        // Early exit if truly idle and nothing changed
+        // Early exit if truly idle AND nothing is overlapping AND nothing changed.
+        // (isAsleep already returns false while hasOverlap is set, so a stacked
+        //  graph keeps stepping until it has un-stacked itself.)
         if (isAsleep && draggedNode == null && !structureChanged) {
             syncData(graphNodes, coordinates, velocities, connections, false)
             return@coroutineScope
@@ -175,11 +191,10 @@ class UltraFastEngine<Id, Data>(
         val thetaSq = theta * theta
         val softening = settings.circleSize * 0.5f
 
-        // Repulsion keeps a small alpha-independent floor so overlapping nodes
-        // always separate instead of freezing on top of each other. Link and
-        // center forces still decay freely with alpha so the graph can sleep.
-        val repelAlpha = max(alpha, config.minRepelAlpha)
-        val effectiveRepel = settings.repelForce * repelAlpha
+        // ALL forces decay together with alpha. This symmetry is what keeps the
+        // layout balanced — repulsion (push apart) and centering+springs (pull
+        // together) must scale by the same factor or the graph drifts.
+        val effectiveRepel = settings.repelForce * alpha
         val effectiveLink = settings.linkForce * alpha
         val effectiveCenter = settings.centerForce * alpha
 
@@ -319,12 +334,22 @@ class UltraFastEngine<Id, Data>(
             velY[draggedIdx] = 0f
         }
 
+        // ---- Overlap detection (sleep gate only — produces no force) ----
+        hasOverlap = detectOverlap(settings)
+
         // Heat decay + snap-freeze
         totalKineticEnergy = chunkEnergy.sum()
         alpha += (alphaTarget - alpha) * alphaDecay
 
         if (freezingEnabled) {
-            if (alpha < config.sleepAlphaThreshold && totalKineticEnergy < config.sleepEnergyThreshold) {
+            if (hasOverlap) {
+                // Hold a small heat floor so cold-but-stacked nodes still move.
+                // The normal balanced physics (which is still running because
+                // alpha > 0) separates them; no special force is needed.
+                alpha = max(alpha, config.overlapResolveAlpha)
+            } else if (alpha < config.sleepAlphaThreshold &&
+                totalKineticEnergy < config.sleepEnergyThreshold
+            ) {
                 alpha = 0f
             }
         } else {
@@ -340,7 +365,80 @@ class UltraFastEngine<Id, Data>(
     }
 
     // -----------------------------------------------------------------
-    // Extracted force phases (for readability)
+    // Overlap detection — cheap uniform grid, single pass, no force output.
+    // Returns true as soon as ANY pair is closer than the overlap radius.
+    // -----------------------------------------------------------------
+
+    private fun detectOverlap(settings: GraphViewSettings): Boolean {
+        if (nodeCount < 2) return false
+
+        val minDist = settings.circleSize * config.overlapDistanceMultiplier
+        if (minDist <= 0f) return false
+        val minDistSq = minDist * minDist
+
+        // Bounding box
+        var minX = posX[0]; var maxX = posX[0]
+        var minY = posY[0]; var maxY = posY[0]
+        for (i in 1 until nodeCount) {
+            val x = posX[i]; val y = posY[i]
+            if (x < minX) minX = x else if (x > maxX) maxX = x
+            if (y < minY) minY = y else if (y > maxY) maxY = y
+        }
+
+        val cell = max(minDist, 1f)
+        val cols = (((maxX - minX) / cell).toInt() + 1).coerceAtLeast(1)
+        val rows = (((maxY - minY) / cell).toInt() + 1).coerceAtLeast(1)
+
+        // Spread-out graphs: a huge grid is pointless and overlaps are rare.
+        // Fall back to a capped O(n^2) scan that bails on the first hit.
+        if (cols.toLong() * rows.toLong() > 4_000_000L) {
+            if (nodeCount > 4000) return false
+            for (i in 0 until nodeCount) {
+                val px = posX[i]; val py = posY[i]
+                for (j in i + 1 until nodeCount) {
+                    val dx = px - posX[j]
+                    val dy = py - posY[j]
+                    if (dx * dx + dy * dy < minDistSq) return true
+                }
+            }
+            return false
+        }
+
+        val cellHead = IntArray(cols * rows) { -1 }
+        val nextInCell = IntArray(nodeCount)
+        for (i in 0 until nodeCount) {
+            val cx = (((posX[i] - minX) / cell).toInt()).coerceIn(0, cols - 1)
+            val cy = (((posY[i] - minY) / cell).toInt()).coerceIn(0, rows - 1)
+            val c = cy * cols + cx
+            nextInCell[i] = cellHead[c]
+            cellHead[c] = i
+        }
+
+        for (i in 0 until nodeCount) {
+            val cx = (((posX[i] - minX) / cell).toInt()).coerceIn(0, cols - 1)
+            val cy = (((posY[i] - minY) / cell).toInt()).coerceIn(0, rows - 1)
+            val px = posX[i]; val py = posY[i]
+            for (gy in (cy - 1)..(cy + 1)) {
+                if (gy < 0 || gy >= rows) continue
+                for (gx in (cx - 1)..(cx + 1)) {
+                    if (gx < 0 || gx >= cols) continue
+                    var j = cellHead[gy * cols + gx]
+                    while (j != -1) {
+                        if (j > i) {
+                            val dx = px - posX[j]
+                            val dy = py - posY[j]
+                            if (dx * dx + dy * dy < minDistSq) return true
+                        }
+                        j = nextInCell[j]
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    // -----------------------------------------------------------------
+    // Extracted force phases
     // -----------------------------------------------------------------
 
     private fun applyGroupForces(gs: GroupSettings, draggedIdx: Int) {
@@ -570,9 +668,9 @@ class UltraFastEngine<Id, Data>(
 
             var pos = coordinates[node.id] ?: Offset.Zero
             if (pos == Offset.Zero) {
-                // Only nodes with no position get a one-time random spawn so
-                // they don't all start coincident. Existing positions pass
-                // through untouched — no per-frame jitter, ever.
+                // Nodes with no position get a one-time random spawn so they
+                // don't all start coincident. Existing positions pass through
+                // untouched — never any per-frame jitter.
                 pos = Offset(
                     (kotlin.random.Random.nextFloat() - 0.5f) * config.spawnSpread,
                     (kotlin.random.Random.nextFloat() - 0.5f) * config.spawnSpread
@@ -582,6 +680,13 @@ class UltraFastEngine<Id, Data>(
             posX[i] = pos.x; posY[i] = pos.y
             val vel = velocities[node.id] ?: Offset.Zero
             velX[i] = vel.x; velY[i] = vel.y
+        }
+
+        // De-stack: nodes that loaded at the SAME position get a tiny one-time
+        // deterministic offset so Barnes-Hut has a real direction to work with.
+        // Runs only on a structural change — never per idle frame.
+        if (structureChanged && n > 1) {
+            deStackCoincidentNodes(coordinates)
         }
 
         // Count CSR entries
@@ -638,6 +743,35 @@ class UltraFastEngine<Id, Data>(
             }
         }
         edgeCount = eWrite
+    }
+
+    /**
+     * One-time fix for nodes that arrive stacked on an identical position.
+     * Quantizes each position into a small map; any collision gets a tiny
+     * golden-angle spiral offset. Cheap (O(n)) and runs only on structural
+     * changes. Offsets are intentionally small so the layout still looks
+     * "loaded at the same place" — the physics then spreads them properly.
+     */
+    private fun deStackCoincidentNodes(coordinates: MutableMap<Id, Offset>) {
+        val seen = HashMap<Long, Int>()
+        for (i in 0 until nodeCount) {
+            // Quantize to ~0.5 units so near-identical positions collide too.
+            val qx = (posX[i] * 2f).toInt()
+            val qy = (posY[i] * 2f).toInt()
+            val key = (qx.toLong() shl 32) xor (qy.toLong() and 0xFFFFFFFFL)
+            val prior = seen[key]
+            if (prior == null) {
+                seen[key] = i
+            } else {
+                // Spiral each duplicate outward by a stable golden-angle step.
+                val rank = seen.size + i
+                val ang = rank * 2.3999632f
+                val r = config.deStackRadius * (1f + (rank and 0x7) * 0.15f)
+                posX[i] += cos(ang) * r
+                posY[i] += sin(ang) * r
+                coordinates[ids[i]] = Offset(posX[i], posY[i])
+            }
+        }
     }
 
     // -----------------------------------------------------------------
