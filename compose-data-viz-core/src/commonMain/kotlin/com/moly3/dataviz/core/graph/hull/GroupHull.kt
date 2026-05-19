@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import com.moly3.dataviz.core.graph.model.GroupId
 import kotlinx.serialization.Serializable
 
 /**
@@ -65,7 +66,9 @@ data class GroupSettings(
     val hullLabelScaleWithZoom: Boolean = false,
     val hullLabelMinScale: Float = 0.5f,
     val hullLabelMaxScale: Float = 2f,
-    val hullLabelVerticalOffset: Float = 18f, // was hardcoded as -18f
+    val hullLabelVerticalOffset: Float = 18f, // was hardcoded as -18f,
+    val angularHullThreshold: Float = 200f,
+    val angularHullSectors: Int = 64
 )
 
 /**
@@ -73,10 +76,9 @@ data class GroupSettings(
  */
 @Immutable
 data class GroupHull(
-    val label: String,
-    val groupId: String,
-    val color: Color,
+    val groupId: GroupId,
+    val label: String,        // copied from GroupHullDef.name at compute time
+    val color: Color,         // copied from GroupHullDef.color
     val path: Path,
-    /** Anchor for an optional label (the topmost point of the hull). */
     val labelAnchor: Offset,
 )

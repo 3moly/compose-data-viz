@@ -5,6 +5,8 @@ import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GroupId
+import com.moly3.dataviz.core.graph.model.GroupIndex
 
 @Stable
 interface IGraphEngine<Id, Data> {
@@ -20,10 +22,15 @@ interface IGraphEngine<Id, Data> {
 
     fun reheat()
     fun nudge()
+
+    /**
+     * Supply the group model directly. Pass null to disable grouping.
+     * The engine reads memberships (and their per-node weights) on the next step().
+     */
     fun setGroupData(
-        groupsForNodeIndex: ((Int) -> List<String>)?,
+        groupIndex: GroupIndex<Id>?,
         settings: GroupSettings,
     )
 
-    fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>>
+    fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>>
 }

@@ -6,6 +6,8 @@ import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GroupId
+import com.moly3.dataviz.core.graph.model.GroupIndex
 
 class HybridGraphRenderer<Id, Data> : IGraphEngine<Id, Data> {
     private val calculator = HybridForceCalculator<Id, Data>()
@@ -38,14 +40,15 @@ class HybridGraphRenderer<Id, Data> : IGraphEngine<Id, Data> {
     }
 
     override fun setGroupData(
-        groupsForNodeIndex: ((Int) -> List<String>)?,
+        groupIndex: GroupIndex<Id>?,
         settings: GroupSettings
     ) {
-
+        TODO("Not yet implemented")
     }
 
-    override fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>> {
-        return listOf()
+
+    override fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>> {
+        TODO("Not yet implemented")
     }
 
     /** True when the simulation has settled - caller can skip frames to save battery. */

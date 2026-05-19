@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.compose.LocalPlatformContext
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
+import com.moly3.dataviz.core.graph.model.GroupHullDef
+import com.moly3.dataviz.core.graph.model.GroupId
+import com.moly3.dataviz.core.graph.model.GroupMembership
+import com.moly3.dataviz.core.graph.model.GroupModel
 import com.moly3.dataviz.func.darker
 import com.moly3.dataviz.graph.features.atlas.AtlasTier
 import com.moly3.dataviz.graph.ui.AtlasPainterLoader
@@ -124,7 +128,24 @@ fun GraphSample(
     )
 
     val watchNodeState = remember { mutableStateOf<String?>(null) }
-
+    val groupModel = remember(s.graphNodes) {
+        val defs = listOf(
+            GroupHullDef(GroupId("collection"), name = "Collection", color = Color.Black),
+            GroupHullDef(GroupId("row"), name = "Row", color = Color.Magenta),
+            GroupHullDef(GroupId("file"),       name = "File",       color = Color.Blue),
+            GroupHullDef(GroupId("tag"),        name = "Tag",        color = Color.Cyan),
+        )
+        val memberships = s.graphNodes.map { node ->
+            val groupId = when (node.data) {
+                is ObsidianGraphData.Collection    -> GroupId("collection")
+                is ObsidianGraphData.CollectionRow -> GroupId("row")
+                is ObsidianGraphData.File          -> GroupId("file")
+                is ObsidianGraphData.Tag           -> GroupId("tag")
+            }
+            GroupMembership(nodeId = node.id, groupId = groupId)
+        }
+        GroupModel(defs = defs, memberships = memberships)
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -137,24 +158,33 @@ fun GraphSample(
             atlasLayers = handle.atlasLayers,
             watchNodeId = watchNodeState.value,
             getIconKey = handle::resolveIconKey,
-            getNodeGroups = { _, data ->
-                when (data) {
-                    is ObsidianGraphData.Collection -> listOf("collection")
-                    is ObsidianGraphData.CollectionRow -> listOf("row")
-                    is ObsidianGraphData.File -> listOf("file")
-                    is ObsidianGraphData.Tag -> listOf("tag")
-                }
-            },
-            getGroupColor = { groupName ->
-                when (groupName) {
-                    "collection" -> Color.Black
-                    "row" -> Color.Magenta
-                    "file" -> Color.Blue
-                    "tag" -> Color.Cyan
-                    else -> Color.Red
-                }
-            },
+            groupModel = groupModel,
             isImmediateReheatOnUpdate = false,
+            settings = s.graphSettings,
+
+//            textStyle = TextStyle.Default.copy(color = Color.Magenta),
+//            engine = engine,
+//            atlasLayers = handle.atlasLayers,
+//            watchNodeId = watchNodeState.value,
+//            getIconKey = handle::resolveIconKey,
+//            getNodeGroups = { _, data ->
+//                when (data) {
+//                    is ObsidianGraphData.Collection -> listOf("collection")
+//                    is ObsidianGraphData.CollectionRow -> listOf("row")
+//                    is ObsidianGraphData.File -> listOf("file")
+//                    is ObsidianGraphData.Tag -> listOf("tag")
+//                }
+//            },
+//            getGroupColor = { groupName ->
+//                when (groupName) {
+//                    "collection" -> Color.Black
+//                    "row" -> Color.Magenta
+//                    "file" -> Color.Blue
+//                    "tag" -> Color.Cyan
+//                    else -> Color.Red
+//                }
+//            },
+//            isImmediateReheatOnUpdate = false,
 //            customPopup = {
 //                val cp =
 //                    rememberAsyncImagePainter("https://composedataviz.3moly.com/images/cat4.jpg")
@@ -164,7 +194,7 @@ fun GraphSample(
 //                    modifier = Modifier.size(100.dp)
 //                )
 //            },
-            settings = s.graphSettings,
+//            settings = s.graphSettings,
             consume = false,
             connections = s.connections,
             stateNodes = s.graphNodes,

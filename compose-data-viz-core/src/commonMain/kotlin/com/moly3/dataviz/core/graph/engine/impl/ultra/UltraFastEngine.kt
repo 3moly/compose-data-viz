@@ -7,6 +7,8 @@ import com.moly3.dataviz.core.graph.func.avaliableCpuProcessors
 import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphViewSettings
+import com.moly3.dataviz.core.graph.model.GroupId
+import com.moly3.dataviz.core.graph.model.GroupIndex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -41,6 +43,40 @@ class UltraFastEngine<Id, Data>(
     // -----------------------------------------------------------------
     // SoA storage
     // -----------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Group data — CSR-style, keyed by node INDEX (built from GroupIndex).
+    // nodeGroupId[k] / nodeGroupWeight[k] are parallel; nodeGroupOffset
+    // partitions them per node.
+    // -----------------------------------------------------------------
+    private var nodeGroupOffset = IntArray(1)
+    private var nodeGroupId = IntArray(0)
+    private var nodeGroupWeight = FloatArray(0)
+    private var groupCount = 0
+    private var groupIdToValue: Array<GroupId> = emptyArray()
+
+    private var groupCentroidX = FloatArray(0)
+    private var groupCentroidY = FloatArray(0)
+    private var groupMemberCount = IntArray(0)
+    // Sum of weights per group — centroid is weight-averaged.
+    private var groupWeightSum = FloatArray(0)
+
+    /** -1 means "no signature yet" so the very first sync doesn't fire a fake reheat. */
+    private var lastGroupSignature = -1
+
+    @Volatile
+    private var pendingGroupIndex: GroupIndex<Id>? = null
+
+    @Volatile
+    private var pendingGroupSettings: GroupSettings = GroupSettings()
+
+    override fun setGroupData(
+        groupIndex: GroupIndex<Id>?,
+        settings: GroupSettings,
+    ) {
+        pendingGroupIndex = groupIndex
+        pendingGroupSettings = settings
+    }
+
     private var nodeCount = 0
     private var edgeCount = 0
 
@@ -446,6 +482,7 @@ class UltraFastEngine<Id, Data>(
             groupCentroidX[g] = 0f
             groupCentroidY[g] = 0f
             groupMemberCount[g] = 0
+            groupWeightSum[g] = 0f
         }
         for (i in 0 until nodeCount) {
             val from = nodeGroupOffset[i]
@@ -453,15 +490,17 @@ class UltraFastEngine<Id, Data>(
             val px = posX[i]; val py = posY[i]
             for (k in from until to) {
                 val gid = nodeGroupId[k]
-                groupCentroidX[gid] += px
-                groupCentroidY[gid] += py
+                val wgt = nodeGroupWeight[k]
+                groupCentroidX[gid] += px * wgt
+                groupCentroidY[gid] += py * wgt
+                groupWeightSum[gid] += wgt
                 groupMemberCount[gid]++
             }
         }
         for (g in 0 until groupCount) {
-            val c = groupMemberCount[g]
-            if (c > 0) {
-                val inv = 1f / c
+            val ws = groupWeightSum[g]
+            if (ws > 1e-4f) {
+                val inv = 1f / ws
                 groupCentroidX[g] *= inv
                 groupCentroidY[g] *= inv
             }
@@ -505,8 +544,12 @@ class UltraFastEngine<Id, Data>(
             val memberships = to - from
             for (k in from until to) {
                 val gid = nodeGroupId[k]
-                fx += (groupCentroidX[gid] - px) * cohesion
-                fy += (groupCentroidY[gid] - py) * cohesion
+                val wgt = nodeGroupWeight[k]
+                // Cohesion pull scales by this node's membership weight:
+                // a loose member (weight < 1) is pulled in more gently.
+                fx += (groupCentroidX[gid] - px) * cohesion * wgt
+                fy += (groupCentroidY[gid] - py) * cohesion * wgt
+                // Separation is a group-level push; weight does not apply.
                 fx += sepX[gid]
                 fy += sepY[gid]
             }
@@ -778,72 +821,63 @@ class UltraFastEngine<Id, Data>(
     // Group data
     // -----------------------------------------------------------------
 
-    private var nodeGroupOffset = IntArray(1)
-    private var nodeGroupId = IntArray(0)
-    private var groupCount = 0
     private var groupIdToString: Array<String> = emptyArray()
-
-    private var groupCentroidX = FloatArray(0)
-    private var groupCentroidY = FloatArray(0)
-    private var groupMemberCount = IntArray(0)
-
-    /** -1 means "no signature yet" so the very first sync doesn't fire a fake reheat. */
-    private var lastGroupSignature = -1
 
     @Volatile
     private var pendingGroupResolver: ((Int) -> List<String>)? = null
 
-    @Volatile
-    private var pendingGroupSettings: GroupSettings = GroupSettings()
-
-    override fun setGroupData(
-        groupsForNodeIndex: ((Int) -> List<String>)?,
-        settings: GroupSettings,
-    ) {
-        pendingGroupResolver = groupsForNodeIndex
-        pendingGroupSettings = settings
-    }
-
     private fun syncGroupsInternal(graphNodes: List<GraphNode<Id, Data>>, n: Int) {
-        val resolver = pendingGroupResolver
+        val index = pendingGroupIndex
 
-        if (resolver == null || !pendingGroupSettings.enabled || n == 0) {
+        if (index == null || !pendingGroupSettings.enabled || n == 0) {
             if (nodeGroupOffset.size < n + 1) {
                 nodeGroupOffset = IntArray((n + 1).coerceAtLeast(1))
             }
             for (i in 0..n) nodeGroupOffset[i] = 0
             groupCount = 0
+            lastGroupSignature = -1
             return
         }
 
-        val nameToId = HashMap<String, Int>()
-        val names = ArrayList<String>()
-        var totalEntries = 0
-        val perNode = arrayOfNulls<List<String>>(n)
+        // Group id -> dense engine index. Order follows model.defs so it's stable.
+        val groupIds = index.groupIds
+        val g = groupIds.size
+        val groupIndexOf = HashMap<GroupId, Int>(g * 2)
+        for (gi in 0 until g) groupIndexOf[groupIds[gi]] = gi
+
+        // Per-node resolved memberships (engine group index + weight), by node index.
         val perNodeIds = arrayOfNulls<IntArray>(n)
+        val perNodeWeights = arrayOfNulls<FloatArray>(n)
+        var totalEntries = 0
 
         for (i in 0 until n) {
-            val list = resolver(i)
-            perNode[i] = list
-            if (list.isEmpty()) continue
-            val gids = IntArray(list.size)
-            for ((k, gName) in list.withIndex()) {
-                var id = nameToId[gName]
-                if (id == null) {
-                    id = names.size
-                    nameToId[gName] = id
-                    names.add(gName)
-                }
-                gids[k] = id
-                totalEntries++
+            val memberships = index.membershipsOf(graphNodes[i].id)
+            if (memberships.isEmpty()) continue
+            // A membership whose groupId has no def is dropped (defensive).
+            var count = 0
+            for (m in memberships) if (groupIndexOf.containsKey(m.groupId)) count++
+            if (count == 0) continue
+
+            val gids = IntArray(count)
+            val gws = FloatArray(count)
+            var k = 0
+            for (m in memberships) {
+                val gi = groupIndexOf[m.groupId] ?: continue
+                gids[k] = gi
+                gws[k] = m.weight
+                k++
             }
             perNodeIds[i] = gids
+            perNodeWeights[i] = gws
+            totalEntries += count
         }
 
-        val g = names.size
-
+        // Signature: group count, entry count, per-node membership shape, and
+        // each group's id hash. Appearance (name/color) is NOT included — that
+        // doesn't affect physics, so it must not trigger a reheat.
         var sig = g * 1_000_003 + totalEntries
-        for (i in 0 until n) sig = sig * 31 + (perNode[i]?.size ?: 0)
+        for (i in 0 until n) sig = sig * 31 + (perNodeIds[i]?.size ?: 0)
+        for (gi in 0 until g) sig = sig * 31 + groupIds[gi].raw.hashCode()
         val isFirstSync = lastGroupSignature == -1
         val groupsChanged = sig != lastGroupSignature
         lastGroupSignature = sig
@@ -853,32 +887,38 @@ class UltraFastEngine<Id, Data>(
         }
         if (nodeGroupId.size < totalEntries) {
             nodeGroupId = IntArray(totalEntries.coerceAtLeast(16))
+            nodeGroupWeight = FloatArray(totalEntries.coerceAtLeast(16))
         }
         if (groupCentroidX.size < g) {
             val cap = g.coerceAtLeast(8)
             groupCentroidX = FloatArray(cap)
             groupCentroidY = FloatArray(cap)
             groupMemberCount = IntArray(cap)
+            groupWeightSum = FloatArray(cap)
         }
 
         var w = 0
         for (i in 0 until n) {
             nodeGroupOffset[i] = w
             val gids = perNodeIds[i] ?: continue
-            for (id in gids) nodeGroupId[w++] = id
+            val gws = perNodeWeights[i]!!
+            for (k in gids.indices) {
+                nodeGroupId[w] = gids[k]
+                nodeGroupWeight[w] = gws[k]
+                w++
+            }
         }
         nodeGroupOffset[n] = w
         groupCount = g
-        groupIdToString = Array(g) { names[it] }
+        groupIdToValue = Array(g) { groupIds[it] }
 
-        // Only reheat if the group set ACTUALLY changed (not on first init).
         if (groupsChanged && !isFirstSync && config.groupChangeReheatAlpha > 0f) {
             reheatInternal(config.groupChangeReheatAlpha)
         }
     }
 
     /** Snapshot of (groupId, [(x,y)...]) for hull computation. */
-    override fun snapshotGroupsForHulls(): List<Pair<String, FloatArray>> {
+    override fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>> {
         val g = groupCount
         if (g == 0 || nodeCount == 0) return emptyList()
 
@@ -902,9 +942,9 @@ class UltraFastEngine<Id, Data>(
                 wIdx[gid] = w + 2
             }
         }
-        val out = ArrayList<Pair<String, FloatArray>>(g)
+        val out = ArrayList<Pair<GroupId, FloatArray>>(g)
         for (gi in 0 until g) {
-            if (counts[gi] > 0) out.add(groupIdToString[gi] to pts[gi])
+            if (counts[gi] > 0) out.add(groupIdToValue[gi] to pts[gi])
         }
         return out
     }

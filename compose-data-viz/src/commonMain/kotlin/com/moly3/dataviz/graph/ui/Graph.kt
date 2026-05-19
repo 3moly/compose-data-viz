@@ -17,7 +17,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
@@ -28,6 +27,8 @@ import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.core.graph.hull.GroupHullController
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
+import com.moly3.dataviz.core.graph.model.GroupIndex
+import com.moly3.dataviz.core.graph.model.GroupModel
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
@@ -81,9 +82,10 @@ fun <Id, Data> Graph(
     atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
     getIconKey: (Id, Data) -> String? = { _, _ -> null },
 
-    getNodeGroups: (Id, Data) -> List<String> = { _, _ -> emptyList() },
-    getGroupColor: (String) -> Color = { Color(0x4D00BFFF) },
-    getGroupName: (String) -> String = { "group label" },
+    // Single immutable group model — replaces getNodeGroups / getGroupColor /
+    // getGroupName. Because it's a data class, every effect that needs to react
+    // to a group change keys on it directly and fires exactly on real change.
+    groupModel: GroupModel<Id> = GroupModel.empty(),
 
     isImmediateReheatOnUpdate: Boolean = false,
 
@@ -174,40 +176,48 @@ fun <Id, Data> Graph(
     }
 
     val hulls by hullController.hulls.collectAsState()
-    val groupResolver: (Int) -> List<String> = remember(stateNodes) {
-        val snapshot = stateNodes  // capture once
-        { i ->
-            if (i in snapshot.indices) {
-                val node = snapshot[i]
-                getNodeGroups(node.id, node.data)
-            } else {
-                emptyList()
-            }
-        }
-    }
+
+    // Bidirectional group lookups, built once per genuine model change.
+    // groupModel is a data class, so this re-keys precisely — no lambda
+    // identity instability, no hand-rolled signature.
+    val groupIndex = remember(groupModel) { GroupIndex.build(groupModel) }
     val groupSettings = settings.groupSettings
 
-    // Push group data into the engine BEFORE each step. The engine reads it
-    // inside syncData(). Since this is just two reference writes, doing it on
-    // recomposition is fine.
-    LaunchedEffect(engine, groupSettings, stateNodes) {
+    // Push group data into the engine. Keyed on the index, so a name/color-only
+    // edit (which produces a new model but the same membership) still re-runs
+    // harmlessly; syncGroupsInternal's signature excludes appearance so no
+    // spurious reheat results.
+    LaunchedEffect(engine, groupSettings, groupIndex) {
         engine.setGroupData(
-            groupsForNodeIndex = if (groupSettings.enabled) groupResolver else null,
+            groupIndex = if (groupSettings.enabled) groupIndex else null,
             settings = groupSettings,
         )
     }
 
     // Drive hull recompute on a configurable cadence.
     // We rebuild more often while the engine is hot, then idle out.
-    LaunchedEffect(hullController, engine, groupSettings, getGroupColor) {
+    LaunchedEffect(hullController, engine, groupSettings) {
         if (!groupSettings.enabled) return@LaunchedEffect
-        val ultra = engine
         while (isActive) {
-            val interval = if (ultra.isAsleep) groupSettings.hullSettledIntervalMs
+            val interval = if (engine.isAsleep) groupSettings.hullSettledIntervalMs
             else groupSettings.hullRecomputeIntervalMs
-            hullController.submit(ultra, getGroupName, getGroupColor, groupSettings)
+            hullController.submit(engine, groupIndex, groupSettings)
             delay(interval)
         }
+    }
+
+    // Immediate, one-shot hull refresh on ANY group change — name, color, or
+    // membership. groupModel is a data class so this fires exactly on real
+    // change and never otherwise; it does not wait for the poll interval,
+    // which fixes the "name/color lags while the engine is asleep" bug.
+    //
+    // Name/color edits are fully safe here: they don't touch the engine
+    // snapshot, only GroupIndex.defOf. A membership edit may briefly snapshot
+    // pre-change geometry (until the next step()), which self-corrects on the
+    // next poll — acceptable for a single frame.
+    LaunchedEffect(groupModel, groupSettings) {
+        if (!groupSettings.enabled) return@LaunchedEffect
+        hullController.submit(engine, groupIndex, groupSettings)
     }
 
     // -----------------------------------------------------------------
