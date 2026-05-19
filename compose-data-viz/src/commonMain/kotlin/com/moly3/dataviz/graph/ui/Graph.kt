@@ -194,6 +194,20 @@ fun <Id, Data> Graph(
         )
     }
 
+    // Push group data into the engine. Keyed on the index, so a name/color-only
+    // edit (which produces a new model but the same membership) still re-runs
+    // harmlessly; syncGroupsInternal's signature excludes appearance so no
+    // spurious reheat results.
+    LaunchedEffect(engine, groupSettings, groupIndex) {
+        engine.setGroupData(
+            groupIndex = if (groupSettings.enabled) groupIndex else null,
+            settings = groupSettings,
+        )
+        // BUG FIX: Wake the engine! If it's asleep, it skips step() and never updates
+        // the snapshot. The hull controller gets stuck with old data.
+        engine.nudge()
+    }
+
     // Drive hull recompute on a configurable cadence.
     // We rebuild more often while the engine is hot, then idle out.
     LaunchedEffect(hullController, engine, groupSettings) {
@@ -210,13 +224,15 @@ fun <Id, Data> Graph(
     // membership. groupModel is a data class so this fires exactly on real
     // change and never otherwise; it does not wait for the poll interval,
     // which fixes the "name/color lags while the engine is asleep" bug.
-    //
-    // Name/color edits are fully safe here: they don't touch the engine
-    // snapshot, only GroupIndex.defOf. A membership edit may briefly snapshot
-    // pre-change geometry (until the next step()), which self-corrects on the
-    // next poll — acceptable for a single frame.
     LaunchedEffect(groupModel, groupSettings) {
         if (!groupSettings.enabled) return@LaunchedEffect
+
+        // BUG FIX: The engine was just nudged and needs a frame to run step() and publish
+        // the new GroupSnapshot. If we submit instantly, we read the old snapshot against
+        // the new GroupIndex, dropping all hulls for this frame. Delay briefly to let
+        // the engine sync and debounce rapid slider changes.
+        delay(32L)
+
         hullController.submit(engine, groupIndex, groupSettings)
     }
 

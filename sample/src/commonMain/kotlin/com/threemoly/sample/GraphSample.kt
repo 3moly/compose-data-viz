@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -128,21 +130,28 @@ fun GraphSample(
     )
 
     val watchNodeState = remember { mutableStateOf<String?>(null) }
-    val groupModel = remember(s.graphNodes) {
+
+    // 1. Add a seed state to force group regeneration
+    var groupSeed by remember { mutableIntStateOf(0) }
+
+    // 2. Tie the remember block to both nodes and the seed
+    val groupModel = remember(s.graphNodes, groupSeed) {
         val defs = listOf(
             GroupHullDef(GroupId("collection"), name = "Collection", color = Color.Black),
             GroupHullDef(GroupId("row"), name = "Row", color = Color.Magenta),
             GroupHullDef(GroupId("file"),       name = "File",       color = Color.Blue),
             GroupHullDef(GroupId("tag"),        name = "Tag",        color = Color.Cyan),
         )
-        val memberships = s.graphNodes.map { node ->
-            val groupId = when (node.data) {
-                is ObsidianGraphData.Collection    -> GroupId("collection")
-                is ObsidianGraphData.CollectionRow -> GroupId("row")
-                is ObsidianGraphData.File          -> GroupId("file")
-                is ObsidianGraphData.Tag           -> GroupId("tag")
-            }
-            GroupMembership(nodeId = node.id, groupId = groupId)
+
+        val groupIds = defs.map { it.id }
+
+        val memberships = s.graphNodes.mapNotNull { node ->
+            // Optional: 20% chance for a node to have NO group to test hull separation
+            if (Random.nextFloat() > 0.2f) {
+                // Use a seeded random so it's stable per click, but changes when groupSeed increments
+                val randomGroupId = groupIds.random(Random(node.id.hashCode() + groupSeed))
+                GroupMembership(nodeId = node.id, groupId = randomGroupId)
+            } else null
         }
         GroupModel(defs = defs, memberships = memberships)
     }
@@ -235,8 +244,17 @@ fun GraphSample(
         // Debug preview: show both atlas bitmaps side-by-side
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(modifier = Modifier.background(Color.White).padding(8.dp)) {
-                Text(text = state.value.zoom.toString())
+                Text(text = "Zoom: ${state.value.zoom}")
             }
+
+            // Trigger random group assignments
+            Button(
+                onClick = { groupSeed++ },
+                modifier = Modifier.padding(horizontal = 8.dp)
+            ) {
+                Text("Scramble Groups")
+            }
+
             for (atlas in handle.atlasLayers.layers) {
                 Image(
                     modifier = Modifier.padding(16.dp).size(100.dp),

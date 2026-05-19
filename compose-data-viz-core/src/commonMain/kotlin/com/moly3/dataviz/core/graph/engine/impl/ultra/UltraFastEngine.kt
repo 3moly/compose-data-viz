@@ -14,6 +14,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
@@ -35,7 +37,23 @@ import kotlin.math.sqrt
  * coincident nodes can never separate. The fix is purely a sleep gate: the
  * graph is not allowed to fall asleep while any two nodes still overlap. While
  * awake, the normal balanced physics pushes them apart; once clean, it sleeps.
+ *
+ * Group-snapshot consistency
+ * --------------------------
+ * The engine's group SoA arrays (nodeGroupOffset / nodeGroupId / ... ) are
+ * mutated inside [syncGroupsInternal], which runs on the physics coroutine.
+ * The hull controller reads group topology from a DIFFERENT coroutine. Reading
+ * the live arrays directly is a data race: a reader can observe a half-
+ * reallocated or half-filled buffer and produce empty / wrong hulls — the
+ * "change one group and every hull blinks out for a frame" bug.
+ *
+ * Fix: [syncGroupsInternal] publishes an immutable [GroupSnapshot] atomically
+ * at its very end, once every array is fully written. [snapshotGroupsForHulls]
+ * reads ONLY that published snapshot. A reader therefore always sees a whole,
+ * self-consistent group topology — either entirely the old one or entirely the
+ * new one, never a torn mix.
  */
+@OptIn(ExperimentalAtomicApi::class)
 class UltraFastEngine<Id, Data>(
     var config: UltraFastEngineConfig = UltraFastEngineConfig.Default
 ) : IGraphEngine<Id, Data> {
@@ -47,6 +65,11 @@ class UltraFastEngine<Id, Data>(
     // Group data — CSR-style, keyed by node INDEX (built from GroupIndex).
     // nodeGroupId[k] / nodeGroupWeight[k] are parallel; nodeGroupOffset
     // partitions them per node.
+    //
+    // These arrays are the engine's WORKING buffers — over-allocated, mutated
+    // in place, and only safe to touch from the physics coroutine. Nothing
+    // outside step()/syncData()/syncGroupsInternal() may read them. Cross-
+    // coroutine readers use `publishedGroupSnapshot` instead.
     // -----------------------------------------------------------------
     private var nodeGroupOffset = IntArray(1)
     private var nodeGroupId = IntArray(0)
@@ -54,11 +77,25 @@ class UltraFastEngine<Id, Data>(
     private var groupCount = 0
     private var groupIdToValue: Array<GroupId> = emptyArray()
 
+    /** Number of CSR entries actually written by the last syncGroupsInternal. */
+    private var groupEntryCount = 0
+
     private var groupCentroidX = FloatArray(0)
     private var groupCentroidY = FloatArray(0)
     private var groupMemberCount = IntArray(0)
     // Sum of weights per group — centroid is weight-averaged.
     private var groupWeightSum = FloatArray(0)
+
+    /**
+     * The single source of truth for ANY cross-coroutine group read.
+     *
+     * Written once per syncGroupsInternal (including the disable path), read by
+     * snapshotGroupsForHulls. AtomicReference makes the swap a single atomic
+     * publish — a reader gets the complete previous snapshot or the complete
+     * new one, never a partially-built array.
+     */
+    private val publishedGroupSnapshot =
+        AtomicReference<GroupSnapshot>(GroupSnapshot.EMPTY)
 
     /** -1 means "no signature yet" so the very first sync doesn't fire a fake reheat. */
     private var lastGroupSignature = -1
@@ -199,6 +236,12 @@ class UltraFastEngine<Id, Data>(
         // Early exit if truly idle AND nothing is overlapping AND nothing changed.
         // (isAsleep already returns false while hasOverlap is set, so a stacked
         //  graph keeps stepping until it has un-stacked itself.)
+        //
+        // IMPORTANT: even on this early-exit path syncData() still runs, and it
+        // calls syncGroupsInternal(), which re-publishes the group snapshot.
+        // That is what lets a group edit made while the engine is asleep still
+        // reach the hull controller — the snapshot is refreshed every step,
+        // awake or not.
         if (isAsleep && draggedNode == null && !structureChanged) {
             syncData(graphNodes, coordinates, velocities, connections, false)
             return@coroutineScope
@@ -702,8 +745,6 @@ class UltraFastEngine<Id, Data>(
             config.baseAlphaDecay
         }
 
-        syncGroupsInternal(graphNodes, n)
-
         for (i in 0 until n) {
             val node = graphNodes[i]
             ids.add(node.id)
@@ -724,6 +765,11 @@ class UltraFastEngine<Id, Data>(
             val vel = velocities[node.id] ?: Offset.Zero
             velX[i] = vel.x; velY[i] = vel.y
         }
+
+        // Groups are synced AFTER ids/idToIndex/positions are populated, since
+        // syncGroupsInternal resolves memberships by node id and the snapshot
+        // it publishes is keyed by node INDEX in this exact order.
+        syncGroupsInternal(graphNodes, n)
 
         // De-stack: nodes that loaded at the SAME position get a tiny one-time
         // deterministic offset so Barnes-Hut has a real direction to work with.
@@ -821,11 +867,6 @@ class UltraFastEngine<Id, Data>(
     // Group data
     // -----------------------------------------------------------------
 
-    private var groupIdToString: Array<String> = emptyArray()
-
-    @Volatile
-    private var pendingGroupResolver: ((Int) -> List<String>)? = null
-
     private fun syncGroupsInternal(graphNodes: List<GraphNode<Id, Data>>, n: Int) {
         val index = pendingGroupIndex
 
@@ -835,7 +876,12 @@ class UltraFastEngine<Id, Data>(
             }
             for (i in 0..n) nodeGroupOffset[i] = 0
             groupCount = 0
+            groupEntryCount = 0
+            groupIdToValue = emptyArray()
             lastGroupSignature = -1
+            // Publish the empty snapshot so a reader that arrives now sees a
+            // consistent "no groups" state rather than the previous topology.
+            publishedGroupSnapshot.store(GroupSnapshot.EMPTY)
             return
         }
 
@@ -910,42 +956,49 @@ class UltraFastEngine<Id, Data>(
         }
         nodeGroupOffset[n] = w
         groupCount = g
+        groupEntryCount = w
         groupIdToValue = Array(g) { groupIds[it] }
+
+        // ---- Atomic publish -------------------------------------------------
+        // EVERY group array is now fully written and internally consistent:
+        //   - nodeGroupOffset[0..n] partitions exactly w entries
+        //   - nodeGroupId[0..w) / nodeGroupWeight[0..w) are filled
+        //   - groupIdToValue has exactly g entries
+        // Build an immutable, exact-sized copy and swap it in with a single
+        // atomic store. Any concurrent snapshotGroupsForHulls() call observes
+        // either the whole previous snapshot or this whole new one — never the
+        // half-written live arrays. This is the fix for "edit one group ->
+        // every hull blinks out for one frame".
+        publishedGroupSnapshot.store(
+            GroupSnapshot.build(
+                groupCount = groupCount,
+                nodeCount = n,
+                groupIdToValue = groupIdToValue,
+                liveNodeGroupOffset = nodeGroupOffset,
+                liveNodeGroupId = nodeGroupId,
+                liveNodeGroupWeight = nodeGroupWeight,
+                entryCount = groupEntryCount,
+            )
+        )
 
         if (groupsChanged && !isFirstSync && config.groupChangeReheatAlpha > 0f) {
             reheatInternal(config.groupChangeReheatAlpha)
         }
     }
 
-    /** Snapshot of (groupId, [(x,y)...]) for hull computation. */
+    /**
+     * Snapshot of (groupId, [(x,y)...]) for hull computation.
+     *
+     * Reads ONLY the atomically-published [GroupSnapshot] — never the engine's
+     * live, mutable group arrays. The topology is therefore always whole and
+     * self-consistent regardless of whether step()/syncGroupsInternal is
+     * running concurrently on the physics coroutine.
+     *
+     * Positions (posX/posY) are still read live; that is intentional and safe
+     * — see [GroupSnapshot.buildHullPoints]. The only thing that must not tear
+     * is the membership topology, and that is what the snapshot guarantees.
+     */
     override fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>> {
-        val g = groupCount
-        if (g == 0 || nodeCount == 0) return emptyList()
-
-        val counts = IntArray(g)
-        for (i in 0 until nodeCount) {
-            val from = nodeGroupOffset[i]
-            val to = nodeGroupOffset[i + 1]
-            for (k in from until to) counts[nodeGroupId[k]]++
-        }
-        val pts = Array(g) { FloatArray(counts[it] * 2) }
-        val wIdx = IntArray(g)
-        for (i in 0 until nodeCount) {
-            val from = nodeGroupOffset[i]
-            val to = nodeGroupOffset[i + 1]
-            val px = posX[i]; val py = posY[i]
-            for (k in from until to) {
-                val gid = nodeGroupId[k]
-                val w = wIdx[gid]
-                pts[gid][w] = px
-                pts[gid][w + 1] = py
-                wIdx[gid] = w + 2
-            }
-        }
-        val out = ArrayList<Pair<GroupId, FloatArray>>(g)
-        for (gi in 0 until g) {
-            if (counts[gi] > 0) out.add(groupIdToValue[gi] to pts[gi])
-        }
-        return out
+        return publishedGroupSnapshot.load().buildHullPoints(posX, posY)
     }
 }
