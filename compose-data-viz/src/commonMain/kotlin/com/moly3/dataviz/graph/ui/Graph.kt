@@ -177,40 +177,24 @@ fun <Id, Data> Graph(
 
     val hulls by hullController.hulls.collectAsState()
 
-    // Bidirectional group lookups, built once per genuine model change.
-    // groupModel is a data class, so this re-keys precisely — no lambda
-    // identity instability, no hand-rolled signature.
     val groupIndex = remember(groupModel) { GroupIndex.build(groupModel) }
+    val groupIndexIdentity = remember(groupModel) { groupModel.hashCode() }
     val groupSettings = settings.groupSettings
 
-    // Push group data into the engine. Keyed on the index, so a name/color-only
-    // edit (which produces a new model but the same membership) still re-runs
-    // harmlessly; syncGroupsInternal's signature excludes appearance so no
-    // spurious reheat results.
-    LaunchedEffect(engine, groupSettings, groupIndex) {
+// Push group data into the engine whenever the index or settings change.
+// setGroupData records the identity and nudges the engine; step() will run
+// syncGroupsInternal and publish a snapshot stamped with this identity.
+    LaunchedEffect(engine, groupSettings, groupIndex, groupIndexIdentity) {
         engine.setGroupData(
             groupIndex = if (groupSettings.enabled) groupIndex else null,
             settings = groupSettings,
+            groupIndexIdentity = groupIndexIdentity,
         )
     }
 
-    // Push group data into the engine. Keyed on the index, so a name/color-only
-    // edit (which produces a new model but the same membership) still re-runs
-    // harmlessly; syncGroupsInternal's signature excludes appearance so no
-    // spurious reheat results.
-    LaunchedEffect(engine, groupSettings, groupIndex) {
-        engine.setGroupData(
-            groupIndex = if (groupSettings.enabled) groupIndex else null,
-            settings = groupSettings,
-        )
-        // BUG FIX: Wake the engine! If it's asleep, it skips step() and never updates
-        // the snapshot. The hull controller gets stuck with old data.
-        engine.nudge()
-    }
-
-    // Drive hull recompute on a configurable cadence.
-    // We rebuild more often while the engine is hot, then idle out.
-    LaunchedEffect(hullController, engine, groupSettings) {
+// Periodic hull recompute on a cadence — unchanged in spirit.
+// was: LaunchedEffect(hullController, engine, groupSettings)
+    LaunchedEffect(hullController, engine, groupSettings, groupIndex) {
         if (!groupSettings.enabled) return@LaunchedEffect
         while (isActive) {
             val interval = if (engine.isAsleep) groupSettings.hullSettledIntervalMs
@@ -219,20 +203,37 @@ fun <Id, Data> Graph(
             delay(interval)
         }
     }
+// Immediate, one-shot hull refresh on ANY group change — name, color, or
+// membership. Instead of a fixed delay(32L) guess, WAIT for the engine to
+// confirm it has run syncGroupsInternal for THIS exact groupIndex and
+// published the matching snapshot. Only then submit.
+    LaunchedEffect(groupModel, groupSettings, groupIndexIdentity) {
+        if (!groupSettings.enabled) {
+            // Disabled: engine still publishes GroupSnapshot.EMPTY; let the
+            // controller clear its hulls against it.
+            hullController.submit(engine, groupIndex, groupSettings)
+            return@LaunchedEffect
+        }
 
-    // Immediate, one-shot hull refresh on ANY group change — name, color, or
-    // membership. groupModel is a data class so this fires exactly on real
-    // change and never otherwise; it does not wait for the poll interval,
-    // which fixes the "name/color lags while the engine is asleep" bug.
-    LaunchedEffect(groupModel, groupSettings) {
-        if (!groupSettings.enabled) return@LaunchedEffect
+        // Make sure the engine is awake so step() actually runs and consumes the
+        // pending index. setGroupData already nudged, but nudge again defensively
+        // in case this effect re-ran without setGroupData (shouldn't, but cheap).
+        engine.nudge()
 
-        // BUG FIX: The engine was just nudged and needs a frame to run step() and publish
-        // the new GroupSnapshot. If we submit instantly, we read the old snapshot against
-        // the new GroupIndex, dropping all hulls for this frame. Delay briefly to let
-        // the engine sync and debounce rapid slider changes.
-        delay(32L)
+        // Poll until the published snapshot is stamped with our index identity.
+        // Bounded so a pathological stall can't hang the effect forever.
+        var waitedMs = 0
+        val timeoutMs = 1000
+        while (isActive &&
+            waitedMs < timeoutMs &&
+            !engine.hasSyncedGroupIndex(groupIndexIdentity)
+        ) {
+            delay(16L)
+            waitedMs += 16
+        }
 
+        // Snapshot now matches groupIndex (or we timed out — submit anyway so a
+        // missed stamp degrades to "slightly stale" rather than "no hulls").
         hullController.submit(engine, groupIndex, groupSettings)
     }
 

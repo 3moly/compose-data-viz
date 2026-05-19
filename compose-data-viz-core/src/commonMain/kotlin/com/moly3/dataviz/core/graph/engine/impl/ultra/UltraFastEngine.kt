@@ -106,12 +106,34 @@ class UltraFastEngine<Id, Data>(
     @Volatile
     private var pendingGroupSettings: GroupSettings = GroupSettings()
 
+
+    /**
+     * Identity of the GroupIndex most recently handed to setGroupData.
+     * syncGroupsInternal copies this into the published snapshot so a reader
+     * can verify the snapshot was built from the index it expects.
+     */
+    @Volatile
+    private var pendingGroupIndexIdentity: Int = 0
+
+    /**
+     * Identity actually baked into the last published snapshot. Read by
+     * hasSyncedGroupIndex from any coroutine.
+     */
+    @Volatile
+    private var publishedGroupIndexIdentity: Int = 0
+
     override fun setGroupData(
         groupIndex: GroupIndex<Id>?,
         settings: GroupSettings,
+        groupIndexIdentity: Int,
     ) {
         pendingGroupIndex = groupIndex
         pendingGroupSettings = settings
+        pendingGroupIndexIdentity = groupIndexIdentity
+        // Wake the engine so step() runs syncGroupsInternal and publishes a
+        // snapshot stamped with this identity. The hull-refresh effect waits
+        // for that stamp before submitting.
+        nudge()
     }
 
     private var nodeCount = 0
@@ -869,6 +891,10 @@ class UltraFastEngine<Id, Data>(
 
     private fun syncGroupsInternal(graphNodes: List<GraphNode<Id, Data>>, n: Int) {
         val index = pendingGroupIndex
+        // Capture the identity ONCE at the top so a concurrent setGroupData call
+        // can't make us publish the new snapshot stamped with a newer identity
+        // than the data we actually read.
+        val identityForThisSync = pendingGroupIndexIdentity
 
         if (index == null || !pendingGroupSettings.enabled || n == 0) {
             if (nodeGroupOffset.size < n + 1) {
@@ -879,9 +905,10 @@ class UltraFastEngine<Id, Data>(
             groupEntryCount = 0
             groupIdToValue = emptyArray()
             lastGroupSignature = -1
-            // Publish the empty snapshot so a reader that arrives now sees a
-            // consistent "no groups" state rather than the previous topology.
             publishedGroupSnapshot.store(GroupSnapshot.EMPTY)
+            // Stamp AFTER the snapshot store so a reader that sees the identity
+            // is guaranteed to also see the matching snapshot.
+            publishedGroupIndexIdentity = identityForThisSync
             return
         }
 
@@ -980,6 +1007,11 @@ class UltraFastEngine<Id, Data>(
                 entryCount = groupEntryCount,
             )
         )
+        // Stamp the identity AFTER the atomic snapshot store. Ordering matters:
+        // hasSyncedGroupIndex reads the identity; if it sees the new value, the
+        // snapshot store above has already happened (single physics coroutine,
+        // and the @Volatile write here can't be reordered before the store).
+        publishedGroupIndexIdentity = identityForThisSync
 
         if (groupsChanged && !isFirstSync && config.groupChangeReheatAlpha > 0f) {
             reheatInternal(config.groupChangeReheatAlpha)
@@ -1001,4 +1033,7 @@ class UltraFastEngine<Id, Data>(
     override fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>> {
         return publishedGroupSnapshot.load().buildHullPoints(posX, posY)
     }
+
+    override fun hasSyncedGroupIndex(groupIndexIdentity: Int): Boolean =
+        publishedGroupIndexIdentity == groupIndexIdentity
 }

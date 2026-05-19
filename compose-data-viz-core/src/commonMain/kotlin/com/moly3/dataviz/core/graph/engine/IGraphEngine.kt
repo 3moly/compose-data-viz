@@ -30,7 +30,10 @@ interface IGraphEngine<Id, Data> {
     fun setGroupData(
         groupIndex: GroupIndex<Id>?,
         settings: GroupSettings,
+        groupIndexIdentity: Int,
     )
 
     fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>>
+
+    fun hasSyncedGroupIndex(groupIndexIdentity: Int): Boolean
 }

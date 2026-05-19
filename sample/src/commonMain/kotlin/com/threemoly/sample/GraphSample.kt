@@ -5,19 +5,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Button
 import androidx.compose.material.Text
+import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
@@ -128,33 +133,49 @@ fun GraphSample(
         staticIconKey = { id, data -> /* return KEY_FOLDER / null / etc */ null },
         isMoving = movement.isMoving
     )
-
-    val watchNodeState = remember { mutableStateOf<String?>(null) }
-
-    // 1. Add a seed state to force group regeneration
+// 1. Add a seed state to force group regeneration
     var groupSeed by remember { mutableIntStateOf(0) }
 
-    // 2. Tie the remember block to both nodes and the seed
-    val groupModel = remember(s.graphNodes, groupSeed) {
-        val defs = listOf(
-            GroupHullDef(GroupId("collection"), name = "Collection", color = Color.Black),
-            GroupHullDef(GroupId("row"), name = "Row", color = Color.Magenta),
-            GroupHullDef(GroupId("file"),       name = "File",       color = Color.Blue),
-            GroupHullDef(GroupId("tag"),        name = "Tag",        color = Color.Cyan),
+// Stable group identities — these never change on rename.
+    val groupIds = remember {
+        listOf(GroupId("collection"), GroupId("row"), GroupId("file"), GroupId("tag"))
+    }
+// Editable display names, keyed by stable GroupId. Renaming touches ONLY this.
+    val groupNames = remember {
+        mutableStateMapOf(
+            GroupId("collection") to "Collection",
+            GroupId("row") to "Row",
+            GroupId("file") to "File",
+            GroupId("tag") to "Tag",
         )
-
-        val groupIds = defs.map { it.id }
+    }
+    val groupColors = remember {
+        mapOf(
+            GroupId("collection") to Color.Black,
+            GroupId("row") to Color.Magenta,
+            GroupId("file") to Color.Blue,
+            GroupId("tag") to Color.Cyan,
+        )
+    }
+// 2. Tie the remember block to nodes, seed, AND the editable names
+    val groupModel = remember(s.graphNodes, groupSeed, groupNames.toMap()) {
+        val defs = groupIds.map { id ->
+            GroupHullDef(
+                id = id,
+                name = groupNames[id] ?: id.raw,
+                color = groupColors[id] ?: Color.Red,
+            )
+        }
 
         val memberships = s.graphNodes.mapNotNull { node ->
-            // Optional: 20% chance for a node to have NO group to test hull separation
             if (Random.nextFloat() > 0.2f) {
-                // Use a seeded random so it's stable per click, but changes when groupSeed increments
                 val randomGroupId = groupIds.random(Random(node.id.hashCode() + groupSeed))
                 GroupMembership(nodeId = node.id, groupId = randomGroupId)
             } else null
         }
         GroupModel(defs = defs, memberships = memberships)
     }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -165,7 +186,7 @@ fun GraphSample(
             textStyle = TextStyle.Default.copy(color = Color.Magenta),
             engine = engine,
             atlasLayers = handle.atlasLayers,
-            watchNodeId = watchNodeState.value,
+            watchNodeId = null,
             getIconKey = handle::resolveIconKey,
             groupModel = groupModel,
             isImmediateReheatOnUpdate = false,
@@ -233,7 +254,7 @@ fun GraphSample(
                 state.value = state.value.copy(graphUserPosition = offset)
             },
             onNodeClick = { node ->
-                watchNodeState.value = node.id
+                //watchNodeState.value = node.id
             },
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())
@@ -261,6 +282,59 @@ fun GraphSample(
                     bitmap = atlas.bitmap,
                     contentDescription = "layer 1"
                 )
+            }
+        }
+        // Trigger random group assignments
+        Button(
+            onClick = { groupSeed++ },
+            modifier = Modifier.padding(horizontal = 8.dp)
+        ) {
+            Text("Scramble Groups")
+        }
+
+// Rename groups individually
+        Column(
+            modifier = Modifier
+                .background(Color.White)
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text("Rename groups:")
+            for (id in groupIds) {
+                var editing by remember(id) { mutableStateOf(false) }
+                var draft by remember(id) { mutableStateOf(groupNames[id].orEmpty()) }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(14.dp)
+                            .background(groupColors[id] ?: Color.Red)
+                    )
+                    Spacer(Modifier.size(8.dp))
+
+                    if (editing) {
+                        TextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(onClick = {
+                            val trimmed = draft.trim()
+                            if (trimmed.isNotEmpty()) groupNames[id] = trimmed
+                            editing = false
+                        }) { Text("Save") }
+                    } else {
+                        Text(
+                            text = groupNames[id].orEmpty(),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(onClick = {
+                            draft = groupNames[id].orEmpty()
+                            editing = true
+                        }) { Text("Rename") }
+                    }
+                }
             }
         }
 //        Box(Modifier.size(100.dp).background(if (movement.isMoving) Color.Magenta else Color.Green))

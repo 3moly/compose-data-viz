@@ -153,7 +153,7 @@ internal fun <Id, Data> GraphInternal(
         for (i in hulls.indices) {
             val hull = hulls[i]
             h = h * 31 xor hull.groupId.hashCode()
-            h = h * 31 xor hull.label.hashCode()
+            h = h * 31 xor hull.label.hashCode()   // label IS in the signature
         }
         h
     }

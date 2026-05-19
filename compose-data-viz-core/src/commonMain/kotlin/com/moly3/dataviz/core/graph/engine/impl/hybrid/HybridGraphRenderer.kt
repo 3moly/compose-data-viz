@@ -41,13 +41,18 @@ class HybridGraphRenderer<Id, Data> : IGraphEngine<Id, Data> {
 
     override fun setGroupData(
         groupIndex: GroupIndex<Id>?,
-        settings: GroupSettings
+        settings: GroupSettings,
+        groupIndexIdentity: Int
     ) {
         TODO("Not yet implemented")
     }
 
 
     override fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>> {
+        TODO("Not yet implemented")
+    }
+
+    override fun hasSyncedGroupIndex(groupIndexIdentity: Int): Boolean {
         TODO("Not yet implemented")
     }
 
