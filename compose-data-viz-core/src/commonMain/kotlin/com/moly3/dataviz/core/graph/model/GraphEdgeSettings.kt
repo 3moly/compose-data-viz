@@ -113,30 +113,24 @@ data class GraphEdgeSettings(
     val dashOffPx: Float = 8f,
     val dotOnPx: Float = 2f,
     val dotOffPx: Float = 6f,
+
+    // ---- NEW: Performance & Rendering Overrides --------------------------
+
+    /** * If true, forces ALL connections to be drawn as basic solid lines,
+     * completely ignoring dash patterns, dot patterns, and arrowheads.
+     */
+    val drawPureLines: Boolean = false,
+
+    /** * The maximum number of connections per node to draw with their complex
+     * authored styles (arrows, dashes, etc.). Connections beyond this limit
+     * fall back to being drawn as pure solid lines to save rendering performance.
+     */
+    val maxStyledEdgesTotal: Int = 150,
+
     // ---- Zoom-response policies ------------------------------------------
 
-    /**
-     * How [strokeWidth] / [strokeHighlightBonus] react to zoom.
-     * Default: constant on-screen thickness (matches legacy behavior).
-     */
     val strokeScalePolicy: ZoomScalePolicy = ZoomScalePolicy.WorldConstant,
-
-    /**
-     * How [arrowHeadLengthPx] / [arrowHeadWidthPx] react to zoom.
-     * Default: constant on-screen size (matches legacy behavior, keeps arrows
-     * readable at every zoom).
-     *
-     * Set to [ZoomScalePolicy.WorldConstant] if you want arrows that grow
-     * visually with the graph. Set to [ZoomScalePolicy.Clamped] for a
-     * hybrid that's screen-constant in a usable band but stops growing at
-     * extreme zooms.
-     */
     val arrowHeadScalePolicy: ZoomScalePolicy = ZoomScalePolicy.WorldConstant,
-
-    /**
-     * How dash/dot pattern lengths react to zoom. Matches the previous
-     * `/ zoom` behavior so the visual cadence stays constant.
-     */
     val dashPatternScalePolicy: ZoomScalePolicy = ZoomScalePolicy.WorldConstant,
 ) {
     companion object {

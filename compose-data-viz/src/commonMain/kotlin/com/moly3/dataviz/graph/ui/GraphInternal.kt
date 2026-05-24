@@ -52,12 +52,19 @@ import com.moly3.dataviz.func.half
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
 import com.moly3.dataviz.graph.features.atlas.NodeStaticData
 import com.moly3.dataviz.graph.func.approach
-import com.moly3.dataviz.graph.func.getNodeConnections
 import com.moly3.shaders.buildEffect
 import com.moly3.shaders.drawVertices2
 import kotlinx.collections.immutable.ImmutableList
 import kotlin.math.max
 import kotlin.math.min
+
+// Pre-allocated object to track edges and their distance to center without garbage collection
+private class VisibleEdgeData {
+    var sIndex: Int = -1
+    var tIndex: Int = -1
+    var connIndex: Int = -1
+    var distSq: Float = 0f
+}
 
 @Composable
 internal fun <Id, Data> GraphInternal(
@@ -132,7 +139,12 @@ internal fun <Id, Data> GraphInternal(
     val textMeasurerNoCaching = rememberTextMeasurer()
 
     val buffers = remember { GraphBuffers() }
+
+    // Pools to avoid GC during panning/zooming
     val visibleTextsPool = remember { ArrayList<VisibleTextData>() }
+    val visibleEdgesPool = remember { ArrayList<VisibleEdgeData>() }
+    val edgeComparator = remember { Comparator<VisibleEdgeData> { a, b -> a.distSq.compareTo(b.distSq) } }
+
     val nodeById = remember(nodes) { nodes.associateBy { it.id } }
 
     val textSignature = remember(nodes) {
@@ -158,13 +170,12 @@ internal fun <Id, Data> GraphInternal(
         }
     }
 
-    // Cache hull label layouts so we don't re-measure every frame.
     val hullLabelSignature = remember(hulls) {
         var h = hulls.size
         for (i in hulls.indices) {
             val hull = hulls[i]
             h = h * 31 xor hull.groupId.hashCode()
-            h = h * 31 xor hull.label.hashCode()   // label IS in the signature
+            h = h * 31 xor hull.label.hashCode()
         }
         h
     }
@@ -203,7 +214,6 @@ internal fun <Id, Data> GraphInternal(
         while (it.hasNext()) if (it.next() !in currentIds) it.remove()
     }
 
-    // Pre-calculate static visual data for nodes so we don't recalculate it inside Canvas every frame
     val staticNodeData =
         remember(nodes, connections, atlasLayers, theme, circleRadius, circleSizeMultiplier) {
             Array(nodes.size) { i ->
@@ -341,7 +351,6 @@ internal fun <Id, Data> GraphInternal(
             val colArray = buffers.colors
             val idxArray = buffers.indices
 
-            // OPTIMIZATION: Extract colors out of the loop
             val solidBackgroundColor = Color(0xFF121212)
             val fadedNodeAlpha = selectionCfg.fadedNodeAlpha
             val fadedEdgeAlpha = selectionCfg.fadedEdgeAlpha
@@ -352,7 +361,6 @@ internal fun <Id, Data> GraphInternal(
                 val pos = coordinates[node.id] ?: continue
                 if (pos.x < cullL || pos.x > cullR || pos.y < cullT || pos.y > cullB) continue
 
-                // Retrieve cached data instead of calculating it
                 val staticData = staticNodeData[i]
                 val baseRadius = staticData.baseRadius
                 val baseColor = staticData.baseColor
@@ -376,10 +384,9 @@ internal fun <Id, Data> GraphInternal(
                 val nodeColorInt = if (dim > 0f) {
                     lerp(base, solidBackgroundColor, dim * (1f - fadedNodeAlpha)).toArgb()
                 } else {
-                    base.toArgb() // Avoids lerp entirely when completely visible
+                    base.toArgb()
                 }
 
-                // ONLY draw the background circle if there is NO icon
                 if (!hasIcon) {
                     val vOff = visibleNodeCount * 4
                     val fOff = vOff * 2
@@ -410,10 +417,8 @@ internal fun <Id, Data> GraphInternal(
                     visibleNodeCount++
                 }
 
-                // Icon drawing logic
                 if (hasIcon && iconLookup != null) {
                     val iconAlpha = lerp(1f, fadedNodeAlpha, dim)
-                    // Avoid color allocation overhead if alpha is 1f
                     val iconFadedColorInt =
                         if (iconAlpha >= 0.99f) whiteColorInt else Color.White.copy(alpha = iconAlpha)
                             .toArgb()
@@ -465,18 +470,16 @@ internal fun <Id, Data> GraphInternal(
                 scale(animZoom, animZoom)
                 translate(center.x + movementOffset.x, center.y + movementOffset.y)
             }) {
-                // -------- Group hulls (background layer) -----------------------------
                 if (groupSettings.enabled && hulls.isNotEmpty()) {
                     val strokePx = (groupSettings.hullStrokeWidth / animZoom).coerceAtLeast(0.5f)
                     val stroke = Stroke(
                         width = strokePx,
-                        cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                        join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
                     )
 
                     for (i in hulls.indices) {
                         val h = hulls[i]
-                        // Fast bounds-cull: skip hulls fully outside the visible rect.
                         val bounds = h.path.getBounds()
                         if (bounds.right < cullL || bounds.left > cullR ||
                             bounds.bottom < cullT || bounds.top > cullB
@@ -495,19 +498,6 @@ internal fun <Id, Data> GraphInternal(
                         )
                     }
                 }
-
-
-                // ============================================================================
-// REPLACE the existing `if (drawEdges) { ... }` block in GraphInternal.kt
-// with this one. Only the size-resolution lines change — the loop body,
-// O(1) lookups, sqrt skipping, and arrowPath reuse from the previous fix
-// are all preserved.
-//
-// Also add this import at the top of GraphInternal.kt:
-//
-//   import com.moly3.dataviz.core.graph.model.resolve
-//
-// ============================================================================
 
                 if (drawEdges) {
                     val strokeScale = edgeCfg.strokeScalePolicy
@@ -530,20 +520,29 @@ internal fun <Id, Data> GraphInternal(
                     val headWidWorld = arrowScale.resolve(edgeCfg.arrowHeadWidthPx, animZoom)
 
                     val arrowPath = buffers.arrowPath
-
-                    // fadedEdgeAlpha is "the alpha value an edge fades TO when fully dimmed".
-                    // We blend FROM 1f to this value as the edge's effective dim goes 0 -> 1.
-                    // Pull it out of the hot loop.
                     val dimTargetAlpha = fadedEdgeAlpha
 
+                    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(dashOn, dashOff), 0f)
+                    val dotEffect = PathEffect.dashPathEffect(floatArrayOf(dotOn, dotOff), 0f)
+
+                    val defaultDimmedLine = baseEdgeColor.copy(alpha = baseEdgeColor.alpha * dimTargetAlpha)
+                    val defaultNormalLine = baseEdgeColor
+
+                    val forcePureLines = edgeCfg.drawPureLines
+                    val maxStyled = edgeCfg.maxStyledEdgesTotal
+
+                    // The world-space center coordinates mapping to the screen center
+                    val worldCenterX = -movementOffset.x
+                    val worldCenterY = -movementOffset.y
+
+                    var visibleEdgeCount = 0
+
+                    // 1. Gather all visible edges and calculate their distance to screen center
                     for (i in nodes.indices) {
                         val sId = nodes[i].id
                         val sPos = coordinates[sId] ?: continue
                         val conns = connections[sId] ?: continue
-                        val sState = nodeAnimStates[sId]
-                        val sActive = sState?.activeKoef ?: 0f
-                        val sDim = sState?.dimFactor ?: 0f
-                        val sRadius = staticNodeData[i].baseRadius
+                        if (conns.isEmpty()) continue
 
                         for (j in conns.indices) {
                             val conn = conns[j]
@@ -552,100 +551,144 @@ internal fun <Id, Data> GraphInternal(
                             val tIdx = nodeIndexById[tId] ?: continue
                             val tPos = coordinates[tId] ?: continue
 
-                            val minX = if (sPos.x < tPos.x) sPos.x else tPos.x
-                            val maxX = if (sPos.x > tPos.x) sPos.x else tPos.x
-                            val minY = if (sPos.y < tPos.y) sPos.y else tPos.y
-                            val maxY = if (sPos.y > tPos.y) sPos.y else tPos.y
+                            val minX = min(sPos.x, tPos.x)
+                            val maxX = max(sPos.x, tPos.x)
+                            val minY = min(sPos.y, tPos.y)
+                            val maxY = max(sPos.y, tPos.y)
                             if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
 
-                            val tState = nodeAnimStates[tId]
-                            val tActive = tState?.activeKoef ?: 0f
-                            val tDim = tState?.dimFactor ?: 0f
+                            val midX = (sPos.x + tPos.x) * 0.5f
+                            val midY = (sPos.y + tPos.y) * 0.5f
+                            val dx = midX - worldCenterX
+                            val dy = midY - worldCenterY
+                            val distSq = dx * dx + dy * dy
 
-                            // Edge "active" — drives stroke thickening and accent-color blend.
-                            // Either endpoint counts; the more-active end wins.
-                            val maxActive = if (sActive > tActive) sActive else tActive
-
-                            // Edge "dim" — the LESS dim endpoint wins. An edge fades only when
-                            // BOTH endpoints are unrelated to the selection. If one endpoint
-                            // is the active node or a direct connection (dim = 0), the edge
-                            // stays bright.
-                            val edgeDim = if (sDim < tDim) sDim else tDim
-
-                            val stroke =
-                                if (maxActive == 0f) strokeNormal
-                                else strokeNormal + (strokeHighlight - strokeNormal) * maxActive
-
-                            val style = conn.style
-                            val themedBase = if (style.color.isSpecified) style.color else baseEdgeColor
-
-                            // Highlight blend toward accent first…
-                            val highlighted = if (maxActive > 0f) {
-                                lerp(themedBase, accentColor, maxActive)
-                            } else {
-                                themedBase
+                            if (visibleEdgeCount >= visibleEdgesPool.size) {
+                                visibleEdgesPool.add(VisibleEdgeData())
                             }
 
-                            // …then dim by scaling alpha. Preserves per-edge custom colors
-                            // (unlike a blend toward a flat dim-line color, which crushes hue).
-                            // Highlighted edges naturally override dim because their endpoints
-                            // have dim = 0 (the active node and its connections never dim).
-                            val edgeColor = if (edgeDim > 0f) {
+                            val data = visibleEdgesPool[visibleEdgeCount++]
+                            data.sIndex = i
+                            data.tIndex = tIdx
+                            data.connIndex = j
+                            data.distSq = distSq
+                        }
+                    }
+
+                    // 2. Sort the gathered edges by proximity to the center
+                    val activeEdges = visibleEdgesPool.subList(0, visibleEdgeCount)
+                    activeEdges.sortWith(edgeComparator)
+
+                    // 3. Draw them! Prioritize custom styles for the closest ones
+                    for (k in 0 until visibleEdgeCount) {
+                        val data = activeEdges[k]
+                        val sIdx = data.sIndex
+                        val tIdx = data.tIndex
+                        val sId = nodes[sIdx].id
+                        val tId = nodes[tIdx].id
+
+                        val sPos = coordinates[sId]!!
+                        val tPos = coordinates[tId]!!
+                        val conn = connections[sId]!![data.connIndex]
+
+                        val sState = nodeAnimStates[sId]
+                        val tState = nodeAnimStates[tId]
+                        val sActive = sState?.activeKoef ?: 0f
+                        val tActive = tState?.activeKoef ?: 0f
+                        val sDim = sState?.dimFactor ?: 0f
+                        val tDim = tState?.dimFactor ?: 0f
+                        val sRadius = staticNodeData[sIdx].baseRadius
+
+                        val maxActive = if (sActive > tActive) sActive else tActive
+                        val edgeDim = if (sDim < tDim) sDim else tDim
+
+                        val stroke = if (maxActive == 0f) strokeNormal
+                        else strokeNormal + (strokeHighlight - strokeNormal) * maxActive
+
+                        // Only the closest 'maxStyled' edges get the complex styling
+                        val isStyled = !forcePureLines && k < maxStyled
+                        val effectiveLineStyle = if (isStyled) conn.style.line else LineStyle.Solid
+                        val effectiveHead = if (isStyled) conn.style.head else ArrowHead.None
+                        val isCustomColor = if (isStyled) conn.style.color.isSpecified else false
+
+                        val edgeColor = if (!isCustomColor && maxActive == 0f) {
+                            if (edgeDim >= 1f) defaultDimmedLine
+                            else if (edgeDim <= 0f) defaultNormalLine
+                            else {
+                                val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
+                                baseEdgeColor.copy(alpha = baseEdgeColor.alpha * alphaScale)
+                            }
+                        } else {
+                            val themedBase = if (isCustomColor) conn.style.color else baseEdgeColor
+                            val highlighted = if (maxActive > 0f) lerp(themedBase, accentColor, maxActive) else themedBase
+
+                            if (edgeDim > 0f) {
                                 val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
                                 highlighted.copy(alpha = highlighted.alpha * alphaScale)
-                            } else {
-                                highlighted
-                            }
+                            } else highlighted
+                        }
 
+                        val hasArrow = effectiveHead != ArrowHead.None
+                        val needsOffset = hasArrow || effectiveLineStyle != LineStyle.Solid
+
+                        val drawStartX: Float
+                        val drawStartY: Float
+                        val drawEndX: Float
+                        val drawEndY: Float
+                        val ux: Float
+                        val uy: Float
+
+                        if (!needsOffset) {
+                            drawStartX = sPos.x
+                            drawStartY = sPos.y
+                            drawEndX = tPos.x
+                            drawEndY = tPos.y
+                            ux = 0f
+                            uy = 0f
+                        } else {
                             val tRadius = staticNodeData[tIdx].baseRadius
-
                             val dx = tPos.x - sPos.x
                             val dy = tPos.y - sPos.y
                             val lenSq = dx * dx + dy * dy
 
                             if (lenSq < 0.0001f) continue
                             val invLen = 1f / kotlin.math.sqrt(lenSq)
-                            val ux = dx * invLen
-                            val uy = dy * invLen
+                            ux = dx * invLen
+                            uy = dy * invLen
 
-                            val drawStartX = sPos.x + ux * sRadius
-                            val drawStartY = sPos.y + uy * sRadius
-                            val drawEndX = tPos.x - ux * tRadius
-                            val drawEndY = tPos.y - uy * tRadius
+                            drawStartX = sPos.x + ux * sRadius
+                            drawStartY = sPos.y + uy * sRadius
+                            drawEndX = tPos.x - ux * tRadius
+                            drawEndY = tPos.y - uy * tRadius
 
                             val tdx = drawEndX - drawStartX
                             val tdy = drawEndY - drawStartY
                             if (tdx * ux + tdy * uy <= 0f) continue
+                        }
 
-                            val drawStart = Offset(drawStartX, drawStartY)
-                            val drawEnd = Offset(drawEndX, drawEndY)
+                        val drawStart = Offset(drawStartX, drawStartY)
+                        val drawEnd = Offset(drawEndX, drawEndY)
 
-                            drawEdgeLine(
-                                start = drawStart,
-                                end = drawEnd,
+                        when (effectiveLineStyle) {
+                            LineStyle.Solid -> drawLine(edgeColor, drawStart, drawEnd, stroke)
+                            LineStyle.Dashed -> drawLine(edgeColor, drawStart, drawEnd, stroke, pathEffect = dashEffect)
+                            LineStyle.Dotted -> drawLine(edgeColor, drawStart, drawEnd, stroke, cap = StrokeCap.Round, pathEffect = dotEffect)
+                        }
+
+                        if (hasArrow) {
+                            drawArrowHead(
+                                path = arrowPath,
+                                tip = drawEnd,
+                                dirX = ux, dirY = uy,
+                                head = effectiveHead,
+                                length = headLenWorld,
+                                width = headWidWorld,
                                 color = edgeColor,
                                 strokeWidth = stroke,
-                                lineStyle = style.line,
-                                dashOn = dashOn, dashOff = dashOff,
-                                dotOn = dotOn, dotOff = dotOff,
                             )
-
-                            if (style.head != ArrowHead.None) {
-                                drawArrowHead(
-                                    path = arrowPath,
-                                    tip = drawEnd,
-                                    dirX = ux, dirY = uy,
-                                    head = style.head,
-                                    length = headLenWorld,
-                                    width = headWidWorld,
-                                    color = edgeColor,
-                                    strokeWidth = stroke,
-                                )
-                            }
                         }
                     }
                 }
-
 
                 if (watchNodeId != null) {
                     val watchPos = coordinates[watchNodeId]
@@ -686,7 +729,6 @@ internal fun <Id, Data> GraphInternal(
                 drawCircle(color = theme.accentColor, radius = 1f / animZoom, center = Offset.Zero)
             }
 
-            // -------- Hull labels (screen-space, drawn above nodes) ------------------
             val drawHullLabels = groupSettings.enabled &&
                     hulls.isNotEmpty() &&
                     animZoom > groupSettings.hullLabelVisibilityZoomThreshold
@@ -753,8 +795,6 @@ internal fun <Id, Data> GraphInternal(
             }
 
             if (drawText) {
-                // Active node + its direct connections must always render text,
-                // regardless of the maxTextsAtCenterVisible budget.
                 val forceVisibleSet: Set<Id> = if (activeNodeId != null) {
                     val conns = connections[activeNodeId]
                     if (conns.isNullOrEmpty()) setOf(activeNodeId)
@@ -768,7 +808,6 @@ internal fun <Id, Data> GraphInternal(
 
                 for (i in nodes.indices) {
                     val node = nodes[i]
-                    // Active node is rendered by the pill/popup path below — skip here.
                     if (activeNodeId == node.id) continue
 
                     val pos = coordinates[node.id] ?: continue
@@ -796,13 +835,10 @@ internal fun <Id, Data> GraphInternal(
                 }
 
                 val activeVisibleTexts = visibleTextsPool.subList(0, visibleTextCount)
-                // Forced labels first, then by distance to center.
                 activeVisibleTexts.sortWith(
                     compareByDescending<VisibleTextData> { it.forced }.thenBy { it.distSq }
                 )
 
-                // Honor the forced set even if it exceeds maxTextsAtCenterVisible;
-                // selection clarity beats the cap.
                 val forcedCount = forceVisibleSet.count { it != activeNodeId && it in nodeById }
                 val limit = min(visibleTextCount, max(maxTextsAtCenterVisible, forcedCount))
 
@@ -820,8 +856,6 @@ internal fun <Id, Data> GraphInternal(
                     val nodeRadius = staticNodeData[nodeIndex].baseRadius
                     val nodeTextAlpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
                     val zoomAlpha = ((animZoom - zoomFadeStart) / zoomFadeWidth).coerceIn(0f, 1f)
-                    // Forced labels bypass the zoom-fade so they stay visible
-                    // when the user is interacting with a selection.
                     val effectiveZoomAlpha = if (textData.forced) 1f else zoomAlpha
                     val finalAlpha = (nodeTextAlpha * effectiveZoomAlpha).coerceIn(0f, 1f)
                     if (finalAlpha < 0.01f) continue
@@ -948,44 +982,8 @@ internal fun <Id, Data> GraphInternal(
     }
 }
 
-private fun DrawScope.drawEdgeLine(
-    start: Offset,
-    end: Offset,
-    color: Color,
-    strokeWidth: Float,
-    lineStyle: LineStyle,
-    dashOn: Float, dashOff: Float,
-    dotOn: Float, dotOff: Float,
-) {
-    when (lineStyle) {
-        LineStyle.Solid -> {
-            drawLine(color, start, end, strokeWidth)
-        }
-        LineStyle.Dashed -> {
-            drawLine(
-                color = color,
-                start = start,
-                end = end,
-                strokeWidth = strokeWidth,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashOn, dashOff), 0f),
-            )
-        }
-        LineStyle.Dotted -> {
-            // Round-capped short on/off pattern reads as dots and stays crisp at zoom.
-            drawLine(
-                color = color,
-                start = start,
-                end = end,
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dotOn, dotOff), 0f),
-            )
-        }
-    }
-}
-
-private fun DrawScope.drawArrowHead(
-    path: Path,                 // <- reused, rewound each call
+private inline fun DrawScope.drawArrowHead(
+    path: Path,
     tip: Offset,
     dirX: Float, dirY: Float,
     head: ArrowHead,
@@ -1012,7 +1010,6 @@ private fun DrawScope.drawArrowHead(
         ArrowHead.None -> Unit
 
         ArrowHead.Open -> {
-            // Two strokes meeting at the tip — no Path needed.
             drawLine(color, Offset(leftX, leftY), tip, strokeWidth, cap = StrokeCap.Round)
             drawLine(color, Offset(rightX, rightY), tip, strokeWidth, cap = StrokeCap.Round)
         }
