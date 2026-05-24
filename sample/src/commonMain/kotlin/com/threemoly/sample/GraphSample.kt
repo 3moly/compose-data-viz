@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.compose.LocalPlatformContext
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
+import com.moly3.dataviz.core.graph.model.Connection
 import com.moly3.dataviz.core.graph.model.GroupHullDef
 import com.moly3.dataviz.core.graph.model.GroupId
 import com.moly3.dataviz.core.graph.model.GroupMembership
@@ -381,8 +382,9 @@ private fun MutableState<GraphState>.spawnConnectedNode(sourceId: String) {
 
     val nodes = current.graphNodes.toMutableList().apply { add(newNode) }
     val connections = current.connections.toMutableMap().apply {
-        put(newId, persistentListOf(sourceId))
-        put(sourceId, ((this[sourceId] ?: listOf()) + newId).toPersistentList())
+        put(newId, persistentListOf(Connection(target = sourceId)))
+        val existing = this[sourceId] ?: persistentListOf()
+        put(sourceId, (existing + Connection(target = newId)).toPersistentList())
     }
 
     value = current.copy(

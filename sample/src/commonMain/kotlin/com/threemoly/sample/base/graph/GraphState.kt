@@ -1,6 +1,7 @@
 package com.threemoly.sample.base.graph
 
 import androidx.compose.ui.geometry.Offset
+import com.moly3.dataviz.core.graph.model.Connection
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.graph.func.GraphPresets
 import kotlinx.collections.immutable.ImmutableList
@@ -12,7 +13,7 @@ data class GraphState(
     val isShowSettings: Boolean = false,
     val config: GraphSettingsConfig = GraphSettingsConfig.Default,
     val graphNodes: ImmutableList<ObsidianGraphNode> = persistentListOf(),
-    val connections: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
+    val connections: ImmutableMap<String, ImmutableList<Connection<String>>> = persistentMapOf(),
     val zoom: Float = 1f,
     val graphUserPosition: Offset = Offset.Zero,
     val graphSettings: GraphSettings = GraphSettings.Default.copy(view = GraphPresets.massive()),

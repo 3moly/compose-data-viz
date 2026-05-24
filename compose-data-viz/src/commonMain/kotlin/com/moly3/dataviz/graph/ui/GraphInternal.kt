@@ -17,9 +17,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -36,8 +42,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import com.moly3.dataviz.core.graph.hull.GroupHull
 import com.moly3.dataviz.core.graph.hull.GroupSettings
+import com.moly3.dataviz.core.graph.model.ArrowHead
+import com.moly3.dataviz.core.graph.model.Connection
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
+import com.moly3.dataviz.core.graph.model.LineStyle
+import com.moly3.dataviz.core.graph.model.resolve
 import com.moly3.dataviz.func.half
 import com.moly3.dataviz.graph.features.atlas.AtlasLayers
 import com.moly3.dataviz.graph.features.atlas.NodeStaticData
@@ -57,7 +67,8 @@ internal fun <Id, Data> GraphInternal(
     atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
     getIconKey: (Id, Data) -> String? = { _, _ -> null },
     nodes: List<GraphNode<Id, Data>>,
-    connections: Map<Id, List<Id>>,
+
+    connections: Map<Id, List<Connection<Id>>>,
     coordinates: Map<Id, Offset>,
     coordinatesVersion: Int,
     draggedNodeId: Id?,
@@ -180,8 +191,9 @@ internal fun <Id, Data> GraphInternal(
     }
 
     val activeConnectionSet = remember(activeNodeId, connections) {
-        if (activeNodeId != null) connections.getNodeConnections(activeNodeId).toHashSet()
-        else emptySet()
+        if (activeNodeId != null) {
+            connections[activeNodeId]?.mapTo(HashSet()) { it.target } ?: emptySet()
+        } else emptySet()
     }
 
     val nodeAnimStates = remember { HashMap<Id, NodeAnimState>() }
@@ -290,6 +302,12 @@ internal fun <Id, Data> GraphInternal(
     LaunchedEffect(atlasLayers, atlasLayers.combinedVersion) {
         atlasTick++
         animTick++
+    }
+
+    val nodeIndexById = remember(nodes) {
+        HashMap<Id, Int>(nodes.size).apply {
+            for (i in nodes.indices) put(nodes[i].id, i)
+        }
     }
 
     val drawText = animZoom > textCfg.visibilityZoomThreshold
@@ -478,63 +496,156 @@ internal fun <Id, Data> GraphInternal(
                     }
                 }
 
+
+                // ============================================================================
+// REPLACE the existing `if (drawEdges) { ... }` block in GraphInternal.kt
+// with this one. Only the size-resolution lines change — the loop body,
+// O(1) lookups, sqrt skipping, and arrowPath reuse from the previous fix
+// are all preserved.
+//
+// Also add this import at the top of GraphInternal.kt:
+//
+//   import com.moly3.dataviz.core.graph.model.resolve
+//
+// ============================================================================
+
                 if (drawEdges) {
-                    val strokeNormal = edgeCfg.strokeWidth / animZoom
-                    val strokeHighlight =
-                        (edgeCfg.strokeWidth + edgeCfg.strokeHighlightBonus) / animZoom
+                    val strokeScale = edgeCfg.strokeScalePolicy
+                    val strokeNormal = strokeScale.resolve(edgeCfg.strokeWidth, animZoom)
+                    val strokeHighlight = strokeScale.resolve(
+                        edgeCfg.strokeWidth + edgeCfg.strokeHighlightBonus, animZoom
+                    )
 
                     val baseEdgeColor = theme.resolvedEdgeColor
-                    val hasSelectionFrame = activeNodeId != null
-
-                    // OPTIMIZATION: Calculate this once outside the nested loop
-                    val dimmedLine = lerp(
-                        baseEdgeColor,
-                        baseEdgeColor.copy(alpha = fadedEdgeAlpha),
-                        if (hasSelectionFrame) 1f else 0f
-                    )
                     val accentColor = theme.accentColor
+
+                    val dashScale = edgeCfg.dashPatternScalePolicy
+                    val dashOn = dashScale.resolve(edgeCfg.dashOnPx, animZoom)
+                    val dashOff = dashScale.resolve(edgeCfg.dashOffPx, animZoom)
+                    val dotOn = dashScale.resolve(edgeCfg.dotOnPx, animZoom)
+                    val dotOff = dashScale.resolve(edgeCfg.dotOffPx, animZoom)
+
+                    val arrowScale = edgeCfg.arrowHeadScalePolicy
+                    val headLenWorld = arrowScale.resolve(edgeCfg.arrowHeadLengthPx, animZoom)
+                    val headWidWorld = arrowScale.resolve(edgeCfg.arrowHeadWidthPx, animZoom)
+
+                    val arrowPath = buffers.arrowPath
+
+                    // fadedEdgeAlpha is "the alpha value an edge fades TO when fully dimmed".
+                    // We blend FROM 1f to this value as the edge's effective dim goes 0 -> 1.
+                    // Pull it out of the hot loop.
+                    val dimTargetAlpha = fadedEdgeAlpha
 
                     for (i in nodes.indices) {
                         val sId = nodes[i].id
                         val sPos = coordinates[sId] ?: continue
                         val conns = connections[sId] ?: continue
-                        val sActive = nodeAnimStates[sId]?.activeKoef ?: 0f
+                        val sState = nodeAnimStates[sId]
+                        val sActive = sState?.activeKoef ?: 0f
+                        val sDim = sState?.dimFactor ?: 0f
+                        val sRadius = staticNodeData[i].baseRadius
 
                         for (j in conns.indices) {
-                            val tId = conns[j]
+                            val conn = conns[j]
+                            val tId = conn.target
 
-                            // ADD THIS CHECK: Ensure the target node actually exists
-                            if (tId !in nodeById) continue
-
+                            val tIdx = nodeIndexById[tId] ?: continue
                             val tPos = coordinates[tId] ?: continue
 
-                            val minX = min(sPos.x, tPos.x)
-                            val maxX = max(sPos.x, tPos.x)
-                            val minY = min(sPos.y, tPos.y)
-                            val maxY = max(sPos.y, tPos.y)
+                            val minX = if (sPos.x < tPos.x) sPos.x else tPos.x
+                            val maxX = if (sPos.x > tPos.x) sPos.x else tPos.x
+                            val minY = if (sPos.y < tPos.y) sPos.y else tPos.y
+                            val maxY = if (sPos.y > tPos.y) sPos.y else tPos.y
                             if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
 
-                            val tActive = nodeAnimStates[tId]?.activeKoef ?: 0f
-                            val maxActive = max(sActive, tActive)
+                            val tState = nodeAnimStates[tId]
+                            val tActive = tState?.activeKoef ?: 0f
+                            val tDim = tState?.dimFactor ?: 0f
 
-                            val stroke = strokeNormal + (strokeHighlight - strokeNormal) * maxActive
+                            // Edge "active" — drives stroke thickening and accent-color blend.
+                            // Either endpoint counts; the more-active end wins.
+                            val maxActive = if (sActive > tActive) sActive else tActive
 
-                            // OPTIMIZATION: Only lerp if the edge is actively highlighting
-                            val edgeColor = if (maxActive > 0f) {
-                                lerp(dimmedLine, accentColor, maxActive)
+                            // Edge "dim" — the LESS dim endpoint wins. An edge fades only when
+                            // BOTH endpoints are unrelated to the selection. If one endpoint
+                            // is the active node or a direct connection (dim = 0), the edge
+                            // stays bright.
+                            val edgeDim = if (sDim < tDim) sDim else tDim
+
+                            val stroke =
+                                if (maxActive == 0f) strokeNormal
+                                else strokeNormal + (strokeHighlight - strokeNormal) * maxActive
+
+                            val style = conn.style
+                            val themedBase = if (style.color.isSpecified) style.color else baseEdgeColor
+
+                            // Highlight blend toward accent first…
+                            val highlighted = if (maxActive > 0f) {
+                                lerp(themedBase, accentColor, maxActive)
                             } else {
-                                dimmedLine
+                                themedBase
                             }
 
-                            drawLine(
+                            // …then dim by scaling alpha. Preserves per-edge custom colors
+                            // (unlike a blend toward a flat dim-line color, which crushes hue).
+                            // Highlighted edges naturally override dim because their endpoints
+                            // have dim = 0 (the active node and its connections never dim).
+                            val edgeColor = if (edgeDim > 0f) {
+                                val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
+                                highlighted.copy(alpha = highlighted.alpha * alphaScale)
+                            } else {
+                                highlighted
+                            }
+
+                            val tRadius = staticNodeData[tIdx].baseRadius
+
+                            val dx = tPos.x - sPos.x
+                            val dy = tPos.y - sPos.y
+                            val lenSq = dx * dx + dy * dy
+
+                            if (lenSq < 0.0001f) continue
+                            val invLen = 1f / kotlin.math.sqrt(lenSq)
+                            val ux = dx * invLen
+                            val uy = dy * invLen
+
+                            val drawStartX = sPos.x + ux * sRadius
+                            val drawStartY = sPos.y + uy * sRadius
+                            val drawEndX = tPos.x - ux * tRadius
+                            val drawEndY = tPos.y - uy * tRadius
+
+                            val tdx = drawEndX - drawStartX
+                            val tdy = drawEndY - drawStartY
+                            if (tdx * ux + tdy * uy <= 0f) continue
+
+                            val drawStart = Offset(drawStartX, drawStartY)
+                            val drawEnd = Offset(drawEndX, drawEndY)
+
+                            drawEdgeLine(
+                                start = drawStart,
+                                end = drawEnd,
                                 color = edgeColor,
-                                start = sPos,
-                                end = tPos,
-                                strokeWidth = stroke
+                                strokeWidth = stroke,
+                                lineStyle = style.line,
+                                dashOn = dashOn, dashOff = dashOff,
+                                dotOn = dotOn, dotOff = dotOff,
                             )
+
+                            if (style.head != ArrowHead.None) {
+                                drawArrowHead(
+                                    path = arrowPath,
+                                    tip = drawEnd,
+                                    dirX = ux, dirY = uy,
+                                    head = style.head,
+                                    length = headLenWorld,
+                                    width = headWidWorld,
+                                    color = edgeColor,
+                                    strokeWidth = stroke,
+                                )
+                            }
                         }
                     }
                 }
+
 
                 if (watchNodeId != null) {
                     val watchPos = coordinates[watchNodeId]
@@ -649,7 +760,7 @@ internal fun <Id, Data> GraphInternal(
                     if (conns.isNullOrEmpty()) setOf(activeNodeId)
                     else HashSet<Id>(conns.size + 1).apply {
                         add(activeNodeId)
-                        addAll(conns)
+                        for (c in conns) add(c.target)
                     }
                 } else emptySet()
 
@@ -832,6 +943,111 @@ internal fun <Id, Data> GraphInternal(
                 ) {
                     customPopup(activeNode)
                 }
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawEdgeLine(
+    start: Offset,
+    end: Offset,
+    color: Color,
+    strokeWidth: Float,
+    lineStyle: LineStyle,
+    dashOn: Float, dashOff: Float,
+    dotOn: Float, dotOff: Float,
+) {
+    when (lineStyle) {
+        LineStyle.Solid -> {
+            drawLine(color, start, end, strokeWidth)
+        }
+        LineStyle.Dashed -> {
+            drawLine(
+                color = color,
+                start = start,
+                end = end,
+                strokeWidth = strokeWidth,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashOn, dashOff), 0f),
+            )
+        }
+        LineStyle.Dotted -> {
+            // Round-capped short on/off pattern reads as dots and stays crisp at zoom.
+            drawLine(
+                color = color,
+                start = start,
+                end = end,
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dotOn, dotOff), 0f),
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawArrowHead(
+    path: Path,                 // <- reused, rewound each call
+    tip: Offset,
+    dirX: Float, dirY: Float,
+    head: ArrowHead,
+    length: Float,
+    width: Float,
+    color: Color,
+    strokeWidth: Float,
+) {
+    if (head == ArrowHead.None) return
+
+    val px = -dirY
+    val py = dirX
+
+    val bx = tip.x - dirX * length
+    val by = tip.y - dirY * length
+
+    val half = width * 0.5f
+    val leftX = bx + px * half
+    val leftY = by + py * half
+    val rightX = bx - px * half
+    val rightY = by - py * half
+
+    when (head) {
+        ArrowHead.None -> Unit
+
+        ArrowHead.Open -> {
+            // Two strokes meeting at the tip — no Path needed.
+            drawLine(color, Offset(leftX, leftY), tip, strokeWidth, cap = StrokeCap.Round)
+            drawLine(color, Offset(rightX, rightY), tip, strokeWidth, cap = StrokeCap.Round)
+        }
+
+        ArrowHead.FilledTriangle -> {
+            path.rewind()
+            path.moveTo(tip.x, tip.y)
+            path.lineTo(leftX, leftY)
+            path.lineTo(rightX, rightY)
+            path.close()
+            drawPath(path, color)
+        }
+
+        ArrowHead.HollowTriangle -> {
+            path.rewind()
+            path.moveTo(tip.x, tip.y)
+            path.lineTo(leftX, leftY)
+            path.lineTo(rightX, rightY)
+            path.close()
+            drawPath(path, color, style = Stroke(width = strokeWidth, join = StrokeJoin.Miter))
+        }
+
+        ArrowHead.FilledDiamond, ArrowHead.HollowDiamond -> {
+            val backX = tip.x - dirX * (length * 2f)
+            val backY = tip.y - dirY * (length * 2f)
+            path.rewind()
+            path.moveTo(tip.x, tip.y)
+            path.lineTo(leftX, leftY)
+            path.lineTo(backX, backY)
+            path.lineTo(rightX, rightY)
+            path.close()
+            if (head == ArrowHead.FilledDiamond) {
+                drawPath(path, color)
+            } else {
+                drawPath(path, color, style = Stroke(width = strokeWidth, join = StrokeJoin.Miter))
             }
         }
     }

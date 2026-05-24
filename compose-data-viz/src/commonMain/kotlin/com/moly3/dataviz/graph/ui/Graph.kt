@@ -25,6 +25,7 @@ import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
 import com.moly3.dataviz.core.graph.hull.GroupHullController
+import com.moly3.dataviz.core.graph.model.Connection
 import com.moly3.dataviz.core.graph.model.GraphNode
 import com.moly3.dataviz.core.graph.model.GraphSettings
 import com.moly3.dataviz.core.graph.model.GroupIndex
@@ -92,7 +93,7 @@ fun <Id, Data> Graph(
     stateNodes: List<GraphNode<Id, Data>>,
     coordinates: Map<Id, Offset>,
     velocities: Map<Id, Offset>,
-    connections: Map<Id, List<Id>>,
+    connections: Map<Id, List<Connection<Id>>>,
 
     onPanDelta: (Offset) -> Unit,
     onWatchPosition: (Offset) -> Unit,
@@ -341,6 +342,9 @@ fun <Id, Data> Graph(
             engine.reheat()
         }
     }
+// Engine consumes plain target adjacency. Build it on structure change only.
+    var engineConnections: Map<Id, List<Id>> = emptyMap()
+    var lastConnectionsRef: Map<Id, List<Connection<Id>>>? = null
 
     LaunchedEffect(engine, latestSettings.view.targetFrameMs) {
         launch(io) {
@@ -388,9 +392,14 @@ fun <Id, Data> Graph(
                     }
                 }
 
+
+                if (latestConnections !== lastConnectionsRef) {
+                    engineConnections = latestConnections.mapValues { (_, list) -> list.map { it.target } }
+                    lastConnectionsRef = latestConnections
+                }
                 engine.step(
                     nodes,
-                    latestConnections,
+                    engineConnections,
                     latestSettings.view,
                     coordsScratch,
                     velsScratch,

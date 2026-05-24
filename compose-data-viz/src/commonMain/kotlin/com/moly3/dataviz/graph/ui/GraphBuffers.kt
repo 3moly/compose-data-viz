@@ -1,5 +1,7 @@
 package com.moly3.dataviz.graph.ui
 
+import androidx.compose.ui.graphics.Path
+
 class GraphBuffers {
     var positions = FloatArray(0)
     var texCoords = FloatArray(0)
@@ -10,6 +12,13 @@ class GraphBuffers {
     private var exactTexCoords = FloatArray(0)
     private var exactColors = IntArray(0)
     private var exactIndices = ShortArray(0)
+
+    /**
+     * Reusable scratch path for arrow heads. Rewound (not re-allocated)
+     * on every use in drawArrowHead so per-edge Path() allocation —
+     * previously a real GC pressure point on large graphs — goes away.
+     */
+    val arrowPath: Path = Path()
 
     fun ensureCapacity(nodeCount: Int) {
         val reqVerts = nodeCount * 4

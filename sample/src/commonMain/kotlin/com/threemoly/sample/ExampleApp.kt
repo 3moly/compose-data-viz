@@ -49,7 +49,7 @@ fun ExampleApp() {
             .crossfade(true)
             .build()
     }
-    val nodeCountState = remember { mutableStateOf(10_000f) }
+    val nodeCountState = remember { mutableStateOf(10_0f) }
     val density = LocalDensity.current
     val graphState = remember(density) {
         mutableStateOf(
