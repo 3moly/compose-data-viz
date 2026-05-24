@@ -157,7 +157,6 @@ fun GraphSample(
             GroupId("tag") to Color.Cyan,
         )
     }
-// 2. Tie the remember block to nodes, seed, AND the editable names
     val groupModel = remember(s.graphNodes, groupSeed, groupNames.toMap()) {
         val defs = groupIds.map { id ->
             GroupHullDef(
@@ -168,12 +167,17 @@ fun GraphSample(
         }
 
         val memberships = s.graphNodes.mapNotNull { node ->
-            if (Random.nextFloat() > 0.2f) {
-                val randomGroupId = groupIds.random(Random(node.id.hashCode() + groupSeed))
+            // Seed BOTH the inclusion check AND the group pick from the node id +
+            // groupSeed, so remounting doesn't reshuffle memberships.
+            val rng = Random(node.id.hashCode() + groupSeed)
+            if (rng.nextFloat() > 0.2f) {
+                val randomGroupId = groupIds.random(rng)
                 GroupMembership(nodeId = node.id, groupId = randomGroupId)
             } else null
         }
-        GroupModel(defs = defs, memberships = memberships)
+        GroupModel(defs = defs, memberships = memberships).also {
+            println("groupModel built, hash=${it.hashCode()}, mems=${it.memberships.size}")
+        }
     }
 
     Box(

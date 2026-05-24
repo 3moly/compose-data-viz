@@ -127,12 +127,22 @@ class UltraFastEngine<Id, Data>(
         settings: GroupSettings,
         groupIndexIdentity: Int,
     ) {
+        // Identity + settings define logical equivalence. The GroupIndex reference
+        // itself is allowed to differ (the composable rebuilds it via remember on
+        // remount even when the underlying groupModel is unchanged).
+        val sameIdentity = groupIndexIdentity == publishedGroupIndexIdentity
+        val sameSettings = settings == pendingGroupSettings
+        val nullnessMatches = (groupIndex == null) == (pendingGroupIndex == null)
+        if (sameIdentity && sameSettings && nullnessMatches) {
+            // Still refresh the pending reference so the next sync reads the
+            // current object (defensive — published snapshot is unchanged).
+            pendingGroupIndex = groupIndex
+            return
+        }
+
         pendingGroupIndex = groupIndex
         pendingGroupSettings = settings
         pendingGroupIndexIdentity = groupIndexIdentity
-        // Wake the engine so step() runs syncGroupsInternal and publishes a
-        // snapshot stamped with this identity. The hull-refresh effect waits
-        // for that stamp before submitting.
         nudge()
     }
 
@@ -215,6 +225,10 @@ class UltraFastEngine<Id, Data>(
     }
 
     private fun reheatInternal(intensity: Float) {
+        if (alpha <= 0f && intensity > 0f) {
+            println("ENGINE WAKING from alpha=$alpha to intensity=$intensity")
+            Throwable("wake source").printStackTrace()
+        }
         alpha = max(alpha, intensity)
         alphaTarget = 0f
     }

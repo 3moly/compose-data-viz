@@ -181,16 +181,36 @@ fun <Id, Data> Graph(
     val groupIndexIdentity = remember(groupModel) { groupModel.hashCode() }
     val groupSettings = settings.groupSettings
 
-// Push group data into the engine whenever the index or settings change.
-// setGroupData records the identity and nudges the engine; step() will run
-// syncGroupsInternal and publish a snapshot stamped with this identity.
+    var hasSyncedGroupsThisMount by remember { mutableStateOf(false) }
+
     LaunchedEffect(engine, groupSettings, groupIndex, groupIndexIdentity) {
         engine.setGroupData(
             groupIndex = if (groupSettings.enabled) groupIndex else null,
             settings = groupSettings,
             groupIndexIdentity = groupIndexIdentity,
         )
+        hasSyncedGroupsThisMount = true
     }
+
+    LaunchedEffect(groupModel, groupSettings, groupIndexIdentity) {
+        if (!groupSettings.enabled) {
+            hullController.submit(engine, groupIndex, groupSettings)
+            return@LaunchedEffect
+        }
+
+        var waitedMs = 0
+        val timeoutMs = 1000
+        while (isActive &&
+            waitedMs < timeoutMs &&
+            !engine.hasSyncedGroupIndex(groupIndexIdentity)
+        ) {
+            delay(16L)
+            waitedMs += 16
+        }
+
+        hullController.submit(engine, groupIndex, groupSettings)
+    }
+
 
 // Periodic hull recompute on a cadence — unchanged in spirit.
 // was: LaunchedEffect(hullController, engine, groupSettings)
@@ -207,35 +227,35 @@ fun <Id, Data> Graph(
 // membership. Instead of a fixed delay(32L) guess, WAIT for the engine to
 // confirm it has run syncGroupsInternal for THIS exact groupIndex and
 // published the matching snapshot. Only then submit.
-    LaunchedEffect(groupModel, groupSettings, groupIndexIdentity) {
-        if (!groupSettings.enabled) {
-            // Disabled: engine still publishes GroupSnapshot.EMPTY; let the
-            // controller clear its hulls against it.
-            hullController.submit(engine, groupIndex, groupSettings)
-            return@LaunchedEffect
-        }
-
-        // Make sure the engine is awake so step() actually runs and consumes the
-        // pending index. setGroupData already nudged, but nudge again defensively
-        // in case this effect re-ran without setGroupData (shouldn't, but cheap).
-        engine.nudge()
-
-        // Poll until the published snapshot is stamped with our index identity.
-        // Bounded so a pathological stall can't hang the effect forever.
-        var waitedMs = 0
-        val timeoutMs = 1000
-        while (isActive &&
-            waitedMs < timeoutMs &&
-            !engine.hasSyncedGroupIndex(groupIndexIdentity)
-        ) {
-            delay(16L)
-            waitedMs += 16
-        }
-
-        // Snapshot now matches groupIndex (or we timed out — submit anyway so a
-        // missed stamp degrades to "slightly stale" rather than "no hulls").
-        hullController.submit(engine, groupIndex, groupSettings)
-    }
+//    LaunchedEffect(groupModel, groupSettings, groupIndexIdentity) {
+//        if (!groupSettings.enabled) {
+//            // Disabled: engine still publishes GroupSnapshot.EMPTY; let the
+//            // controller clear its hulls against it.
+//            hullController.submit(engine, groupIndex, groupSettings)
+//            return@LaunchedEffect
+//        }
+//
+//        // Make sure the engine is awake so step() actually runs and consumes the
+//        // pending index. setGroupData already nudged, but nudge again defensively
+//        // in case this effect re-ran without setGroupData (shouldn't, but cheap).
+//        engine.nudge()
+//
+//        // Poll until the published snapshot is stamped with our index identity.
+//        // Bounded so a pathological stall can't hang the effect forever.
+//        var waitedMs = 0
+//        val timeoutMs = 1000
+//        while (isActive &&
+//            waitedMs < timeoutMs &&
+//            !engine.hasSyncedGroupIndex(groupIndexIdentity)
+//        ) {
+//            delay(16L)
+//            waitedMs += 16
+//        }
+//
+//        // Snapshot now matches groupIndex (or we timed out — submit anyway so a
+//        // missed stamp degrades to "slightly stale" rather than "no hulls").
+//        hullController.submit(engine, groupIndex, groupSettings)
+//    }
 
     // -----------------------------------------------------------------
     // Single source of truth: `coordinates`.
@@ -335,6 +355,17 @@ fun <Id, Data> Graph(
                     continue
                 }
 
+                // Pause physics — UNLESS a drag is active. A drag must always move
+                // the node visibly, even when iteration is otherwise stopped:
+                // step() applies the dragged-node position override and runs the
+                // rest of the physics around it, which is exactly what we want.
+                // Other genuine work (real structural changes, real wake-ups) is
+                // deferred until isMoving flips back to true.
+                if (!latestSettings.isMoving && latestDragged == null) {
+                    delay(100L)
+                    continue
+                }
+
                 val currentStructureSig =
                     nodes.size * 31 + latestConnections.values.sumOf { it.size }
                 val structureChanged = currentStructureSig != lastStructureSig
@@ -390,6 +421,10 @@ fun <Id, Data> Graph(
         launch(io) {
             while (isActive) {
                 delay(1000L)
+                // Skip routine ticks while paused (and no drag in flight). The
+                // end-of-drag save below is unconditional — a release must always
+                // persist the final position.
+                if (!latestSettings.isMoving && latestDragged == null) continue
                 if (engine.isAsleep && latestDragged == null) continue
 
                 var coordsCopy: HashMap<Id, Offset>? = null
@@ -400,11 +435,21 @@ fun <Id, Data> Graph(
                 }
 
                 coordsCopy?.let {
-                    // Record before emitting so the echo of this exact map is
-                    // recognized when it round-trips back through `coordinates`.
                     lastEmittedCoords.store(it)
                     onCoordinatesUpdate(it)
                 }
+            }
+        }
+    }
+
+// (unchanged — fires on drag release regardless of isMoving)
+    LaunchedEffect(draggedNodeState) {
+        if (draggedNodeState == null) {
+            stateMutex.withLock {
+                if (engineCoords.isEmpty()) return@withLock
+                val snapshot = HashMap(engineCoords)
+                lastEmittedCoords.store(snapshot)
+                onCoordinatesUpdate(snapshot)
             }
         }
     }

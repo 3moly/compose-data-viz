@@ -16,7 +16,8 @@ data class GraphSettings(
     val text: GraphTextSettings = GraphTextSettings.Default,
     val zoom: GraphZoomSettings = GraphZoomSettings.Default,
     val watch: GraphWatchSettings = GraphWatchSettings.Default,
-    val groupSettings: GroupSettings = GroupSettings()
+    val groupSettings: GroupSettings = GroupSettings(),
+    val isMoving: Boolean = true,
 ) {
     companion object {
         val Default = GraphSettings()
