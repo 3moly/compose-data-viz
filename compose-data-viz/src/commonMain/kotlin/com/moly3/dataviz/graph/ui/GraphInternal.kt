@@ -531,13 +531,13 @@ internal fun <Id, Data> GraphInternal(
                     val forcePureLines = edgeCfg.drawPureLines
                     val maxStyled = edgeCfg.maxStyledEdgesTotal
 
-                    // The world-space center coordinates mapping to the screen center
                     val worldCenterX = -movementOffset.x
                     val worldCenterY = -movementOffset.y
 
                     var visibleEdgeCount = 0
 
-                    // 1. Gather all visible edges and calculate their distance to screen center
+                    // 1. Gather visible edges. Min/Max normalization guarantees identical distance
+                    //    results for bidirectional connections between the exact same two nodes.
                     for (i in nodes.indices) {
                         val sId = nodes[i].id
                         val sPos = coordinates[sId] ?: continue
@@ -551,14 +551,15 @@ internal fun <Id, Data> GraphInternal(
                             val tIdx = nodeIndexById[tId] ?: continue
                             val tPos = coordinates[tId] ?: continue
 
-                            val minX = min(sPos.x, tPos.x)
-                            val maxX = max(sPos.x, tPos.x)
-                            val minY = min(sPos.y, tPos.y)
-                            val maxY = max(sPos.y, tPos.y)
+                            val minX = if (sPos.x < tPos.x) sPos.x else tPos.x
+                            val maxX = if (sPos.x > tPos.x) sPos.x else tPos.x
+                            val minY = if (sPos.y < tPos.y) sPos.y else tPos.y
+                            val maxY = if (sPos.y > tPos.y) sPos.y else tPos.y
+
                             if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
 
-                            val midX = (sPos.x + tPos.x) * 0.5f
-                            val midY = (sPos.y + tPos.y) * 0.5f
+                            val midX = (minX + maxX) * 0.5f
+                            val midY = (minY + maxY) * 0.5f
                             val dx = midX - worldCenterX
                             val dy = midY - worldCenterY
                             val distSq = dx * dx + dy * dy
@@ -575,21 +576,62 @@ internal fun <Id, Data> GraphInternal(
                         }
                     }
 
-                    // 2. Sort the gathered edges by proximity to the center
+                    // 2. Sort by distance to camera center
                     val activeEdges = visibleEdgesPool.subList(0, visibleEdgeCount)
                     activeEdges.sortWith(edgeComparator)
 
-                    // 3. Draw them! Prioritize custom styles for the closest ones
+                    var drawnStyledCount = 0
+
+                    // 3. Draw + Deduplicate!
                     for (k in 0 until visibleEdgeCount) {
                         val data = activeEdges[k]
                         val sIdx = data.sIndex
                         val tIdx = data.tIndex
                         val sId = nodes[sIdx].id
                         val tId = nodes[tIdx].id
-
-                        val sPos = coordinates[sId]!!
-                        val tPos = coordinates[tId]!!
                         val conn = connections[sId]!![data.connIndex]
+
+                        val willBeStyled = !forcePureLines && drawnStyledCount < maxStyled
+                        var isDuplicate = false
+
+                        // DEDUPLICATION: Look backwards. Because of our deterministic midX/midY,
+                        // duplicates will be clustered with the EXACT same distance.
+                        for (prevK in k - 1 downTo 0) {
+                            val prevData = activeEdges[prevK]
+                            if (prevData.distSq != data.distSq) break
+
+                            val prevSIdx = prevData.sIndex
+                            val prevTIdx = prevData.tIndex
+
+                            val sameDirect = sIdx == prevSIdx && tIdx == prevTIdx
+                            val sameReverse = sIdx == prevTIdx && tIdx == prevSIdx
+
+                            if (sameDirect || sameReverse) {
+                                // If we ran out of style budget, we just need ANY connecting line.
+                                // If a line already exists here, we don't need a redundant pure line.
+                                if (!willBeStyled) {
+                                    isDuplicate = true
+                                    break
+                                }
+
+                                val prevConn = connections[nodes[prevSIdx].id]!![prevData.connIndex]
+
+                                // Check if styles are equivalent
+                                if (conn.style == prevConn.style) {
+                                    // If it has an arrow pointing the opposite way, we must keep both
+                                    if (conn.style.head != ArrowHead.None && sameReverse) {
+                                        // Keep searching backwards just in case
+                                    } else {
+                                        isDuplicate = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isDuplicate) continue
+
+                        if (willBeStyled) drawnStyledCount++
 
                         val sState = nodeAnimStates[sId]
                         val tState = nodeAnimStates[tId]
@@ -605,11 +647,9 @@ internal fun <Id, Data> GraphInternal(
                         val stroke = if (maxActive == 0f) strokeNormal
                         else strokeNormal + (strokeHighlight - strokeNormal) * maxActive
 
-                        // Only the closest 'maxStyled' edges get the complex styling
-                        val isStyled = !forcePureLines && k < maxStyled
-                        val effectiveLineStyle = if (isStyled) conn.style.line else LineStyle.Solid
-                        val effectiveHead = if (isStyled) conn.style.head else ArrowHead.None
-                        val isCustomColor = if (isStyled) conn.style.color.isSpecified else false
+                        val effectiveLineStyle = if (willBeStyled) conn.style.line else LineStyle.Solid
+                        val effectiveHead = if (willBeStyled) conn.style.head else ArrowHead.None
+                        val isCustomColor = if (willBeStyled) conn.style.color.isSpecified else false
 
                         val edgeColor = if (!isCustomColor && maxActive == 0f) {
                             if (edgeDim >= 1f) defaultDimmedLine
@@ -637,6 +677,9 @@ internal fun <Id, Data> GraphInternal(
                         val drawEndY: Float
                         val ux: Float
                         val uy: Float
+
+                        val sPos = coordinates[sId]!!
+                        val tPos = coordinates[tId]!!
 
                         if (!needsOffset) {
                             drawStartX = sPos.x
