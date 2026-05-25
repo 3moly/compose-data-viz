@@ -203,6 +203,7 @@ fun <Id, Data> Graph(
                 engineCoords[node.id] = coordinates[node.id] ?: Offset.Zero
                 engineVels[node.id] = velocities[node.id] ?: Offset.Zero
             }
+            mapVersion++
         }
         Unit
     }
@@ -376,6 +377,9 @@ fun <Id, Data> Graph(
             engine.reheat()
         }
     }
+    LaunchedEffect(connections) {
+        engine.nudge()
+    }
 // Engine consumes plain target adjacency. Build it on structure change only.
 //    var engineConnections: Map<Id, List<Id>> = emptyMap()
 //    var lastConnectionsRef: Map<Id, List<Connection<Id>>>? = null
@@ -391,6 +395,13 @@ fun <Id, Data> Graph(
             val coordsScratch = HashMap<Id, Offset>()
             val velsScratch = HashMap<Id, Offset>()
             var lastStructureSig = Int.MIN_VALUE
+
+            // Yield once before the very first step. This lets Compose commit
+            // the first composition (which already has the synchronously-seeded
+            // coordinates) and present the first frame BEFORE we start the
+            // expensive Barnes-Hut / spring / integration work. The user sees
+            // the graph instantly; physics catches up over the next few frames.
+            delay(16L)
 
             while (isActive) {
                 val nodes = latestNodes
