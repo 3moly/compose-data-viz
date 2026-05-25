@@ -122,9 +122,17 @@ fun <Id, Data> Graph(
     // them; advanced positions are surfaced for rendering and periodically
     // pushed back out via onCoordinatesUpdate.
     // -----------------------------------------------------------------
-    val engineCoords = remember<HashMap<Id, Offset>> { HashMap() }
-    val engineVels = remember { HashMap<Id, Offset>() }
-
+//    val engineCoords = remember<HashMap<Id, Offset>> { HashMap() }
+//    val engineVels = remember { HashMap<Id, Offset>() }
+//    remember(Unit) {
+//        if (engineCoords.isEmpty() && stateNodes.isNotEmpty()) {
+//            for (node in stateNodes) {
+//                engineCoords[node.id] = coordinates[node.id] ?: Offset.Zero
+//                engineVels[node.id] = velocities[node.id] ?: Offset.Zero
+//            }
+//        }
+//        Unit
+//    }
     // -----------------------------------------------------------------
     // Echo guard.
     //
@@ -135,7 +143,7 @@ fun <Id, Data> Graph(
     // micro-jumps. We record the exact map we last emitted; a matching
     // `coordinates` is recognized as our own echo and the snap is skipped.
     // -----------------------------------------------------------------
-    val lastEmittedCoords = remember { AtomicReference<Map<Id, Offset>?>(null) }
+//    val lastEmittedCoords = remember { AtomicReference<Map<Id, Offset>?>(null) }
 
     // -----------------------------------------------------------------
     // Remount gate.
@@ -152,8 +160,22 @@ fun <Id, Data> Graph(
     // mount. That first pass restores state silently and never nudges.
     // Subsequent passes nudge only if coordinates genuinely changed.
     // -----------------------------------------------------------------
-    var hasSeededThisMount by remember { mutableStateOf(false) }
+//    var hasSeededThisMount by remember { mutableStateOf(false) }
 
+//    var mapVersion by remember { mutableIntStateOf(0) }
+
+    val engineCoords = remember<HashMap<Id, Offset>> { HashMap() }
+    val engineVels = remember { HashMap<Id, Offset>() }
+
+// SYNCHRONOUS first-frame seed. Runs once per mount, during composition,
+// so GraphInternal's very first draw sees real positions instead of an
+// empty map. The async LaunchedEffect below still runs and remains the
+// source of truth for subsequent external coordinate changes — but the
+// first frame no longer renders blank.
+
+
+    val lastEmittedCoords = remember { AtomicReference<Map<Id, Offset>?>(null) }
+    var hasSeededThisMount by remember { mutableStateOf(false) }
     var mapVersion by remember { mutableIntStateOf(0) }
 
     val stateMutex = remember { Mutex() }
@@ -174,6 +196,15 @@ fun <Id, Data> Graph(
             hullController.stop()
             hullScope.cancel()
         }
+    }
+    remember(stateNodes.isNotEmpty()) {
+        if (engineCoords.isEmpty() && stateNodes.isNotEmpty()) {
+            for (node in stateNodes) {
+                engineCoords[node.id] = coordinates[node.id] ?: Offset.Zero
+                engineVels[node.id] = velocities[node.id] ?: Offset.Zero
+            }
+        }
+        Unit
     }
 
     val hulls by hullController.hulls.collectAsState()
@@ -285,7 +316,6 @@ fun <Id, Data> Graph(
             return@LaunchedEffect
         }
 
-        // Our own save round-tripping back — not an external edit. Do not snap.
         if (isCoordinatesEcho(coordinates, lastEmittedCoords.load())) {
             hasSeededThisMount = true
             return@LaunchedEffect
@@ -296,11 +326,9 @@ fun <Id, Data> Graph(
             val newIds = HashSet<Id>(stateNodes.size)
             for (node in stateNodes) newIds.add(node.id)
 
-            // Drop any node that no longer exists.
             engineCoords.keys.retainAll(newIds)
             engineVels.keys.retainAll(newIds)
 
-            // coordinates wins: every current node snaps to the param value.
             for (node in stateNodes) {
                 val incoming = coordinates[node.id] ?: Offset.Zero
                 val prev = engineCoords[node.id]
@@ -316,11 +344,17 @@ fun <Id, Data> Graph(
             mapVersion++
         }
 
-        // Wake the engine ONLY for a genuine post-restore coordinate change.
-        // The first pass of a mount is pure restoration and must not nudge,
-        // or re-entering the screen would wake a deliberately-asleep engine.
         if (changedAnything && hasSeededThisMount) {
             engine.nudge()
+        }
+
+        // First-mount + all-zero coordinates: nothing external will ever
+        // change to trigger physics, so wake the engine ourselves. This is
+        // what makes a fresh graph spread out instead of sitting stacked
+        // at the origin waiting for a touch.
+        if (!hasSeededThisMount && stateNodes.isNotEmpty()) {
+            val allZero = stateNodes.all { (coordinates[it.id] ?: Offset.Zero) == Offset.Zero }
+            if (allZero) engine.nudge()
         }
         hasSeededThisMount = true
     }
@@ -343,14 +377,20 @@ fun <Id, Data> Graph(
         }
     }
 // Engine consumes plain target adjacency. Build it on structure change only.
-    var engineConnections: Map<Id, List<Id>> = emptyMap()
-    var lastConnectionsRef: Map<Id, List<Connection<Id>>>? = null
+//    var engineConnections: Map<Id, List<Id>> = emptyMap()
+//    var lastConnectionsRef: Map<Id, List<Connection<Id>>>? = null
+// Engine consumes plain target adjacency. Cached across recompositions
+// via remembered single-slot holders so a structural rewire is detected
+// once and the adjacency map is only rebuilt when the source actually
+// changes by identity.
+    val engineConnectionsRef = remember { arrayOf<Map<Id, List<Id>>>(emptyMap()) }
+    val lastConnectionsRefHolder = remember { arrayOfNulls<Map<Id, List<Connection<Id>>>>(1) }
 
     LaunchedEffect(engine, latestSettings.view.targetFrameMs) {
         launch(io) {
             val coordsScratch = HashMap<Id, Offset>()
             val velsScratch = HashMap<Id, Offset>()
-            var lastStructureSig = -1
+            var lastStructureSig = Int.MIN_VALUE
 
             while (isActive) {
                 val nodes = latestNodes
@@ -359,19 +399,30 @@ fun <Id, Data> Graph(
                     continue
                 }
 
-                // Pause physics — UNLESS a drag is active. A drag must always move
-                // the node visibly, even when iteration is otherwise stopped:
-                // step() applies the dragged-node position override and runs the
-                // rest of the physics around it, which is exactly what we want.
-                // Other genuine work (real structural changes, real wake-ups) is
-                // deferred until isMoving flips back to true.
                 if (!latestSettings.isMoving && latestDragged == null) {
                     delay(100L)
                     continue
                 }
 
-                val currentStructureSig =
-                    nodes.size * 31 + latestConnections.values.sumOf { it.size }
+                // Structural hash that catches edge rewires, not just count changes.
+                // sumOf-of-sizes was identical for "delete one edge + add one edge",
+                // so a rewire used to slip past unnoticed and the engine never woke.
+                val conns = latestConnections
+                val currentStructureSig = run {
+                    var h = nodes.size
+                    for (i in nodes.indices) {
+                        val id = nodes[i].id
+                        val list = conns[id]
+                        h = h * 31 + id.hashCode()
+                        if (list != null) {
+                            h = h * 31 + list.size
+                            for (c in list) h = h * 31 + c.target.hashCode()
+                        } else {
+                            h *= 31
+                        }
+                    }
+                    h
+                }
                 val structureChanged = currentStructureSig != lastStructureSig
 
                 if (!structureChanged && engine.isAsleep && latestDragged == null) {
@@ -379,8 +430,6 @@ fun <Id, Data> Graph(
                     continue
                 }
                 lastStructureSig = currentStructureSig
-
-                withFrameNanos { }
 
                 coordsScratch.clear()
                 velsScratch.clear()
@@ -392,14 +441,16 @@ fun <Id, Data> Graph(
                     }
                 }
 
-
-                if (latestConnections !== lastConnectionsRef) {
-                    engineConnections = latestConnections.mapValues { (_, list) -> list.map { it.target } }
-                    lastConnectionsRef = latestConnections
+                if (latestConnections !== lastConnectionsRefHolder[0]) {
+                    engineConnectionsRef[0] = latestConnections.mapValues { (_, list) ->
+                        list.map { it.target }
+                    }
+                    lastConnectionsRefHolder[0] = latestConnections
                 }
+
                 engine.step(
                     nodes,
-                    engineConnections,
+                    engineConnectionsRef[0],
                     latestSettings.view,
                     coordsScratch,
                     velsScratch,
@@ -463,16 +514,16 @@ fun <Id, Data> Graph(
         }
     }
 
-    LaunchedEffect(draggedNodeState) {
-        if (draggedNodeState == null) {
-            stateMutex.withLock {
-                if (engineCoords.isEmpty()) return@withLock
-                val snapshot = HashMap(engineCoords)
-                lastEmittedCoords.store(snapshot)
-                onCoordinatesUpdate(snapshot)
-            }
-        }
-    }
+//    LaunchedEffect(draggedNodeState) {
+//        if (draggedNodeState == null) {
+//            stateMutex.withLock {
+//                if (engineCoords.isEmpty()) return@withLock
+//                val snapshot = HashMap(engineCoords)
+//                lastEmittedCoords.store(snapshot)
+//                onCoordinatesUpdate(snapshot)
+//            }
+//        }
+//    }
 
     fun hitTest(tapOffset: Offset): GraphNode<Id, Data>? {
         // Rendering ADDS userPosition, so bounds testing must as well.

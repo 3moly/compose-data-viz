@@ -246,7 +246,20 @@ class UltraFastEngine<Id, Data>(
         draggedNode: DragNodeData<Id>?,
     ) = coroutineScope {
         // ---- Structural change detection ----
-        val structureSig = graphNodes.size * 31 + connections.values.sumOf { it.size }
+        val structureSig = run {
+            var h = graphNodes.size
+            for (node in graphNodes) {
+                val list = connections[node.id]
+                h = h * 31 + node.id.hashCode()
+                if (list != null) {
+                    h = h * 31 + list.size
+                    for (tid in list) h = h * 31 + tid.hashCode()
+                } else {
+                    h *= 31
+                }
+            }
+            h
+        }
         val structureChanged = structureSig != lastNodeCountSignature
         if (structureChanged) {
             val prevNodeCount = nodeCount

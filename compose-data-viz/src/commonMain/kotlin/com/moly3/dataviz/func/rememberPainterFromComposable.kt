@@ -54,7 +54,7 @@ fun <T> rememberPainterFromComposable(
     // Recapture whenever layer content changes (captureKey or a fresh draw).
     LaunchedEffect(graphicsLayer, captureKey, layerHasContent) {
         if (!layerHasContent) return@LaunchedEffect
-        withFrameNanos { }  // wait one frame so the record() has run
+//        withFrameNanos { }  // wait one frame so the record() has run
         runCatching {
             capturedPainter = BitmapPainter(graphicsLayer.toImageBitmap())
         }
