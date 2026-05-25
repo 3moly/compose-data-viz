@@ -678,8 +678,8 @@ internal fun <Id, Data> GraphInternal(
                         val ux: Float
                         val uy: Float
 
-                        val sPos = coordinates[sId]!!
-                        val tPos = coordinates[tId]!!
+                        val sPos = coordinates[sId] ?: continue
+                        val tPos = coordinates[tId] ?: continue
 
                         if (!needsOffset) {
                             drawStartX = sPos.x

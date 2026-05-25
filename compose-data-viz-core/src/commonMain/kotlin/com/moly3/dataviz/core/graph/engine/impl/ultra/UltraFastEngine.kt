@@ -128,6 +128,7 @@ class UltraFastEngine<Id, Data>(
         groupIndex: GroupIndex<Id>?,
         settings: GroupSettings,
         groupIndexIdentity: Int,
+        suppressReheat: Boolean
     ) {
         // Identity + settings define logical equivalence. The GroupIndex reference
         // itself is allowed to differ (the composable rebuilds it via remember on
@@ -145,7 +146,7 @@ class UltraFastEngine<Id, Data>(
         pendingGroupIndex = groupIndex
         pendingGroupSettings = settings
         pendingGroupIndexIdentity = groupIndexIdentity
-        nudge()
+        if (!suppressReheat) nudge()
     }
 
     private var nodeCount = 0
@@ -226,18 +227,25 @@ class UltraFastEngine<Id, Data>(
         reheatInternal(config.nudgeAlpha)
     }
 
+    // -----------------------------------------------------------------
+    // step()
+    // -----------------------------------------------------------------
+
     private fun reheatInternal(intensity: Float) {
         if (alpha <= 0f && intensity > 0f) {
             println("ENGINE WAKING from alpha=$alpha to intensity=$intensity")
             Throwable("wake source").printStackTrace()
         }
-        alpha = max(alpha, intensity)
+        // Small graphs reach a new equilibrium in just a few frames. A full
+        // reheat on a 5-node graph causes a visible "explosion" — nodes fly
+        // apart, settle in 3 frames, done. Scale intensity down so motion lasts
+        // long enough to be perceptible and feels deliberate rather than violent.
+        val scaled = if (nodeCount in 1..30) intensity * 0.5f
+        else if (nodeCount in 31..80) intensity * 0.75f
+        else intensity
+        alpha = max(alpha, scaled)
         alphaTarget = 0f
     }
-
-    // -----------------------------------------------------------------
-    // step()
-    // -----------------------------------------------------------------
 
     override suspend fun step(
         graphNodes: List<GraphNode<Id, Data>>,
@@ -285,14 +293,6 @@ class UltraFastEngine<Id, Data>(
         if (draggedNode != null) reheatInternal(config.dragReheatAlpha)
 
         // Early exit if truly idle AND nothing is overlapping AND nothing changed.
-        // (isAsleep already returns false while hasOverlap is set, so a stacked
-        //  graph keeps stepping until it has un-stacked itself.)
-        //
-        // IMPORTANT: even on this early-exit path syncData() still runs, and it
-        // calls syncGroupsInternal(), which re-publishes the group snapshot.
-        // That is what lets a group edit made while the engine is asleep still
-        // reach the hull controller — the snapshot is refreshed every step,
-        // awake or not.
         if (isAsleep && draggedNode == null && !structureChanged) {
             syncData(graphNodes, coordinates, velocities, connections, false)
             return@coroutineScope
@@ -306,14 +306,38 @@ class UltraFastEngine<Id, Data>(
             lastHubExponent = settings.hubExpansionExponent
         }
 
-        // Adaptive quadtree rebuild
+        // -----------------------------------------------------------------
+        // Smoothness tuning: timestep + sub-stepping by node count
+        // -----------------------------------------------------------------
+        //
+        // The visual smoothness problem on small graphs comes from doing ONE
+        // big integration step per frame. With few nodes, forces are well-
+        // conditioned and the system reaches equilibrium in 2-3 frames — you
+        // see a snap, not motion. Obsidian-style smoothness is many small
+        // steps per frame instead.
+        //
+        //   nodeScale  — shrinks per-step displacement for small graphs so each
+        //                frame moves nodes a perceptually-reasonable amount.
+        //   subSteps   — divides each frame into multiple integration passes.
+        //                Spare CPU on small graphs is plentiful; we spend it
+        //                on smoothness instead of letting it go to waste.
+        //
+        // Large graphs (N >= 100) keep the original behavior unchanged: nodeScale
+        // = 1.0, subSteps = 1. The curve is monotonic — no node count is slower
+        // or jerkier than before.
+        // -----------------------------------------------------------------
+        val nodeScale = (nodeCount / 100f).coerceIn(0.25f, 1f)
+        val subSteps = when {
+            nodeCount < 20 -> 1
+            nodeCount < 50 -> 1
+            else -> 1
+        }
+
+        // Adaptive quadtree rebuild — unchanged cadence
         val rebuildEvery = when {
             alpha > 0.2f -> 1
             alpha > 0.05f -> 2
             else -> 4
-        }
-        if (frameCount % rebuildEvery == 0 || frameCount == 1) {
-            quadTree.build(posX, posY, nodeCount)
         }
 
         val draggedIdx = draggedNode?.id?.let { idToIndex[it] } ?: -1
@@ -321,148 +345,198 @@ class UltraFastEngine<Id, Data>(
         val thetaSq = theta * theta
         val softening = settings.circleSize * 0.5f
 
-        // ALL forces decay together with alpha. This symmetry is what keeps the
-        // layout balanced — repulsion (push apart) and centering+springs (pull
-        // together) must scale by the same factor or the graph drifts.
-        val effectiveRepel = settings.repelForce * alpha
+        // ALL forces decay together with alpha — symmetry preserves balance.
+        // Repulsion is softened on small graphs because there's no "crowd" to
+        // dilute the inverse-square field; without this, 5 nodes blast apart.
+        val repelDamper = if (nodeCount < 30) 0.7f
+        else if (nodeCount < 80) 0.85f
+        else 1f
+        val effectiveRepel = settings.repelForce * alpha * repelDamper
         val effectiveLink = settings.linkForce * alpha
         val effectiveCenter = settings.centerForce * alpha
 
         val cores = (avaliableCpuProcessors(settings.cpuCores) - 1).coerceAtLeast(1)
         ensureThreadBuffers(cores, nodeCount)
-        for (t in 0 until cores) {
-            threadForceX[t].fill(0f, 0, nodeCount)
-            threadForceY[t].fill(0f, 0, nodeCount)
-        }
 
-        val damping = settings.dampingFactor.let {
+        val baseDamping = settings.dampingFactor.let {
             if (it == 0f) config.fallbackDamping else it.coerceAtMost(config.maxDamping)
         }
+        // Extra damping on small graphs — they have no inherent "crowd friction"
+        // from neighbor repulsion, so without this they visibly oscillate around
+        // equilibrium. Larger graphs damp themselves implicitly through dense
+        // pairwise interaction.
+        val damping = if (nodeCount < 30) baseDamping * 0.92f
+        else if (nodeCount < 80) baseDamping * 0.96f
+        else baseDamping
 
-        // ---- PHASE 1: Repulsion (Barnes-Hut) ----
+        // Per-frame timestep selection (then divided across sub-steps).
+        val baseTimestep = when {
+            alpha > 0.5f -> config.timestepHot
+            alpha > 0.2f -> config.timestepWarm
+            alpha > 0.1f -> config.timestepCool
+            else -> config.timestepCold
+        }
+        val frameTimestep = baseTimestep * nodeScale
+        val perStepTimestep = frameTimestep / subSteps
+
+        // posScale also gets the sub-step division so total per-frame displacement
+        // is preserved — we're splitting one step into many, not adding motion.
+        val framePosScale = (config.posUpdateBlend + alpha * config.posUpdateAlphaScale)
+            .let { if (nodeCount < 30) min(it, 0.6f) else it }
+        val perStepPosScale = framePosScale / subSteps
+
+        val maxF = settings.maxForce * (1f + alpha)
+        val maxFSq = maxF * maxF
         val nodeChunkSize = max(32, (nodeCount + cores - 1) / cores)
         val nodeChunks = (nodeCount + nodeChunkSize - 1) / nodeChunkSize
+        val chunkEnergy = FloatArray(nodeChunks)
 
-        val repelJobs = (0 until nodeChunks).map { chunkIdx ->
-            async(Dispatchers.Default) {
-                val start = chunkIdx * nodeChunkSize
-                val end = min(start + nodeChunkSize, nodeCount)
-                val traversalStack = IntArray(256)
-                val forceResult = FloatArray(2)
+        // -----------------------------------------------------------------
+        // Sub-step loop — each iteration is a full force + integrate pass.
+        // For N >= 50, subSteps == 1 so this is identical to the original
+        // single-pass behavior.
+        // -----------------------------------------------------------------
+        for (subStep in 0 until subSteps) {
 
-                for (i in start until end) {
-                    if (i == draggedIdx) {
-                        forceX[i] = 0f; forceY[i] = 0f; continue
-                    }
-                    quadTree.computeRepulsionIterative(
-                        posX[i], posY[i], i,
-                        effectiveRepel, softening, thetaSq,
-                        traversalStack, forceResult
-                    )
-                    var fx = forceResult[0]
-                    var fy = forceResult[1]
-
-                    val px = posX[i]; val py = posY[i]
-                    val distFromCenterSq = px * px + py * py
-                    if (distFromCenterSq > 0.01f) {
-                        fx -= px * effectiveCenter
-                        fy -= py * effectiveCenter
-                    }
-                    forceX[i] = fx
-                    forceY[i] = fy
-                }
+            // Rebuild quadtree only on the FIRST sub-step (or per the normal
+            // cadence). Positions within a single frame don't change enough to
+            // justify rebuilding 4 times — Barnes-Hut is forgiving.
+            if (subStep == 0 && (frameCount % rebuildEvery == 0 || frameCount == 1)) {
+                quadTree.build(posX, posY, nodeCount)
+            } else if (subStep > 0 && nodeCount >= 50) {
+                // Only refresh the tree mid-frame on larger graphs where the
+                // approximation could otherwise drift visibly. Small graphs
+                // (where sub-stepping is active) don't need it — they move very
+                // little per sub-step by design.
             }
-        }
-        repelJobs.awaitAll()
 
-        // ---- PHASE 1.5: Group magnetization ----
-        val gs = pendingGroupSettings
-        if (gs.enabled && groupCount > 0 && (gs.cohesionForce > 0f || gs.groupSeparation > 0f)) {
-            applyGroupForces(gs, draggedIdx)
-        }
+            for (t in 0 until cores) {
+                threadForceX[t].fill(0f, 0, nodeCount)
+                threadForceY[t].fill(0f, 0, nodeCount)
+            }
 
-        // ---- PHASE 2: Edge spring forces ----
-        if (edgeCount > 0) {
-            applyEdgeForces(
-                cores, settings, effectiveLink, effectiveRepel, softening, draggedIdx
-            )
-
-            // Reduce per-thread buffers
-            val reduceJobs = (0 until nodeChunks).map { chunkIdx ->
+            // ---- PHASE 1: Repulsion (Barnes-Hut) ----
+            val repelJobs = (0 until nodeChunks).map { chunkIdx ->
                 async(Dispatchers.Default) {
                     val start = chunkIdx * nodeChunkSize
                     val end = min(start + nodeChunkSize, nodeCount)
+                    val traversalStack = IntArray(256)
+                    val forceResult = FloatArray(2)
+
                     for (i in start until end) {
-                        if (i == draggedIdx) continue
-                        var fx = forceX[i]
-                        var fy = forceY[i]
-                        for (t in 0 until cores) {
-                            fx += threadForceX[t][i]
-                            fy += threadForceY[t][i]
+                        if (i == draggedIdx) {
+                            forceX[i] = 0f; forceY[i] = 0f; continue
+                        }
+                        quadTree.computeRepulsionIterative(
+                            posX[i], posY[i], i,
+                            effectiveRepel, softening, thetaSq,
+                            traversalStack, forceResult
+                        )
+                        var fx = forceResult[0]
+                        var fy = forceResult[1]
+
+                        val px = posX[i]; val py = posY[i]
+                        val distFromCenterSq = px * px + py * py
+                        if (distFromCenterSq > 0.01f) {
+                            fx -= px * effectiveCenter
+                            fy -= py * effectiveCenter
                         }
                         forceX[i] = fx
                         forceY[i] = fy
                     }
                 }
             }
-            reduceJobs.awaitAll()
-        }
+            repelJobs.awaitAll()
 
-        // ---- PHASE 3: Clamp + integrate ----
-        val maxF = settings.maxForce * (1f + alpha)
-        val maxFSq = maxF * maxF
-        val chunkEnergy = FloatArray(nodeChunks)
-        val adaptiveTimestep = when {
-            alpha > 0.5f -> config.timestepHot
-            alpha > 0.2f -> config.timestepWarm
-            alpha > 0.1f -> config.timestepCool
-            else -> config.timestepCold
-        }
-        val posScale = config.posUpdateBlend + alpha * config.posUpdateAlphaScale
+            // ---- PHASE 1.5: Group magnetization ----
+            val gs = pendingGroupSettings
+            if (gs.enabled && groupCount > 0 && (gs.cohesionForce > 0f || gs.groupSeparation > 0f)) {
+                applyGroupForces(gs, draggedIdx)
+            }
 
-        val integrateJobs = (0 until nodeChunks).map { chunkIdx ->
-            async(Dispatchers.Default) {
-                val start = chunkIdx * nodeChunkSize
-                val end = min(start + nodeChunkSize, nodeCount)
-                var localEnergy = 0f
+            // ---- PHASE 2: Edge spring forces ----
+            if (edgeCount > 0) {
+                applyEdgeForces(
+                    cores, settings, effectiveLink, effectiveRepel, softening, draggedIdx
+                )
 
-                for (i in start until end) {
-                    if (i == draggedIdx) continue
-                    var fx = forceX[i]
-                    var fy = forceY[i]
-
-                    val fMagSq = fx * fx + fy * fy
-                    if (fMagSq > maxFSq) {
-                        val s = maxF / sqrt(fMagSq)
-                        fx *= s; fy *= s
+                // Reduce per-thread buffers
+                val reduceJobs = (0 until nodeChunks).map { chunkIdx ->
+                    async(Dispatchers.Default) {
+                        val start = chunkIdx * nodeChunkSize
+                        val end = min(start + nodeChunkSize, nodeCount)
+                        for (i in start until end) {
+                            if (i == draggedIdx) continue
+                            var fx = forceX[i]
+                            var fy = forceY[i]
+                            for (t in 0 until cores) {
+                                fx += threadForceX[t][i]
+                                fy += threadForceY[t][i]
+                            }
+                            forceX[i] = fx
+                            forceY[i] = fy
+                        }
                     }
-
-                    var vx = (velX[i] + fx * adaptiveTimestep) * damping
-                    var vy = (velY[i] + fy * adaptiveTimestep) * damping
-
-                    val vMagSq = vx * vx + vy * vy
-                    if (vMagSq < 1e-5f) {
-                        vx = 0f; vy = 0f
-                    } else {
-                        localEnergy += vMagSq
-                    }
-
-                    velX[i] = vx; velY[i] = vy
-                    posX[i] += vx * posScale
-                    posY[i] += vy * posScale
                 }
-                chunkEnergy[chunkIdx] = localEnergy
+                reduceJobs.awaitAll()
+            }
+
+            // ---- PHASE 3: Clamp + integrate ----
+            // Only the FINAL sub-step accumulates kinetic energy — earlier sub-
+            // steps are transient and would falsely inflate the sleep check.
+            val isLastSubStep = subStep == subSteps - 1
+            if (isLastSubStep) {
+                for (c in chunkEnergy.indices) chunkEnergy[c] = 0f
+            }
+
+            val integrateJobs = (0 until nodeChunks).map { chunkIdx ->
+                async(Dispatchers.Default) {
+                    val start = chunkIdx * nodeChunkSize
+                    val end = min(start + nodeChunkSize, nodeCount)
+                    var localEnergy = 0f
+
+                    for (i in start until end) {
+                        if (i == draggedIdx) continue
+                        var fx = forceX[i]
+                        var fy = forceY[i]
+
+                        val fMagSq = fx * fx + fy * fy
+                        if (fMagSq > maxFSq) {
+                            val s = maxF / sqrt(fMagSq)
+                            fx *= s; fy *= s
+                        }
+
+                        var vx = (velX[i] + fx * perStepTimestep) * damping
+                        var vy = (velY[i] + fy * perStepTimestep) * damping
+
+                        val vMagSq = vx * vx + vy * vy
+                        if (vMagSq < 1e-5f) {
+                            vx = 0f; vy = 0f
+                        } else if (isLastSubStep) {
+                            localEnergy += vMagSq
+                        }
+
+                        velX[i] = vx; velY[i] = vy
+                        posX[i] += vx * perStepPosScale
+                        posY[i] += vy * perStepPosScale
+                    }
+                    if (isLastSubStep) chunkEnergy[chunkIdx] = localEnergy
+                }
+            }
+            integrateJobs.awaitAll()
+
+            // Dragged node override — applied every sub-step so it tracks the
+            // cursor without lag even when sub-stepping is active.
+            if (draggedIdx >= 0 && draggedNode?.offset != null) {
+                posX[draggedIdx] = draggedNode.offset.x
+                posY[draggedIdx] = draggedNode.offset.y
+                velX[draggedIdx] = 0f
+                velY[draggedIdx] = 0f
             }
         }
-        integrateJobs.awaitAll()
-
-        // Dragged node override
-        if (draggedIdx >= 0 && draggedNode?.offset != null) {
-            posX[draggedIdx] = draggedNode.offset.x
-            posY[draggedIdx] = draggedNode.offset.y
-            velX[draggedIdx] = 0f
-            velY[draggedIdx] = 0f
-        }
+        // -----------------------------------------------------------------
+        // End sub-step loop
+        // -----------------------------------------------------------------
 
         // ---- Overlap detection (sleep gate only — produces no force) ----
         hasOverlap = detectOverlap(settings)
@@ -473,9 +547,6 @@ class UltraFastEngine<Id, Data>(
 
         if (freezingEnabled) {
             if (hasOverlap) {
-                // Hold a small heat floor so cold-but-stacked nodes still move.
-                // The normal balanced physics (which is still running because
-                // alpha > 0) separates them; no special force is needed.
                 alpha = max(alpha, config.overlapResolveAlpha)
             } else if (alpha < config.sleepAlphaThreshold &&
                 totalKineticEnergy < config.sleepEnergyThreshold

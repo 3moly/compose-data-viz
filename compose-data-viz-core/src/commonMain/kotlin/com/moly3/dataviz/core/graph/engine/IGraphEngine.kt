@@ -31,6 +31,7 @@ interface IGraphEngine<Id, Data> {
         groupIndex: GroupIndex<Id>?,
         settings: GroupSettings,
         groupIndexIdentity: Int,
+        suppressReheat: Boolean = false,
     )
 
     fun snapshotGroupsForHulls(): List<Pair<GroupId, FloatArray>>

@@ -42,7 +42,8 @@ class HybridGraphRenderer<Id, Data> : IGraphEngine<Id, Data> {
     override fun setGroupData(
         groupIndex: GroupIndex<Id>?,
         settings: GroupSettings,
-        groupIndexIdentity: Int
+        groupIndexIdentity: Int,
+        suppressReheat: Boolean
     ) {
         TODO("Not yet implemented")
     }

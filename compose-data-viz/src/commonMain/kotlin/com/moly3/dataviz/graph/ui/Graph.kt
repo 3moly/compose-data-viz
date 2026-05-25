@@ -221,6 +221,7 @@ fun <Id, Data> Graph(
             groupIndex = if (groupSettings.enabled) groupIndex else null,
             settings = groupSettings,
             groupIndexIdentity = groupIndexIdentity,
+            suppressReheat = !hasSyncedGroupsThisMount,
         )
         hasSyncedGroupsThisMount = true
     }
