@@ -306,59 +306,59 @@ fun <Id, Data> Graph(
     // A nudge fires only when coordinates genuinely moved AND this is not the
     // mount's first restorative pass.
     // -----------------------------------------------------------------
-    LaunchedEffect(stateNodes, coordinates, velocities) {
-        if (stateNodes.isEmpty()) {
-            stateMutex.withLock {
-                engineCoords.clear()
-                engineVels.clear()
-                mapVersion++
-            }
-            hasSeededThisMount = true
-            return@LaunchedEffect
-        }
-
-        if (isCoordinatesEcho(coordinates, lastEmittedCoords.load())) {
-            hasSeededThisMount = true
-            return@LaunchedEffect
-        }
-
-        var changedAnything = false
-        stateMutex.withLock {
-            val newIds = HashSet<Id>(stateNodes.size)
-            for (node in stateNodes) newIds.add(node.id)
-
-            engineCoords.keys.retainAll(newIds)
-            engineVels.keys.retainAll(newIds)
-
-            for (node in stateNodes) {
-                val incoming = coordinates[node.id] ?: Offset.Zero
-                val prev = engineCoords[node.id]
-                if (prev == null ||
-                    abs(prev.x - incoming.x) > 0.05f ||
-                    abs(prev.y - incoming.y) > 0.05f
-                ) {
-                    changedAnything = true
-                }
-                engineCoords[node.id] = incoming
-                engineVels[node.id] = velocities[node.id] ?: Offset.Zero
-            }
-            mapVersion++
-        }
-
-        if (changedAnything && hasSeededThisMount) {
-            engine.nudge()
-        }
-
-        // First-mount + all-zero coordinates: nothing external will ever
-        // change to trigger physics, so wake the engine ourselves. This is
-        // what makes a fresh graph spread out instead of sitting stacked
-        // at the origin waiting for a touch.
-        if (!hasSeededThisMount && stateNodes.isNotEmpty()) {
-            val allZero = stateNodes.all { (coordinates[it.id] ?: Offset.Zero) == Offset.Zero }
-            if (allZero) engine.nudge()
-        }
-        hasSeededThisMount = true
-    }
+//    LaunchedEffect(stateNodes, coordinates, velocities) {
+//        if (stateNodes.isEmpty()) {
+//            stateMutex.withLock {
+//                engineCoords.clear()
+//                engineVels.clear()
+//                mapVersion++
+//            }
+//            hasSeededThisMount = true
+//            return@LaunchedEffect
+//        }
+//
+//        if (isCoordinatesEcho(coordinates, lastEmittedCoords.load())) {
+//            hasSeededThisMount = true
+//            return@LaunchedEffect
+//        }
+//
+//        var changedAnything = false
+//        stateMutex.withLock {
+//            val newIds = HashSet<Id>(stateNodes.size)
+//            for (node in stateNodes) newIds.add(node.id)
+//
+//            engineCoords.keys.retainAll(newIds)
+//            engineVels.keys.retainAll(newIds)
+//
+//            for (node in stateNodes) {
+//                val incoming = coordinates[node.id] ?: Offset.Zero
+//                val prev = engineCoords[node.id]
+//                if (prev == null ||
+//                    abs(prev.x - incoming.x) > 0.05f ||
+//                    abs(prev.y - incoming.y) > 0.05f
+//                ) {
+//                    changedAnything = true
+//                }
+//                engineCoords[node.id] = incoming
+//                engineVels[node.id] = velocities[node.id] ?: Offset.Zero
+//            }
+//            mapVersion++
+//        }
+//
+//        if (changedAnything && hasSeededThisMount) {
+//            engine.nudge()
+//        }
+//
+//        // First-mount + all-zero coordinates: nothing external will ever
+//        // change to trigger physics, so wake the engine ourselves. This is
+//        // what makes a fresh graph spread out instead of sitting stacked
+//        // at the origin waiting for a touch.
+//        if (!hasSeededThisMount && stateNodes.isNotEmpty()) {
+//            val allZero = stateNodes.all { (coordinates[it.id] ?: Offset.Zero) == Offset.Zero }
+//            if (allZero) engine.nudge()
+//        }
+//        hasSeededThisMount = true
+//    }
 
     LaunchedEffect(watchNodeId) {
         if (watchNodeId != null) {
@@ -377,9 +377,15 @@ fun <Id, Data> Graph(
             engine.reheat()
         }
     }
-    LaunchedEffect(connections) {
-        engine.nudge()
-    }
+//    val lastConnectionsForNudge = remember { arrayOfNulls<Map<Id, List<Connection<Id>>>>(1) }
+//    LaunchedEffect(connections) {
+//        val prev = lastConnectionsForNudge[0]
+//        lastConnectionsForNudge[0] = connections
+//        if (prev != null && prev !== connections) {
+//            // Real change, not just first mount
+//            engine.nudge()
+//        }
+//    }
 // Engine consumes plain target adjacency. Build it on structure change only.
 //    var engineConnections: Map<Id, List<Id>> = emptyMap()
 //    var lastConnectionsRef: Map<Id, List<Connection<Id>>>? = null

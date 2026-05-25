@@ -89,7 +89,7 @@ fun generateRandomGraphState(
                         )
                     )
                 )
-                connections[child]?.add(Connection(target = parent, style = reverseStyle.copy(color =  Color.Green)))
+//                connections[child]?.add(Connection(target = parent, style = reverseStyle.copy(color =  Color.Green)))
 
                 queue.addLast(child)
             }

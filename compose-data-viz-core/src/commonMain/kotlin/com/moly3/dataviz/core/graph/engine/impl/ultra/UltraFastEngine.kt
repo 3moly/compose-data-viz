@@ -1,5 +1,6 @@
 package com.moly3.dataviz.core.graph.engine.impl.ultra
 
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
@@ -54,6 +55,7 @@ import kotlin.math.sqrt
  * new one, never a torn mix.
  */
 @OptIn(ExperimentalAtomicApi::class)
+@Stable
 class UltraFastEngine<Id, Data>(
     var config: UltraFastEngineConfig = UltraFastEngineConfig.Default
 ) : IGraphEngine<Id, Data> {
