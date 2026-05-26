@@ -57,8 +57,14 @@ import kotlin.math.sqrt
 @OptIn(ExperimentalAtomicApi::class)
 @Stable
 class UltraFastEngine<Id, Data>(
-    var config: UltraFastEngineConfig = UltraFastEngineConfig.Default
+    _config: UltraFastEngineConfig = UltraFastEngineConfig.Default
 ) : IGraphEngine<Id, Data> {
+
+    private var config: UltraFastEngineConfig = _config
+
+    fun setNewConfig(newConfig: UltraFastEngineConfig){
+        config = newConfig
+    }
 
     // -----------------------------------------------------------------
     // SoA storage
@@ -85,6 +91,7 @@ class UltraFastEngine<Id, Data>(
     private var groupCentroidX = FloatArray(0)
     private var groupCentroidY = FloatArray(0)
     private var groupMemberCount = IntArray(0)
+
     // Sum of weights per group — centroid is weight-averaged.
     private var groupWeightSum = FloatArray(0)
 
@@ -254,6 +261,7 @@ class UltraFastEngine<Id, Data>(
         coordinates: MutableMap<Id, Offset>,
         velocities: MutableMap<Id, Offset>,
         draggedNode: DragNodeData<Id>?,
+        isMoving: Boolean,
     ) = coroutineScope {
         // ---- Structural change detection ----
         val structureSig = run {
@@ -281,17 +289,48 @@ class UltraFastEngine<Id, Data>(
                 prevNodeCount == 0 -> {
                     // first load — no reheat needed
                 }
+
                 delta <= config.gentleAddThreshold -> {
                     nudge()
                 }
+
                 delta <= bigThreshold -> reheatInternal(config.moderateChangeAlpha)
                 else -> reheatInternal(config.reheatAlpha)
             }
             lastNodeCountSignature = structureSig
         }
 
-        if (draggedNode != null) reheatInternal(config.dragReheatAlpha)
+        if (draggedNode != null && isMoving) reheatInternal(config.dragReheatAlpha)
 
+        if (!isMoving) {
+            syncData(graphNodes, coordinates, velocities, connections, structureChanged)
+
+            val draggedIdx = draggedNode?.id?.let { idToIndex[it] } ?: -1
+            if (draggedIdx >= 0 && draggedNode?.offset != null) {
+                posX[draggedIdx] = draggedNode.offset.x
+                posY[draggedIdx] = draggedNode.offset.y
+            }
+
+            // Freeze all motion. Cheap; nodeCount is bounded.
+            for (i in 0 until nodeCount) {
+                velX[i] = 0f
+                velY[i] = 0f
+            }
+
+            // Park heat so we don't burn alpha while frozen and so we don't
+            // explode awake when unfrozen.
+            alpha = 0f
+            alphaTarget = 0f
+            totalKineticEnergy = 0f
+
+            // Write back — same loop as the normal path.
+            for (i in 0 until nodeCount) {
+                val id = ids[i]
+                coordinates[id] = Offset(posX[i], posY[i])
+                velocities[id] = Offset(velX[i], velY[i])
+            }
+            return@coroutineScope
+        }
         // Early exit if truly idle AND nothing is overlapping AND nothing changed.
         if (isAsleep && draggedNode == null && !structureChanged) {
             syncData(graphNodes, coordinates, velocities, connections, false)
@@ -341,7 +380,8 @@ class UltraFastEngine<Id, Data>(
         }
 
         val draggedIdx = draggedNode?.id?.let { idToIndex[it] } ?: -1
-        val theta = if (nodeCount > config.bigGraphNodeCount) config.thetaLargeGraph else config.thetaSmallGraph
+        val theta =
+            if (nodeCount > config.bigGraphNodeCount) config.thetaLargeGraph else config.thetaSmallGraph
         val thetaSq = theta * theta
         val softening = settings.circleSize * 0.5f
 
@@ -435,7 +475,8 @@ class UltraFastEngine<Id, Data>(
                         var fx = forceResult[0]
                         var fy = forceResult[1]
 
-                        val px = posX[i]; val py = posY[i]
+                        val px = posX[i];
+                        val py = posY[i]
                         val distFromCenterSq = px * px + py * py
                         if (distFromCenterSq > 0.01f) {
                             fx -= px * effectiveCenter
@@ -578,10 +619,13 @@ class UltraFastEngine<Id, Data>(
         val minDistSq = minDist * minDist
 
         // Bounding box
-        var minX = posX[0]; var maxX = posX[0]
-        var minY = posY[0]; var maxY = posY[0]
+        var minX = posX[0];
+        var maxX = posX[0]
+        var minY = posY[0];
+        var maxY = posY[0]
         for (i in 1 until nodeCount) {
-            val x = posX[i]; val y = posY[i]
+            val x = posX[i];
+            val y = posY[i]
             if (x < minX) minX = x else if (x > maxX) maxX = x
             if (y < minY) minY = y else if (y > maxY) maxY = y
         }
@@ -595,7 +639,8 @@ class UltraFastEngine<Id, Data>(
         if (cols.toLong() * rows.toLong() > 4_000_000L) {
             if (nodeCount > 4000) return false
             for (i in 0 until nodeCount) {
-                val px = posX[i]; val py = posY[i]
+                val px = posX[i];
+                val py = posY[i]
                 for (j in i + 1 until nodeCount) {
                     val dx = px - posX[j]
                     val dy = py - posY[j]
@@ -618,7 +663,8 @@ class UltraFastEngine<Id, Data>(
         for (i in 0 until nodeCount) {
             val cx = (((posX[i] - minX) / cell).toInt()).coerceIn(0, cols - 1)
             val cy = (((posY[i] - minY) / cell).toInt()).coerceIn(0, rows - 1)
-            val px = posX[i]; val py = posY[i]
+            val px = posX[i];
+            val py = posY[i]
             for (gy in (cy - 1)..(cy + 1)) {
                 if (gy < 0 || gy >= rows) continue
                 for (gx in (cx - 1)..(cx + 1)) {
@@ -652,7 +698,8 @@ class UltraFastEngine<Id, Data>(
         for (i in 0 until nodeCount) {
             val from = nodeGroupOffset[i]
             val to = nodeGroupOffset[i + 1]
-            val px = posX[i]; val py = posY[i]
+            val px = posX[i];
+            val py = posY[i]
             for (k in from until to) {
                 val gid = nodeGroupId[k]
                 val wgt = nodeGroupWeight[k]
@@ -704,8 +751,10 @@ class UltraFastEngine<Id, Data>(
             val from = nodeGroupOffset[i]
             val to = nodeGroupOffset[i + 1]
             if (from == to) continue
-            val px = posX[i]; val py = posY[i]
-            var fx = 0f; var fy = 0f
+            val px = posX[i];
+            val py = posY[i]
+            var fx = 0f;
+            var fy = 0f
             val memberships = to - from
             for (k in from until to) {
                 val gid = nodeGroupId[k]
@@ -778,7 +827,8 @@ class UltraFastEngine<Id, Data>(
 
                     val effectiveLinkDistance = baseLinkDistance * hubScale * degreeScale
                     val distMul = if (dist > effectiveLinkDistance * 1.5f) longMul else 1f
-                    val repCompensation = (effectiveRepel / max(distSq, softening)) * connRepulsionMul
+                    val repCompensation =
+                        (effectiveRepel / max(distSq, softening)) * connRepulsionMul
 
                     val displacement = dist - effectiveLinkDistance
                     val baseLinkMag = effectiveLink * displacement * distMul
@@ -799,8 +849,12 @@ class UltraFastEngine<Id, Data>(
                         tfx[a] -= antiFx; tfy[a] -= antiFy
                         tfx[b] += antiFx; tfy[b] += antiFy
                     }
-                    if (a != draggedIdx) { tfx[a] += fxA; tfy[a] += fyA }
-                    if (b != draggedIdx) { tfx[b] += fxB; tfy[b] += fyB }
+                    if (a != draggedIdx) {
+                        tfx[a] += fxA; tfy[a] += fyA
+                    }
+                    if (b != draggedIdx) {
+                        tfx[b] += fxB; tfy[b] += fyB
+                    }
                 }
             }
         }

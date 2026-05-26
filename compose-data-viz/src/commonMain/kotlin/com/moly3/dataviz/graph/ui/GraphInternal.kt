@@ -67,7 +67,7 @@ private class VisibleEdgeData {
 }
 
 @Composable
-internal fun <Id, Data> GraphInternal(
+fun <Id, Data> GraphInternal(
     modifier: Modifier = Modifier,
     textStyle: TextStyle,
     settings: GraphSettings,
@@ -143,7 +143,8 @@ internal fun <Id, Data> GraphInternal(
     // Pools to avoid GC during panning/zooming
     val visibleTextsPool = remember { ArrayList<VisibleTextData>() }
     val visibleEdgesPool = remember { ArrayList<VisibleEdgeData>() }
-    val edgeComparator = remember { Comparator<VisibleEdgeData> { a, b -> a.distSq.compareTo(b.distSq) } }
+    val edgeComparator =
+        remember { Comparator<VisibleEdgeData> { a, b -> a.distSq.compareTo(b.distSq) } }
 
     val nodeById = remember(nodes) { nodes.associateBy { it.id } }
 
@@ -525,7 +526,8 @@ internal fun <Id, Data> GraphInternal(
                     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(dashOn, dashOff), 0f)
                     val dotEffect = PathEffect.dashPathEffect(floatArrayOf(dotOn, dotOff), 0f)
 
-                    val defaultDimmedLine = baseEdgeColor.copy(alpha = baseEdgeColor.alpha * dimTargetAlpha)
+                    val defaultDimmedLine =
+                        baseEdgeColor.copy(alpha = baseEdgeColor.alpha * dimTargetAlpha)
                     val defaultNormalLine = baseEdgeColor
 
                     val forcePureLines = edgeCfg.drawPureLines
@@ -647,9 +649,11 @@ internal fun <Id, Data> GraphInternal(
                         val stroke = if (maxActive == 0f) strokeNormal
                         else strokeNormal + (strokeHighlight - strokeNormal) * maxActive
 
-                        val effectiveLineStyle = if (willBeStyled) conn.style.line else LineStyle.Solid
+                        val effectiveLineStyle =
+                            if (willBeStyled) conn.style.line else LineStyle.Solid
                         val effectiveHead = if (willBeStyled) conn.style.head else ArrowHead.None
-                        val isCustomColor = if (willBeStyled) conn.style.color.isSpecified else false
+                        val isCustomColor =
+                            if (willBeStyled) conn.style.color.isSpecified else false
 
                         val edgeColor = if (!isCustomColor && maxActive == 0f) {
                             if (edgeDim >= 1f) defaultDimmedLine
@@ -660,7 +664,11 @@ internal fun <Id, Data> GraphInternal(
                             }
                         } else {
                             val themedBase = if (isCustomColor) conn.style.color else baseEdgeColor
-                            val highlighted = if (maxActive > 0f) lerp(themedBase, accentColor, maxActive) else themedBase
+                            val highlighted = if (maxActive > 0f) lerp(
+                                themedBase,
+                                accentColor,
+                                maxActive
+                            ) else themedBase
 
                             if (edgeDim > 0f) {
                                 val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
@@ -714,8 +722,22 @@ internal fun <Id, Data> GraphInternal(
 
                         when (effectiveLineStyle) {
                             LineStyle.Solid -> drawLine(edgeColor, drawStart, drawEnd, stroke)
-                            LineStyle.Dashed -> drawLine(edgeColor, drawStart, drawEnd, stroke, pathEffect = dashEffect)
-                            LineStyle.Dotted -> drawLine(edgeColor, drawStart, drawEnd, stroke, cap = StrokeCap.Round, pathEffect = dotEffect)
+                            LineStyle.Dashed -> drawLine(
+                                edgeColor,
+                                drawStart,
+                                drawEnd,
+                                stroke,
+                                pathEffect = dashEffect
+                            )
+
+                            LineStyle.Dotted -> drawLine(
+                                edgeColor,
+                                drawStart,
+                                drawEnd,
+                                stroke,
+                                cap = StrokeCap.Round,
+                                pathEffect = dotEffect
+                            )
                         }
 
                         if (hasArrow) {
