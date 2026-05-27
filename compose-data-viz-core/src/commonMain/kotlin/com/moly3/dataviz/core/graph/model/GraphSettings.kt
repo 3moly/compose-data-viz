@@ -18,6 +18,7 @@ data class GraphSettings(
     val watch: GraphWatchSettings = GraphWatchSettings.Default,
     val groupSettings: GroupSettings = GroupSettings(),
     val isMoving: Boolean = true,
+    val moveConnectedWhenPaused: Boolean = false,
 ) {
     companion object {
         val Default = GraphSettings()

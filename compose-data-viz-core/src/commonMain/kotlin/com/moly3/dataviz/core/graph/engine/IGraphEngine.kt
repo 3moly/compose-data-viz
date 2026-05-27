@@ -18,7 +18,8 @@ interface IGraphEngine<Id, Data> {
         coordinates: MutableMap<Id, Offset>,
         velocities: MutableMap<Id, Offset>,
         draggedNode: DragNodeData<Id>?,
-        isMoving: Boolean
+        isMoving: Boolean,
+        moveConnectedWhenPaused: Boolean = true,
     )
 
     fun reheat()

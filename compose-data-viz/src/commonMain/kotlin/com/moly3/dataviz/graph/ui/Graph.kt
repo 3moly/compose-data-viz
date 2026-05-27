@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.moly3.dataviz.core.graph.engine.DragNodeData
 import com.moly3.dataviz.core.graph.engine.IGraphEngine
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
+import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngineConfig
 import com.moly3.dataviz.core.graph.hull.GroupHullController
 import com.moly3.dataviz.core.graph.model.Connection
 import com.moly3.dataviz.core.graph.model.GraphNode
@@ -45,6 +46,7 @@ import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
+import kotlin.time.Clock
 
 @OptIn(ExperimentalAtomicApi::class)
 @Composable
@@ -52,7 +54,43 @@ fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle.Default,
     settings: GraphSettings = GraphSettings.Default,
-    engine: IGraphEngine<Id, Data> = remember { UltraFastEngine() },
+    engine: IGraphEngine<Id, Data> = remember {
+        UltraFastEngine(
+            UltraFastEngineConfig(
+                posUpdateBlend = 0.4f,
+                posUpdateAlphaScale = 0.3f,
+                baseAlphaDecay = 0.0228f,
+                dragReheatAlpha = 0.02f,
+                nudgeAlpha = 0.05f,
+                moderateChangeAlpha = 0.1f,
+                reheatAlpha = 0.2f,
+
+                // ===== SMOOTHNESS — the actual smoothness knobs =====
+                // Global speed governor. THIS is the "make it slower" lever.
+                globalMotionScale = 0.5f,
+
+                // Per-frame displacement cap (the safety net).
+                maxDisplacementPerFrame = 4f,
+
+                // Velocity smoothing — 0.15 = ~6-frame ease-in/out lag.
+                // Drop toward 0.08 for very cinematic, raise toward 0.3 for snappy.
+                velocitySmoothing = 0.15f,
+
+                // Sub-stepping kicks in for graphs <= 80 nodes when hot.
+                maxSubSteps = 5,
+                subStepNodeCeiling = 80,
+
+                // Partial freeze
+                dragNeighborhoodHops = 2,
+                partialDragAlpha = 0.15f,
+
+                // Anti-clump
+                clumpDetectRadiusMul = 3.5f,
+                clumpNeighborThreshold = 6,
+                clumpSpreadForce = 0.4f,
+            )
+        )
+    },
     consume: Boolean,
     userPosition: Offset,
     zoom: Float,
@@ -194,14 +232,18 @@ fun <Id, Data> Graph(
             val velsScratch = HashMap<Id, Offset>()
             var lastStructureSig = Int.MIN_VALUE
 
-            // Yield once before the very first step. This lets Compose commit
-            // the first composition (which already has the synchronously-seeded
-            // coordinates) and present the first frame BEFORE we start the
-            // expensive Barnes-Hut / spring / integration work. The user sees
-            // the graph instantly; physics catches up over the next few frames.
-            delay(16L)
+            // Frame-rate target. The engine is intentionally "frame-paced" — one
+            // step per visible frame, not "as fast as the CPU will allow". This is
+            // THE single biggest contributor to perceived smoothness: physics that
+            // runs at 200Hz on a fast machine and 60Hz on a slow one looks wildly
+            // different. Pacing makes motion velocity-consistent across machines.
+            val targetFrameMs = latestSettings.view.targetFrameMs.coerceAtLeast(8L)
+
+            delay(targetFrameMs)
 
             while (isActive) {
+                val frameStart = Clock.System.now().toEpochMilliseconds()
+
                 val nodes = latestNodes
                 if (nodes.isEmpty()) {
                     delay(100L)
@@ -213,9 +255,6 @@ fun <Id, Data> Graph(
                     continue
                 }
 
-                // Structural hash that catches edge rewires, not just count changes.
-                // sumOf-of-sizes was identical for "delete one edge + add one edge",
-                // so a rewire used to slip past unnoticed and the engine never woke.
                 val conns = latestConnections
                 val currentStructureSig = run {
                     var h = nodes.size
@@ -264,16 +303,19 @@ fun <Id, Data> Graph(
                     coordsScratch,
                     velsScratch,
                     latestDragged,
-                    isMoving = settings.isMoving
+                    isMoving = latestSettings.isMoving,
+                    moveConnectedWhenPaused = latestSettings.moveConnectedWhenPaused
                 )
 
                 stateMutex.withLock {
                     var updated = false
                     for ((id, off) in coordsScratch) {
                         val prev = engineCoords[id]
+                        // Lower the deadband — at 60Hz, 0.05f/frame = 3 units/sec
+                        // which is enough to feel "jumpy". 0.005f = 0.3 units/sec.
                         if (prev == null ||
-                            abs(prev.x - off.x) > 0.05f ||
-                            abs(prev.y - off.y) > 0.05f
+                            abs(prev.x - off.x) > 0.005f ||
+                            abs(prev.y - off.y) > 0.005f
                         ) {
                             engineCoords[id] = off
                             updated = true
@@ -283,6 +325,15 @@ fun <Id, Data> Graph(
 
                     if (updated) mapVersion++
                 }
+
+                // Pace to the target frame time. If step() took 5ms and we want
+                // 16ms frames, sleep 11ms. If step() blew past 16ms, run the next
+                // frame immediately. This is what makes motion look consistent
+                // across machines — slow machines just visibly drop frames rather
+                // than running physics at a different speed.
+                val elapsed = Clock.System.now().toEpochMilliseconds() - frameStart
+                val remaining = targetFrameMs - elapsed
+                if (remaining > 0) delay(remaining)
             }
         }
     }

@@ -23,7 +23,8 @@ class HybridGraphRenderer<Id, Data> : IGraphEngine<Id, Data> {
         coordinates: MutableMap<Id, Offset>,
         velocities: MutableMap<Id, Offset>,
         draggedNode: DragNodeData<Id>?,
-        isMoving: Boolean
+        isMoving: Boolean,
+        moveConnectedWhenPaused: Boolean
     ) {
         applyHybridForces(
             nodes, connections, settings, coordinates, velocities,

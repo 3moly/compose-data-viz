@@ -189,6 +189,86 @@ data class UltraFastEngineConfig(
     val overlapResolveAlpha: Float = 0.00f,
     /** Spiral step for separating nodes that loaded on identical positions. */
     val deStackRadius: Float = 2f,
+
+// Smoothness — caps motion per frame regardless of forces/node count
+// ---------------------------------------------------------------------
+
+    /**
+     * Hard cap on how far ANY node may move in a single frame, in world units.
+     * This is the single most important smoothness knob: it prevents the
+     * "5-node graph teleports to equilibrium in 2 frames" problem without
+     * needing to detune forces. Set high enough that dragged-node tracking
+     * isn't laggy (the drag override bypasses this cap anyway).
+     *
+     * Typical: 8-15 units. Higher = snappier, lower = more cinematic.
+     */
+    val maxDisplacementPerFrame: Float = 8f, // was 12f
+
+    /**
+     * Velocity smoothing factor. Each frame, applied velocity is blended
+     * between the previous applied velocity and the newly-integrated one:
+     *   v_applied = lerp(v_prev_applied, v_new, velocitySmoothing)
+     * 1.0 = no smoothing (raw physics). 0.3 = heavy smoothing.
+     * 0.5-0.7 reads as "buttery" without feeling laggy.
+     */
+//    val velocitySmoothing: Float = 0.6f,
+
+    /**
+     * Adaptive sub-stepping. When per-frame displacement would exceed
+     * maxDisplacementPerFrame, the frame is split into N sub-steps so motion
+     * is integrated smoothly rather than clamped to a hard cap (which looks
+     * like a stutter). Capped to prevent runaway CPU on tiny graphs.
+     */
+    val maxSubSteps: Int = 6,
+
+    /**
+     * Sub-step CPU budget: graphs with more than this many nodes never sub-step
+     * beyond 1, regardless of displacement. Sub-stepping is for smoothness on
+     * small graphs; large graphs have enough nodes to look smooth naturally.
+     */
+    val subStepNodeCeiling: Int = 80,
+
+// ---------------------------------------------------------------------
+// Partial freeze (isMoving = false + drag)
+// ---------------------------------------------------------------------
+
+    /**
+     * When isMoving = false but a node IS being dragged, this many hops of
+     * connected neighbors are allowed to move. 1 = direct neighbors only,
+     * 2 = neighbors-of-neighbors, etc. 0 = only the dragged node moves.
+     */
+    val dragNeighborhoodHops: Int = 2,
+
+    /**
+     * Heat applied to the frozen-but-drag-active sub-simulation. Keeps the
+     * local neighborhood responsive without disturbing the wider frozen layout.
+     */
+    val partialDragAlpha: Float = 0.15f,
+
+// ---------------------------------------------------------------------
+// Anti-clump (spread dense clusters)
+// ---------------------------------------------------------------------
+
+    /**
+     * When N nodes are within circleSize * this radius of a single node,
+     * extra spreading force activates. Prevents physics from converging
+     * many nodes onto one centroid.
+     */
+    val clumpDetectRadiusMul: Float = 3f,
+
+    /**
+     * If more than this many neighbors are inside the clump radius, the
+     * node is considered "clumped" and gets a radial spreading force.
+     */
+    val clumpNeighborThreshold: Int = 6,
+
+    /**
+     * Strength of the radial spreading force applied to clumped nodes.
+     * Scales with alpha like everything else, so it never fights a settled layout.
+     */
+    val clumpSpreadForce: Float = 0.5f,
+    val globalMotionScale: Float = 0.5f,
+    val velocitySmoothing: Float = 0.15f,
 ) {
     companion object {
         /** Drop-in replacement matching the original hardcoded values. */

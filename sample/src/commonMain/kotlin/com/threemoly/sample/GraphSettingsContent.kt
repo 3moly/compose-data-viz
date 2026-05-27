@@ -1,10 +1,14 @@
 package com.threemoly.sample
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.Switch
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moly3.dataviz.core.graph.hull.GroupSettings
 import com.moly3.dataviz.core.graph.model.GraphEdgeSettings
@@ -28,12 +32,22 @@ fun GraphSettingsContent(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Switch(checked=settings.isMoving, onCheckedChange = {
-            onChange(settings.copy(isMoving = !settings.isMoving))
-        })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text = "is moving:")
+            Switch(checked = settings.isMoving, onCheckedChange = {
+                onChange(settings.copy(isMoving = !settings.isMoving))
+            })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text = "moveConnectedWhenPaused:")
+            Switch(checked = settings.moveConnectedWhenPaused, onCheckedChange = {
+                onChange(settings.copy(moveConnectedWhenPaused = !settings.moveConnectedWhenPaused))
+            })
+        }
         ObsText("zoom: %.3f".format(zoom))
         IntSliderRow(
-            "Nodes count", nodeCount, valueRange = 1 until 20_000) {
+            "Nodes count", nodeCount, valueRange = 1 until 20_000
+        ) {
             onNodeCountChange(it)
         }
         SettingsSection(title = "Theme", accentColor = Color(0xFF7E57C2)) {
