@@ -36,7 +36,7 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
         zoom: Float,
         rotation: Float,
         mainPointer: PointerInputChange,
-        changes: List<PointerInputChange>
+        changes: List<PointerInputChange>,
     ) -> Unit = { _, _, _, _, _, _ -> },
     onGestureEnd: (PointerInputChange) -> Unit = {},
     onGestureCancel: () -> Unit = {},
@@ -81,10 +81,11 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                 var lockedToPanZoom = false
                 var gestureStarted = false
 
-                val down: PointerInputChange = awaitFirstDown(
-                    requireUnconsumed = false,
-                    pass = pass
-                )
+                val down: PointerInputChange =
+                    awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = pass,
+                    )
                 onGestureStart(down)
 
                 var pointer = down
@@ -96,20 +97,22 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                     // BUG FIX: Actually count the pressed pointers
                     val downPointerCount = event.changes.size
 
-                    val requirementFulfilled = when (requisite) {
-                        PointerRequisite.LessThan -> downPointerCount < numberOfPointers
-                        PointerRequisite.EqualTo -> downPointerCount == numberOfPointers
-                        PointerRequisite.GreaterThan -> downPointerCount > numberOfPointers
-                        else -> true
-                    }
+                    val requirementFulfilled =
+                        when (requisite) {
+                            PointerRequisite.LessThan -> downPointerCount < numberOfPointers
+                            PointerRequisite.EqualTo -> downPointerCount == numberOfPointers
+                            PointerRequisite.GreaterThan -> downPointerCount > numberOfPointers
+                            else -> true
+                        }
 
                     val canceled = event.changes.any { it.isConsumed }
 
                     if (!canceled && requirementFulfilled) {
                         gestureStarted = true
 
-                        val pointerInputChange = event.changes.lastOrNull { it.id == pointerId }
-                            ?: event.changes.first()
+                        val pointerInputChange =
+                            event.changes.lastOrNull { it.id == pointerId }
+                                ?: event.changes.first()
 
                         pointerId = pointerInputChange.id
                         pointer = pointerInputChange
@@ -142,21 +145,23 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                             val effectiveRotation = if (lockedToPanZoom) 0f else rotationChange
 
                             // Emit accumulated pan on the slop-crossing frame, then per-frame delta after
-                            val panToEmit = if (pan != Offset.Zero) {
-                                val p = pan
-                                pan = Offset.Zero  // consume the accumulated buffer once
-                                p
-                            } else {
-                                panChange
-                            }
+                            val panToEmit =
+                                if (pan != Offset.Zero) {
+                                    val p = pan
+                                    pan = Offset.Zero // consume the accumulated buffer once
+                                    p
+                                } else {
+                                    panChange
+                                }
 
-                            val zoomToEmit = if (zoom != 1f) {
-                                val z = zoom
-                                zoom = 1f
-                                z
-                            } else {
-                                zoomChange
-                            }
+                            val zoomToEmit =
+                                if (zoom != 1f) {
+                                    val z = zoom
+                                    zoom = 1f
+                                    z
+                                } else {
+                                    zoomChange
+                                }
 
                             if (effectiveRotation != 0f || zoomToEmit != 1f || panToEmit != Offset.Zero) {
                                 onGesture(
@@ -165,7 +170,7 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
                                     zoomToEmit,
                                     effectiveRotation,
                                     pointer,
-                                    event.changes
+                                    event.changes,
                                 )
                             }
 
