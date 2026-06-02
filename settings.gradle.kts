@@ -18,3 +18,4 @@ include(
     ":compose-data-viz-core",
     ":sample"
 )
+include(":build-tools:ktlint-rules")
