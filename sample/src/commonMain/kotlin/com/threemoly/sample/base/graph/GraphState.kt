@@ -2,8 +2,8 @@ package com.threemoly.sample.base.graph
 
 import androidx.compose.ui.geometry.Offset
 import com.moly3.dataviz.core.graph.model.Connection
+import com.moly3.dataviz.core.graph.model.GraphPresets
 import com.moly3.dataviz.core.graph.model.GraphSettings
-import com.moly3.dataviz.graph.func.GraphPresets
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf

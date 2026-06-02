@@ -10,7 +10,7 @@ fun isInResizeArea(
     shapePositionY: Float,
     shapeSizeX: Float,
     shapeSizeY: Float,
-    detectionPercent: Float //0.0f to 1.0f
+    detectionPercent: Float, // 0.0f to 1.0f
 ): ResizeType? {
     val left = shapePositionX
     val top = shapePositionY
@@ -49,15 +49,14 @@ fun isInResizeArea(
     mousePosition: Offset,
     shapePosition: Offset,
     shapeSize: Offset,
-    detectionPercent: Float
-): ResizeType? {
-    return isInResizeArea(
+    detectionPercent: Float,
+): ResizeType? =
+    isInResizeArea(
         mousePositionX = mousePosition.x,
         mousePositionY = mousePosition.y,
         shapePositionX = shapePosition.x,
         shapePositionY = shapePosition.y,
         shapeSizeX = shapeSize.x,
         shapeSizeY = shapeSize.y,
-        detectionPercent = detectionPercent
+        detectionPercent = detectionPercent,
     )
-}

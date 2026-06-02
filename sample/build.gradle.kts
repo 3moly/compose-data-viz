@@ -18,26 +18,10 @@ kotlin {
 
     jvm()
     android {
-//        defaultConfig {
-//            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-//        }
         namespace = "com.threemoly.sample"
         compileSdk = 36
-//        defaultConfig {
-//            minSdk = 23
-//        }
-//        compileOptions {
-//            sourceCompatibility = JavaVersion.VERSION_17
-//            targetCompatibility = JavaVersion.VERSION_17
-//        }
-//        sourceSets["main"].apply {
-//            manifest.srcFile("src/androidMain/AndroidManifest.xml")
-//            res.srcDirs("src/androidMain/resources")
-//            resources.srcDirs("src/commonMain/resources")
-//        }
     }
 
-    
     iosArm64()
     iosSimulatorArm64()
 
@@ -58,7 +42,6 @@ kotlin {
         xcodeConfigurationToNativeBuildType["betarelease"] = NativeBuildType.RELEASE
     }
 
-    
     macosArm64()
 
     js {
@@ -79,7 +62,7 @@ kotlin {
     }
 
     //noinspection UseTomlInstead
-    //keeping clean libs.versions.toml from libs that used only in this sample
+    // keeping clean libs.versions.toml from libs that used only in this sample
     val coil = "3.3.0"
     sourceSets {
         commonMain.dependencies {
@@ -133,7 +116,6 @@ kotlin {
         }
     }
 }
-
 
 compose.resources {
     publicResClass = false

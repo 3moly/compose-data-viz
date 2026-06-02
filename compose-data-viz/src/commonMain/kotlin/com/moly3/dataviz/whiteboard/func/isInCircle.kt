@@ -5,7 +5,7 @@ fun isInCircle(
     pointY: Float,
     centerX: Float,
     centerY: Float,
-    radius: Float
+    radius: Float,
 ): Boolean {
     val dx = pointX - centerX
     val dy = pointY - centerY

@@ -15,7 +15,12 @@ interface Shader {
     val sksl: String
 
     /** Applies the uniforms required for this shader to the effect */
-    fun applyUniforms(runtimeEffect: RuntimeEffect, time: Float, width: Float, height: Float) {
+    fun applyUniforms(
+        runtimeEffect: RuntimeEffect,
+        time: Float,
+        width: Float,
+        height: Float,
+    ) {
         runtimeEffect.setFloatUniform("uResolution", width, height, width / height)
         runtimeEffect.setFloatUniform("uTime", time)
     }

@@ -20,21 +20,22 @@ fun BButton(
     text: String,
     backColor: Color = Color.Black,
     fontColor: Color = Color.Unspecified,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = modifier
-            .background(backColor, shape = RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { onClick() }
-            .padding(vertical = 4.dp, horizontal = 12.dp),
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .background(backColor, shape = RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onClick() }
+                .padding(vertical = 4.dp, horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
     ) {
         ObsText(
             text = text,
             style = TextStyle.Default,
             fontSize = 12.sp,
-            color = fontColor
+            color = fontColor,
         )
     }
 }

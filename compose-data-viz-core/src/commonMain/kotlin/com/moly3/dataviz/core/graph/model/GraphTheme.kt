@@ -42,22 +42,23 @@ data class GraphTheme(
     val resolvedEdgeColor: Color get() = edgeColor ?: nodeOutlineColor
 
     companion object {
+        val Dark =
+            GraphTheme(
+                nodeColor = Color(0xFF8A8A8A),
+                nodeOutlineColor = Color(0xFF4A4A4A),
+                edgeColor = Color(0xFF4A4A4A),
+                accentColor = Color(0xFF7E57C2),
+                textColor = Color(0xFFE0E0E0),
+            )
 
-        val Dark = GraphTheme(
-            nodeColor = Color(0xFF8A8A8A),
-            nodeOutlineColor = Color(0xFF4A4A4A),
-            edgeColor = Color(0xFF4A4A4A),
-            accentColor = Color(0xFF7E57C2),
-            textColor = Color(0xFFE0E0E0),
-        )
-
-        val Light = GraphTheme(
-            nodeColor = Color(0xFF606060),
-            nodeOutlineColor = Color(0xFFBDBDBD),
-            edgeColor = Color(0xFFBDBDBD),
-            accentColor = Color(0xFF5E35B1),
-            textColor = Color(0xFF212121),
-        )
+        val Light =
+            GraphTheme(
+                nodeColor = Color(0xFF606060),
+                nodeOutlineColor = Color(0xFFBDBDBD),
+                edgeColor = Color(0xFFBDBDBD),
+                accentColor = Color(0xFF5E35B1),
+                textColor = Color(0xFF212121),
+            )
 
         val Default = Dark
     }

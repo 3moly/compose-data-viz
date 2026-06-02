@@ -4,5 +4,5 @@ import androidx.compose.ui.input.pointer.PointerIcon
 
 data class PointerDetection(
     val pointerIcon: PointerIcon,
-    val detectionType: DetectionType? = null
+    val detectionType: DetectionType? = null,
 )

@@ -31,7 +31,7 @@ fun isNearArrow(
     toSide: BoxSide,
     density: Density,
     config: ConnectionConfig,
-    zoom: Float
+    zoom: Float,
 ): Boolean {
     // Convert Dp values to pixels with density scaling
 //    val hitThresholdPx = density.run { config.hitThreshold.toPx() } * zoom
@@ -42,16 +42,18 @@ fun isNearArrow(
     val maxArcHeightPx = density.run { config.maxArcHeight.dp.toPx() } * zoom
 
     // Calculate stub points
-    val (stubStartPoint, curveStartPoint) = calculateStubAndCurvePoints(
-        startPoint,
-        fromSide,
-        stubLengthPx
-    )
-    val (stubEndPoint, curveEndPoint) = calculateStubAndCurvePoints(
-        endPoint,
-        toSide,
-        stubLengthPx
-    )
+    val (stubStartPoint, curveStartPoint) =
+        calculateStubAndCurvePoints(
+            startPoint,
+            fromSide,
+            stubLengthPx,
+        )
+    val (stubEndPoint, curveEndPoint) =
+        calculateStubAndCurvePoints(
+            endPoint,
+            toSide,
+            stubLengthPx,
+        )
 
     // Check if cursor is near line segments
     if (isPointNearLineSegment(cursor, stubStartPoint, curveStartPoint, hitThresholdPx)) {
@@ -62,16 +64,17 @@ fun isNearArrow(
     }
 
     // Calculate control points for the Bezier curve
-    val controlPoints = calculateControlPoints(
-        curveStartPoint,
-        curveEndPoint,
-        fromSide,
-        toSide,
-        config.controlPointFactor,
-        startPoint,
-        endPoint,
-        maxArcHeightPx
-    )
+    val controlPoints =
+        calculateControlPoints(
+            curveStartPoint,
+            curveEndPoint,
+            fromSide,
+            toSide,
+            config.controlPointFactor,
+            startPoint,
+            endPoint,
+            maxArcHeightPx,
+        )
 
     // Check if cursor is near the Bezier curve
     return isPointNearCubicBezier(
@@ -80,7 +83,7 @@ fun isNearArrow(
         controlPoints.first,
         controlPoints.second,
         curveEndPoint,
-        hitThresholdPx
+        hitThresholdPx,
     )
 }
 
@@ -91,7 +94,7 @@ private fun isPointNearLineSegment(
     point: Offset,
     lineStart: Offset,
     lineEnd: Offset,
-    threshold: Float
+    threshold: Float,
 ): Boolean {
     // Vector from lineStart to lineEnd
     val lineVec = Offset(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y)
@@ -111,14 +114,25 @@ private fun isPointNearLineSegment(
     val projection = pointVec.x * lineUnitVec.x + pointVec.y * lineUnitVec.y
 
     // Calculate closest point on line segment
-    val closestPoint: Offset = when {
-        projection < 0 -> lineStart // Before start of line segment
-        projection > lineLength -> lineEnd // After end of line segment
-        else -> Offset(
-            lineStart.x + projection * lineUnitVec.x,
-            lineStart.y + projection * lineUnitVec.y
-        ) // On the line segment
-    }
+    val closestPoint: Offset =
+        when {
+            projection < 0 -> {
+                lineStart
+            }
+
+            // Before start of line segment
+            projection > lineLength -> {
+                lineEnd
+            }
+
+            // After end of line segment
+            else -> {
+                Offset(
+                    lineStart.x + projection * lineUnitVec.x,
+                    lineStart.y + projection * lineUnitVec.y,
+                )
+            } // On the line segment
+        }
 
     // Calculate distance to closest point
     return distanceBetween(point, closestPoint) <= threshold
@@ -127,7 +141,10 @@ private fun isPointNearLineSegment(
 /**
  * Calculates the distance between two points.
  */
-private fun distanceBetween(p1: Offset, p2: Offset): Float {
+private fun distanceBetween(
+    p1: Offset,
+    p2: Offset,
+): Float {
     val dx = p1.x - p2.x
     val dy = p1.y - p2.y
     return sqrt(dx * dx + dy * dy)
@@ -144,7 +161,7 @@ private fun isPointNearCubicBezier(
     p2: Offset,
     p3: Offset,
     threshold: Float,
-    numSamples: Int = 30
+    numSamples: Int = 30,
 ): Boolean {
     // Sample points along the Bezier curve
     var prevPoint = p0

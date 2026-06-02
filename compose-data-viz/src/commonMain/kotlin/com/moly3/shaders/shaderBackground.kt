@@ -1,7 +1,12 @@
 package com.moly3.shaders
 
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -10,15 +15,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlin.math.round
 
+private const val INITIAL_TIME_STAMP = -1L
+private const val FRAME_DURATION_MS = 16.6f
+private const val TIME_DIVISOR = 10f
+private const val ROUNDING_DECIMALS = 3
+private const val DECIMAL_MULTIPLIER_ITERATIONS = 10
+
 /**
  * Draw's the shader as background via the [drawBehind] modifier.
- *
- * When running on Android 13 or newer (Tiramisu), usage of this API renders the shader.
- * On older Android devices, the provided [fallback] Brush is used instead.
- *
- * @param shader Shader to use to draw. [Shader] class. Example [com.mikepenz.hypnoticcanvas.shaders.GlossyGradients].
- * @param speed Adjusts how fast the shader is animated
- * @param fallback The fallback brush to draw on unsupported devices
  */
 @Composable
 fun Modifier.shaderBackground(
@@ -33,12 +37,12 @@ fun Modifier.shaderBackground(
     val speedModifier = shader.speedModifier
 
     val time by if (runtimeEffect.supported) {
-        var startMillis = remember(shader) { -1L }
+        var startMillis = remember(shader) { INITIAL_TIME_STAMP }
         produceState(0f, speedModifier) {
             while (true) {
                 withInfiniteAnimationFrameMillis {
                     if (startMillis < 0) startMillis = it
-                    value = ((it - startMillis) / 16.6f) / 10f
+                    value = ((it - startMillis) / FRAME_DURATION_MS) / TIME_DIVISOR
                 }
             }
         }
@@ -46,21 +50,22 @@ fun Modifier.shaderBackground(
         mutableStateOf(-1f)
     }
 
-    return this then Modifier.onGloballyPositioned {
-        size = Size(it.size.width.toFloat(), it.size.height.toFloat())
-    }.drawBehind {
-        runtimeEffect.update(shader, (time * speed * speedModifier).round(3), size.width, size.height) // set uniforms for the shaders
-        if (runtimeEffect.ready) {
-
-            drawRect(brush = runtimeEffect.build())
-        } else {
-            drawRect(brush = fallback())
-        }
-    }
+    return this then
+        Modifier
+            .onGloballyPositioned {
+                size = Size(it.size.width.toFloat(), it.size.height.toFloat())
+            }.drawBehind {
+                runtimeEffect.update(shader, (time * speed * speedModifier).round(ROUNDING_DECIMALS), size.width, size.height)
+                if (runtimeEffect.ready) {
+                    drawRect(brush = runtimeEffect.build())
+                } else {
+                    drawRect(brush = fallback())
+                }
+            }
 }
 
-fun Float.round(decimals: Int): Float {
-    var multiplier = 1.0f
-    repeat(decimals) { multiplier *= 10 }
+private fun Float.round(decimals: Int): Float {
+    var multiplier = 1f
+    repeat(decimals) { multiplier *= DECIMAL_MULTIPLIER_ITERATIONS }
     return round(this * multiplier) / multiplier
 }

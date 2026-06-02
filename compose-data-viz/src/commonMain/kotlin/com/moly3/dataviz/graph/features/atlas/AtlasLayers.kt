@@ -6,7 +6,7 @@ import kotlinx.collections.immutable.persistentListOf
 
 @Immutable
 data class AtlasLayers(
-    val layers: ImmutableList<AtlasState>
+    val layers: ImmutableList<AtlasState>,
 ) {
     fun resolve(key: String): AtlasLookup? {
         for (i in layers.indices) {

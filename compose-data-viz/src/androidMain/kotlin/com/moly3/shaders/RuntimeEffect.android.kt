@@ -14,40 +14,51 @@ import androidx.compose.ui.graphics.asAndroidBitmap
  * No-op implementation of the Runtime effect for devices not supporting the [RuntimeShader].
  */
 internal class FallbackAndroidRuntimeEffect : RuntimeEffect {
-
     override val supported: Boolean = false
     override var ready: Boolean = false
 
-    override fun build(): Brush {
-        return Brush.horizontalGradient(listOf(Color.White, Color.White))
-    }
+    override fun build(): Brush = Brush.horizontalGradient(listOf(Color.White, Color.White))
 
-    override fun buildShader(): androidx.compose.ui.graphics.Shader {
-        TODO("Not yet implemented")
-    }
+    override fun buildShader(): androidx.compose.ui.graphics.Shader = throw UnsupportedOperationException()
 }
 
-
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-internal class AndroidRuntimeEffect(shader: Shader) : RuntimeEffect {
+internal class AndroidRuntimeEffect(
+    shader: Shader,
+) : RuntimeEffect {
     private val compositeRuntimeEffect = RuntimeShader(shader.sksl)
 
     override val supported: Boolean = true
     override var ready: Boolean = false
 
-    override fun setFloatUniform(name: String, value1: Float) {
+    override fun setFloatUniform(
+        name: String,
+        value1: Float,
+    ) {
         compositeRuntimeEffect.setFloatUniform(name, value1)
     }
 
-    override fun setFloatUniform(name: String, value1: Float, value2: Float) {
+    override fun setFloatUniform(
+        name: String,
+        value1: Float,
+        value2: Float,
+    ) {
         compositeRuntimeEffect.setFloatUniform(name, value1, value2)
     }
 
-    override fun setFloatUniform(name: String, value1: Float, value2: Float, value3: Float) {
+    override fun setFloatUniform(
+        name: String,
+        value1: Float,
+        value2: Float,
+        value3: Float,
+    ) {
         compositeRuntimeEffect.setFloatUniform(name, value1, value2, value3)
     }
 
-    override fun setImageUniform(name: String, image: ImageBitmap) {
+    override fun setImageUniform(
+        name: String,
+        image: ImageBitmap,
+    ) {
         // 1. Extract native Android Bitmap
         val androidBitmap = image.asAndroidBitmap()
 
@@ -63,33 +74,36 @@ internal class AndroidRuntimeEffect(shader: Shader) : RuntimeEffect {
         value1: Float,
         value2: Float,
         value3: Float,
-        value4: Float
+        value4: Float,
     ) {
         compositeRuntimeEffect.setFloatUniform(name, value1, value2, value3, value4)
     }
 
-    override fun setFloatUniform(name: String, values: FloatArray) {
+    override fun setFloatUniform(
+        name: String,
+        values: FloatArray,
+    ) {
         compositeRuntimeEffect.setFloatUniform(name, values)
     }
 
-    override fun update(shader: Shader, time: Float, width: Float, height: Float) {
+    override fun update(
+        shader: Shader,
+        time: Float,
+        width: Float,
+        height: Float,
+    ) {
         shader.applyUniforms(this, time, width, height)
         ready = width > 0 && height > 0
     }
 
-    override fun build(): Brush {
-        return ShaderBrush(compositeRuntimeEffect)
-    }
+    override fun build(): Brush = ShaderBrush(compositeRuntimeEffect)
 
-    override fun buildShader(): androidx.compose.ui.graphics.Shader {
-        return compositeRuntimeEffect
-    }
+    override fun buildShader(): androidx.compose.ui.graphics.Shader = compositeRuntimeEffect
 }
 
-internal actual fun buildEffect(shader: Shader): RuntimeEffect {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+internal actual fun buildEffect(shader: Shader): RuntimeEffect =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         AndroidRuntimeEffect(shader)
     } else {
         FallbackAndroidRuntimeEffect()
     }
-}

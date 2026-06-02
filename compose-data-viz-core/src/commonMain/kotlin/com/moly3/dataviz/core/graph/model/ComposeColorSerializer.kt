@@ -10,18 +10,31 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 object ComposeColorSerializer : KSerializer<Color> {
+    private const val HEX_PREFIX = "#"
+    private const val HEX_RADIX = 16
+    private const val ARGB_STRING_LENGTH = 8
+
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("ComposeColor", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: Color) {
+    override fun serialize(
+        encoder: Encoder,
+        value: Color,
+    ) {
         val argb = value.toArgb()
-        val hexString = "#" + argb.toUInt().toString(16).uppercase().padStart(8, '0')
+        val hexString =
+            HEX_PREFIX +
+                argb
+                    .toUInt()
+                    .toString(HEX_RADIX)
+                    .uppercase()
+                    .padStart(ARGB_STRING_LENGTH, '0')
         encoder.encodeString(hexString)
     }
 
     override fun deserialize(decoder: Decoder): Color {
         val hexString = decoder.decodeString()
-        val argb = hexString.removePrefix("#").toLong(16).toInt()
+        val argb = hexString.removePrefix(HEX_PREFIX).toLong(HEX_RADIX).toInt()
         return Color(argb)
     }
 }

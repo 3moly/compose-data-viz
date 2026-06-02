@@ -3,8 +3,8 @@ package com.moly3.dataviz.whiteboard.func
 import com.moly3.dataviz.core.whiteboard.model.PointerIconType
 import com.moly3.dataviz.core.whiteboard.model.ResizeType
 
-fun ResizeType.toPointerType(): PointerIconType {
-    return when (this) {
+fun ResizeType.toPointerType(): PointerIconType =
+    when (this) {
         ResizeType.TopLeft -> PointerIconType.ResizeTopLeft
         ResizeType.TopRight -> PointerIconType.ResizeTopRight
         ResizeType.BottomLeft -> PointerIconType.ResizeBottomLeft
@@ -14,4 +14,3 @@ fun ResizeType.toPointerType(): PointerIconType {
         ResizeType.Top -> PointerIconType.ResizeVertical
         ResizeType.Left -> PointerIconType.ResizeHorizontal
     }
-}

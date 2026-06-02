@@ -8,18 +8,19 @@ fun isInSidePosition(
     itemPosition: Offset,
     boxSize: Offset,
     side: BoxSide,
-    radius: Float
+    radius: Float,
 ): Boolean {
-    val sidePosition = makeSideWorldPosition(
-        itemPosition = itemPosition,
-        boxSize = boxSize,
-        side = side
-    )
+    val sidePosition =
+        makeSideWorldPosition(
+            itemPosition = itemPosition,
+            boxSize = boxSize,
+            side = side,
+        )
     return isInCircle(
         pointX = sidePosition.x,
         pointY = sidePosition.y,
         centerX = mousePosition.x,
         centerY = mousePosition.y,
-        radius = radius
+        radius = radius,
     )
 }

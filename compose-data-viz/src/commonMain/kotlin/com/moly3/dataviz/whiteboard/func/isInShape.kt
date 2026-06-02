@@ -6,7 +6,7 @@ import com.moly3.dataviz.core.whiteboard.model.ResizeType
 fun isInShape(
     mousePosition: Offset,
     shapePosition: Offset,
-    shapeSize: Offset
+    shapeSize: Offset,
 ): Boolean {
     val left = shapePosition.x
     val top = shapePosition.y
@@ -23,7 +23,7 @@ fun isInShapeComplex(
     shapePosition: Offset,
     shapeSize: Offset,
     detectionPercent: Float = 0.1f,
-    circleRadius: Float? = null
+    circleRadius: Float? = null,
 ): InShape? {
     val left = shapePosition.x
     val top = shapePosition.y
@@ -70,7 +70,11 @@ fun isInShapeComplex(
     }
 }
 
-private fun isInsideCircle(point: Offset, center: Offset, radius: Float): Boolean {
+private fun isInsideCircle(
+    point: Offset,
+    center: Offset,
+    radius: Float,
+): Boolean {
     val dx = point.x - center.x
     val dy = point.y - center.y
     return (dx * dx + dy * dy) <= (radius * radius)
@@ -78,5 +82,8 @@ private fun isInsideCircle(point: Offset, center: Offset, radius: Float): Boolea
 
 sealed class InShape {
     data object Body : InShape()
-    data class Resize(val resizeType: ResizeType) : InShape()
+
+    data class Resize(
+        val resizeType: ResizeType,
+    ) : InShape()
 }

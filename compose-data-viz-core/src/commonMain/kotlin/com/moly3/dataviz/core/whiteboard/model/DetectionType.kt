@@ -4,5 +4,5 @@ enum class DetectionType {
     Box,
     Arrow,
     SideBox,
-    ResizeBox
+    ResizeBox,
 }

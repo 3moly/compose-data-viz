@@ -7,6 +7,5 @@ expect fun Canvas.drawVertices2(
     colors: IntArray?,
     texCoords: FloatArray?,
     indices: ShortArray?,
-    shader: androidx.compose.ui.graphics.Shader
+    shader: androidx.compose.ui.graphics.Shader,
 )
-

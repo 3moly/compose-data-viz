@@ -58,6 +58,57 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlin.math.max
 import kotlin.math.min
 
+private object GraphConstants {
+    const val HASH_PRIME = 31
+    const val ZERO_TIME_NANOS = 0L
+    const val TARGET_FPS = 60f
+    const val NANOS_PER_SECOND = 1_000_000_000.0
+    const val MAX_DT_SEC = 0.1f
+    const val MS_PER_SEC = 1000f
+
+    const val HALF_FRACTION = 0.5f
+    const val MULTIPLIER_TWO = 2f
+    const val EPSILON = 0.0001f
+    const val CULLING_PADDING = 100f
+
+    const val OPAQUE_ALPHA_THRESHOLD = 0.99f
+    const val VISIBILITY_ALPHA_THRESHOLD = 0.01f
+
+    const val FALLBACK_TEX_MIN = -101f
+    const val FALLBACK_TEX_MAX = -99f
+
+    // Buffer capacities
+    const val BUFFER_CAPACITY_MULTIPLIER = 2
+    const val VERTICES_PER_QUAD = 4
+    const val FLOATS_PER_VERTEX = 2
+    const val INDICES_PER_QUAD = 6
+    const val POS_TEX_FLOATS_PER_QUAD = 8
+
+    // Vertex array offsets
+    const val V0_X = 0
+    const val V0_Y = 1
+    const val V1_X = 2
+    const val V1_Y = 3
+    const val V2_X = 4
+    const val V2_Y = 5
+    const val V3_X = 6
+    const val V3_Y = 7
+
+    // Color array offsets
+    const val C0 = 0
+    const val C1 = 1
+    const val C2 = 2
+    const val C3 = 3
+
+    // Index array offsets
+    const val I0 = 0
+    const val I1 = 1
+    const val I2 = 2
+    const val I3 = 3
+    const val I4 = 4
+    const val I5 = 5
+}
+
 // Pre-allocated object to track edges and their distance to center without garbage collection
 private class VisibleEdgeData {
     var sIndex: Int = -1
@@ -74,20 +125,17 @@ fun <Id, Data> GraphInternal(
     atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
     getIconKey: (Id, Data) -> String? = { _, _ -> null },
     nodes: List<GraphNode<Id, Data>>,
-
     connections: Map<Id, List<Connection<Id>>>,
     coordinates: Map<Id, Offset>,
     coordinatesVersion: Int,
     draggedNodeId: Id?,
     cursorNodeId: Id?,
     watchNodeId: Id?,
-
     hulls: ImmutableList<GroupHull>,
     groupSettings: GroupSettings,
-
     movementOffset: Offset,
     zoom: Float,
-    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
+    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null,
 ) {
     val theme = settings.theme
     val view = settings.view
@@ -105,36 +153,40 @@ fun <Id, Data> GraphInternal(
     val fallbackBitmap = remember { ImageBitmap(1, 1) }
     val shader = remember(layerCount) { GraphShader(layerCount) }
 
-    val runtimeEffect = remember(shader) {
-        buildEffect(shader)
-    }
-    val rtShader = remember(
-        runtimeEffect,
-        view.circleQuality,
-        view.circleBorderWidth,
-        atlasLayers.combinedVersion,
-        fallbackBitmap
-    ) {
-        runtimeEffect.apply {
-            setFloatUniform("uQuality", view.circleQuality)
-            setFloatUniform("uBorderWidth", view.circleBorderWidth)
-            setFloatUniform("uUseAtlas", if (layerCount > 0) 1f else 0f)
-            setFloatUniform("uLayerCount", layerCount.toFloat())
-            for (i in 0 until layerCount) {
-                val layer = atlasLayers.layers[i]
-                setImageUniform("uAtlas$i", layer.bitmap)
-                setFloatUniform("uTileSize$i", layer.tileSizePx.toFloat())
-                setFloatUniform("uColumns$i", layer.columns.toFloat())
-                setFloatUniform("uCircular$i", if (layer.isCircular) 1f else 0f)
-            }
-        }.buildShader()
-    }
+    val runtimeEffect =
+        remember(shader) {
+            buildEffect(shader)
+        }
+    val rtShader =
+        remember(
+            runtimeEffect,
+            view.circleQuality,
+            view.circleBorderWidth,
+            atlasLayers.combinedVersion,
+            fallbackBitmap,
+        ) {
+            runtimeEffect
+                .apply {
+                    setFloatUniform("uQuality", view.circleQuality)
+                    setFloatUniform("uBorderWidth", view.circleBorderWidth)
+                    setFloatUniform("uUseAtlas", if (layerCount > 0) 1f else 0f)
+                    setFloatUniform("uLayerCount", layerCount.toFloat())
+                    for (i in 0 until layerCount) {
+                        val layer = atlasLayers.layers[i]
+                        setImageUniform("uAtlas$i", layer.bitmap)
+                        setFloatUniform("uTileSize$i", layer.tileSizePx.toFloat())
+                        setFloatUniform("uColumns$i", layer.columns.toFloat())
+                        setFloatUniform("uCircular$i", if (layer.isCircular) 1f else 0f)
+                    }
+                }.buildShader()
+        }
 
     val animZoom = zoom
     val localDensity = LocalDensity.current
-    val textPadding = remember(textCfg.labelPaddingDp) {
-        localDensity.run { textCfg.labelPaddingDp.toDp().toPx() }
-    }
+    val textPadding =
+        remember(textCfg.labelPaddingDp) {
+            localDensity.run { textCfg.labelPaddingDp.toDp().toPx() }
+        }
     val textMeasurer = rememberTextMeasurer()
     val textMeasurerNoCaching = rememberTextMeasurer()
 
@@ -148,38 +200,42 @@ fun <Id, Data> GraphInternal(
 
     val nodeById = remember(nodes) { nodes.associateBy { it.id } }
 
-    val textSignature = remember(nodes) {
-        var h = nodes.size
-        for (i in nodes.indices) {
-            val n = nodes[i]
-            h = h * 31 xor n.id.hashCode()
-            h = h * 31 xor n.name.hashCode()
+    val textSignature =
+        remember(nodes) {
+            var h = nodes.size
+            for (i in nodes.indices) {
+                val n = nodes[i]
+                h = h * GraphConstants.HASH_PRIME xor n.id.hashCode()
+                h = h * GraphConstants.HASH_PRIME xor n.name.hashCode()
+            }
+            h
         }
-        h
-    }
 
-    val textLayouts = remember(textSignature, baseTextStyle, textCfg.normalFontSizeSp) {
-        val style =
-            baseTextStyle.copy(fontSize = textCfg.normalFontSizeSp.sp, textAlign = TextAlign.Center)
-        nodes.associate { node ->
-            node.id to textMeasurer.measure(
-                text = node.name,
-                maxLines = textCfg.labelMaxLines,
-                constraints = Constraints(maxWidth = textCfg.labelMaxWidth),
-                style = style
-            )
+    val textLayouts =
+        remember(textSignature, baseTextStyle, textCfg.normalFontSizeSp) {
+            val style =
+                baseTextStyle.copy(fontSize = textCfg.normalFontSizeSp.sp, textAlign = TextAlign.Center)
+            nodes.associate { node ->
+                node.id to
+                    textMeasurer.measure(
+                        text = node.name,
+                        maxLines = textCfg.labelMaxLines,
+                        constraints = Constraints(maxWidth = textCfg.labelMaxWidth),
+                        style = style,
+                    )
+            }
         }
-    }
 
-    val hullLabelSignature = remember(hulls) {
-        var h = hulls.size
-        for (i in hulls.indices) {
-            val hull = hulls[i]
-            h = h * 31 xor hull.groupId.hashCode()
-            h = h * 31 xor hull.label.hashCode()
+    val hullLabelSignature =
+        remember(hulls) {
+            var h = hulls.size
+            for (i in hulls.indices) {
+                val hull = hulls[i]
+                h = h * GraphConstants.HASH_PRIME xor hull.groupId.hashCode()
+                h = h * GraphConstants.HASH_PRIME xor hull.label.hashCode()
+            }
+            h
         }
-        h
-    }
 
     val hullLabelLayouts =
         remember(hullLabelSignature, baseTextStyle, groupSettings.hullLabelFontSizeSp) {
@@ -191,22 +247,31 @@ fun <Id, Data> GraphInternal(
 
     val activeNodeId: Id? = draggedNodeId ?: cursorNodeId
 
-    val activeNodeTextLayout = remember(
-        activeNodeId, nodes, baseTextStyle, textCfg.activeFontSizePx, localDensity.density
-    ) {
-        val style = baseTextStyle.copy(
-            fontSize = (textCfg.activeFontSizePx / localDensity.density).sp
-        )
-        activeNodeId?.let { id ->
-            nodeById[id]?.let { textMeasurerNoCaching.measure(text = it.name, style = style) }
+    val activeNodeTextLayout =
+        remember(
+            activeNodeId,
+            nodes,
+            baseTextStyle,
+            textCfg.activeFontSizePx,
+            localDensity.density,
+        ) {
+            val style =
+                baseTextStyle.copy(
+                    fontSize = (textCfg.activeFontSizePx / localDensity.density).sp,
+                )
+            activeNodeId?.let { id ->
+                nodeById[id]?.let { textMeasurerNoCaching.measure(text = it.name, style = style) }
+            }
         }
-    }
 
-    val activeConnectionSet = remember(activeNodeId, connections) {
-        if (activeNodeId != null) {
-            connections[activeNodeId]?.mapTo(HashSet()) { it.target } ?: emptySet()
-        } else emptySet()
-    }
+    val activeConnectionSet =
+        remember(activeNodeId, connections) {
+            if (activeNodeId != null) {
+                connections[activeNodeId]?.mapTo(HashSet()) { it.target } ?: emptySet()
+            } else {
+                emptySet()
+            }
+        }
 
     val nodeAnimStates = remember { HashMap<Id, NodeAnimState>() }
     remember(nodes) {
@@ -222,9 +287,12 @@ fun <Id, Data> GraphInternal(
                 val connCount = connections[node.id]?.size ?: 1
                 val radius = GraphNode.getCircleSize(circleRadius, connCount, circleSizeMultiplier)
                 val color = node.colorValue?.let { Color(it) } ?: theme.nodeColor
-                val icon = if (!atlasLayers.isEmpty) {
-                    getIconKey(node.id, node.data)?.let { key -> atlasLayers.resolve(key) }
-                } else null
+                val icon =
+                    if (!atlasLayers.isEmpty) {
+                        getIconKey(node.id, node.data)?.let { key -> atlasLayers.resolve(key) }
+                    } else {
+                        null
+                    }
                 NodeStaticData(baseRadius = radius, baseColor = color, iconLookup = icon)
             }
         }
@@ -238,11 +306,15 @@ fun <Id, Data> GraphInternal(
     val latestSelectionCfg by rememberUpdatedState(selectionCfg)
 
     LaunchedEffect(Unit) {
-        var lastNanos = 0L
+        var lastNanos = GraphConstants.ZERO_TIME_NANOS
         while (true) {
             withFrameNanos { nowNanos ->
-                val dtSec = if (lastNanos == 0L) 1f / 60f
-                else ((nowNanos - lastNanos) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.1f)
+                val dtSec =
+                    if (lastNanos == GraphConstants.ZERO_TIME_NANOS) {
+                        1f / GraphConstants.TARGET_FPS
+                    } else {
+                        ((nowNanos - lastNanos) / GraphConstants.NANOS_PER_SECOND).toFloat().coerceIn(0f, GraphConstants.MAX_DT_SEC)
+                    }
                 lastNanos = nowNanos
 
                 val cfg = latestSelectionCfg
@@ -253,7 +325,7 @@ fun <Id, Data> GraphInternal(
                 val hasSelection = currentActiveId != null
                 var anyChange = false
 
-                val rateActive = 1000f / cfg.scaleAnimationMs.coerceAtLeast(1)
+                val rateActive = GraphConstants.MS_PER_SEC / cfg.scaleAnimationMs.coerceAtLeast(1)
 
                 for (i in currentNodes.indices) {
                     val node = currentNodes[i]
@@ -265,19 +337,23 @@ fun <Id, Data> GraphInternal(
 
                     when {
                         !hasSelection -> {
-                            targetText = 1f; targetDim = 0f
+                            targetText = 1f
+                            targetDim = 0f
                         }
 
                         node.id == currentActiveId -> {
-                            targetText = 0f; targetDim = 0f
+                            targetText = 0f
+                            targetDim = 0f
                         }
 
                         node.id in currentConnections -> {
-                            targetText = cfg.selectedTextAlpha; targetDim = 0f
+                            targetText = cfg.selectedTextAlpha
+                            targetDim = 0f
                         }
 
                         else -> {
-                            targetText = cfg.unrelatedTextAlpha; targetDim = 1f
+                            targetText = cfg.unrelatedTextAlpha
+                            targetDim = 1f
                         }
                     }
 
@@ -315,11 +391,12 @@ fun <Id, Data> GraphInternal(
         animTick++
     }
 
-    val nodeIndexById = remember(nodes) {
-        HashMap<Id, Int>(nodes.size).apply {
-            for (i in nodes.indices) put(nodes[i].id, i)
+    val nodeIndexById =
+        remember(nodes) {
+            HashMap<Id, Int>(nodes.size).apply {
+                for (i in nodes.indices) put(nodes[i].id, i)
+            }
         }
-    }
 
     val drawText = animZoom > textCfg.visibilityZoomThreshold
     val drawEdges = animZoom > edgeCfg.visibilityZoomThreshold
@@ -328,23 +405,26 @@ fun <Id, Data> GraphInternal(
 
     Box(modifier = modifier.onSizeChanged { boxSize = it }) {
         Canvas(modifier = Modifier.matchParentSize()) {
-            @Suppress("UNUSED_EXPRESSION") animTick
-            @Suppress("UNUSED_EXPRESSION") coordinatesVersion
-            @Suppress("UNUSED_EXPRESSION") atlasTick
+            @Suppress("UNUSED_EXPRESSION")
+            animTick
+            @Suppress("UNUSED_EXPRESSION")
+            coordinatesVersion
+            @Suppress("UNUSED_EXPRESSION")
+            atlasTick
 
             val canvasW = size.width
             val canvasH = size.height
-            val centerX = canvasW * 0.5f
-            val centerY = canvasH * 0.5f
+            val centerX = canvasW * GraphConstants.HALF_FRACTION
+            val centerY = canvasH * GraphConstants.HALF_FRACTION
 
-            val invZoom = 1f / animZoom.coerceAtLeast(0.0001f)
-            val cullPad = 100f
+            val invZoom = 1f / animZoom.coerceAtLeast(GraphConstants.EPSILON)
+            val cullPad = GraphConstants.CULLING_PADDING
             val cullL = (-centerX) * invZoom - movementOffset.x - cullPad
             val cullR = (canvasW - centerX) * invZoom - movementOffset.x + cullPad
             val cullT = (-centerY) * invZoom - movementOffset.y - cullPad
             val cullB = (canvasH - centerY) * invZoom - movementOffset.y + cullPad
 
-            buffers.ensureCapacity(nodes.size * 2)
+            buffers.ensureCapacity(nodes.size * GraphConstants.BUFFER_CAPACITY_MULTIPLIER)
             var visibleNodeCount = 0
 
             val posArray = buffers.positions
@@ -376,44 +456,54 @@ fun <Id, Data> GraphInternal(
                 val hoverOrDragColor =
                     if (node.id == draggedNodeId) theme.draggedNodeColor else theme.hoveredNodeColor
 
-                val base = if (activeKoef > 0f) {
-                    lerp(baseColor, hoverOrDragColor, activeKoef)
-                } else {
-                    baseColor
-                }
+                val base =
+                    if (activeKoef > 0f) {
+                        lerp(baseColor, hoverOrDragColor, activeKoef)
+                    } else {
+                        baseColor
+                    }
 
-                val nodeColorInt = if (dim > 0f) {
-                    lerp(base, solidBackgroundColor, dim * (1f - fadedNodeAlpha)).toArgb()
-                } else {
-                    base.toArgb()
-                }
+                val nodeColorInt =
+                    if (dim > 0f) {
+                        lerp(base, solidBackgroundColor, dim * (1f - fadedNodeAlpha)).toArgb()
+                    } else {
+                        base.toArgb()
+                    }
 
                 if (!hasIcon) {
-                    val vOff = visibleNodeCount * 4
-                    val fOff = vOff * 2
-                    val iOff = visibleNodeCount * 6
+                    val vOff = visibleNodeCount * GraphConstants.VERTICES_PER_QUAD
+                    val fOff = vOff * GraphConstants.FLOATS_PER_VERTEX
+                    val iOff = visibleNodeCount * GraphConstants.INDICES_PER_QUAD
 
-                    posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
-                    posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
-                    posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
-                    posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
+                    posArray[fOff + GraphConstants.V0_X] = pos.x - r
+                    posArray[fOff + GraphConstants.V0_Y] = pos.y - r
+                    posArray[fOff + GraphConstants.V1_X] = pos.x + r
+                    posArray[fOff + GraphConstants.V1_Y] = pos.y - r
+                    posArray[fOff + GraphConstants.V2_X] = pos.x + r
+                    posArray[fOff + GraphConstants.V2_Y] = pos.y + r
+                    posArray[fOff + GraphConstants.V3_X] = pos.x - r
+                    posArray[fOff + GraphConstants.V3_Y] = pos.y + r
 
-                    texArray[fOff + 0] = -101f; texArray[fOff + 1] = -101f
-                    texArray[fOff + 2] = -99f; texArray[fOff + 3] = -101f
-                    texArray[fOff + 4] = -99f; texArray[fOff + 5] = -99f
-                    texArray[fOff + 6] = -101f; texArray[fOff + 7] = -99f
+                    texArray[fOff + GraphConstants.V0_X] = GraphConstants.FALLBACK_TEX_MIN
+                    texArray[fOff + GraphConstants.V0_Y] = GraphConstants.FALLBACK_TEX_MIN
+                    texArray[fOff + GraphConstants.V1_X] = GraphConstants.FALLBACK_TEX_MAX
+                    texArray[fOff + GraphConstants.V1_Y] = GraphConstants.FALLBACK_TEX_MIN
+                    texArray[fOff + GraphConstants.V2_X] = GraphConstants.FALLBACK_TEX_MAX
+                    texArray[fOff + GraphConstants.V2_Y] = GraphConstants.FALLBACK_TEX_MAX
+                    texArray[fOff + GraphConstants.V3_X] = GraphConstants.FALLBACK_TEX_MIN
+                    texArray[fOff + GraphConstants.V3_Y] = GraphConstants.FALLBACK_TEX_MAX
 
-                    colArray[vOff + 0] = nodeColorInt
-                    colArray[vOff + 1] = nodeColorInt
-                    colArray[vOff + 2] = nodeColorInt
-                    colArray[vOff + 3] = nodeColorInt
+                    colArray[vOff + GraphConstants.C0] = nodeColorInt
+                    colArray[vOff + GraphConstants.C1] = nodeColorInt
+                    colArray[vOff + GraphConstants.C2] = nodeColorInt
+                    colArray[vOff + GraphConstants.C3] = nodeColorInt
 
-                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] =
-                        (vOff + 1).toShort()
-                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] =
-                        (vOff + 0).toShort()
-                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] =
-                        (vOff + 3).toShort()
+                    idxArray[iOff + GraphConstants.I0] = (vOff + GraphConstants.C0).toShort()
+                    idxArray[iOff + GraphConstants.I1] = (vOff + GraphConstants.C1).toShort()
+                    idxArray[iOff + GraphConstants.I2] = (vOff + GraphConstants.C2).toShort()
+                    idxArray[iOff + GraphConstants.I3] = (vOff + GraphConstants.C0).toShort()
+                    idxArray[iOff + GraphConstants.I4] = (vOff + GraphConstants.C2).toShort()
+                    idxArray[iOff + GraphConstants.I5] = (vOff + GraphConstants.C3).toShort()
 
                     visibleNodeCount++
                 }
@@ -421,47 +511,60 @@ fun <Id, Data> GraphInternal(
                 if (hasIcon && iconLookup != null) {
                     val iconAlpha = lerp(1f, fadedNodeAlpha, dim)
                     val iconFadedColorInt =
-                        if (iconAlpha >= 0.99f) whiteColorInt else Color.White.copy(alpha = iconAlpha)
-                            .toArgb()
+                        if (iconAlpha >= GraphConstants.OPAQUE_ALPHA_THRESHOLD) {
+                            whiteColorInt
+                        } else {
+                            Color.White
+                                .copy(alpha = iconAlpha)
+                                .toArgb()
+                        }
 
                     val layer = atlasLayers.layers[iconLookup.layerIndex]
                     val atlasCols = layer.columns
                     val atlasTileSize = layer.tileSizePx.toFloat()
-                    val inset = 0.5f
+                    val inset = GraphConstants.HALF_FRACTION
 
                     val rawU = (iconLookup.tileIndex % atlasCols) * atlasTileSize + inset
                     val rawV = (iconLookup.tileIndex / atlasCols) * atlasTileSize + inset
-                    val texSpan = atlasTileSize - (inset * 2f)
+                    val texSpan = atlasTileSize - (inset * GraphConstants.MULTIPLIER_TWO)
 
                     val layerShift = iconLookup.layerIndex * GraphShader.STRIDE.toFloat()
                     val texU = rawU + layerShift
                     val texV = rawV
 
-                    val vOff = visibleNodeCount * 4
-                    val fOff = vOff * 2
-                    val iOff = visibleNodeCount * 6
+                    val vOff = visibleNodeCount * GraphConstants.VERTICES_PER_QUAD
+                    val fOff = vOff * GraphConstants.FLOATS_PER_VERTEX
+                    val iOff = visibleNodeCount * GraphConstants.INDICES_PER_QUAD
 
-                    posArray[fOff + 0] = pos.x - r; posArray[fOff + 1] = pos.y - r
-                    posArray[fOff + 2] = pos.x + r; posArray[fOff + 3] = pos.y - r
-                    posArray[fOff + 4] = pos.x + r; posArray[fOff + 5] = pos.y + r
-                    posArray[fOff + 6] = pos.x - r; posArray[fOff + 7] = pos.y + r
+                    posArray[fOff + GraphConstants.V0_X] = pos.x - r
+                    posArray[fOff + GraphConstants.V0_Y] = pos.y - r
+                    posArray[fOff + GraphConstants.V1_X] = pos.x + r
+                    posArray[fOff + GraphConstants.V1_Y] = pos.y - r
+                    posArray[fOff + GraphConstants.V2_X] = pos.x + r
+                    posArray[fOff + GraphConstants.V2_Y] = pos.y + r
+                    posArray[fOff + GraphConstants.V3_X] = pos.x - r
+                    posArray[fOff + GraphConstants.V3_Y] = pos.y + r
 
-                    texArray[fOff + 0] = texU; texArray[fOff + 1] = texV
-                    texArray[fOff + 2] = texU + texSpan; texArray[fOff + 3] = texV
-                    texArray[fOff + 4] = texU + texSpan; texArray[fOff + 5] = texV + texSpan
-                    texArray[fOff + 6] = texU; texArray[fOff + 7] = texV + texSpan
+                    texArray[fOff + GraphConstants.V0_X] = texU
+                    texArray[fOff + GraphConstants.V0_Y] = texV
+                    texArray[fOff + GraphConstants.V1_X] = texU + texSpan
+                    texArray[fOff + GraphConstants.V1_Y] = texV
+                    texArray[fOff + GraphConstants.V2_X] = texU + texSpan
+                    texArray[fOff + GraphConstants.V2_Y] = texV + texSpan
+                    texArray[fOff + GraphConstants.V3_X] = texU
+                    texArray[fOff + GraphConstants.V3_Y] = texV + texSpan
 
-                    colArray[vOff + 0] = iconFadedColorInt
-                    colArray[vOff + 1] = iconFadedColorInt
-                    colArray[vOff + 2] = iconFadedColorInt
-                    colArray[vOff + 3] = iconFadedColorInt
+                    colArray[vOff + GraphConstants.C0] = iconFadedColorInt
+                    colArray[vOff + GraphConstants.C1] = iconFadedColorInt
+                    colArray[vOff + GraphConstants.C2] = iconFadedColorInt
+                    colArray[vOff + GraphConstants.C3] = iconFadedColorInt
 
-                    idxArray[iOff + 0] = (vOff + 0).toShort(); idxArray[iOff + 1] =
-                        (vOff + 1).toShort()
-                    idxArray[iOff + 2] = (vOff + 2).toShort(); idxArray[iOff + 3] =
-                        (vOff + 0).toShort()
-                    idxArray[iOff + 4] = (vOff + 2).toShort(); idxArray[iOff + 5] =
-                        (vOff + 3).toShort()
+                    idxArray[iOff + GraphConstants.I0] = (vOff + GraphConstants.C0).toShort()
+                    idxArray[iOff + GraphConstants.I1] = (vOff + GraphConstants.C1).toShort()
+                    idxArray[iOff + GraphConstants.I2] = (vOff + GraphConstants.C2).toShort()
+                    idxArray[iOff + GraphConstants.I3] = (vOff + GraphConstants.C0).toShort()
+                    idxArray[iOff + GraphConstants.I4] = (vOff + GraphConstants.C2).toShort()
+                    idxArray[iOff + GraphConstants.I5] = (vOff + GraphConstants.C3).toShort()
 
                     visibleNodeCount++
                 }
@@ -472,19 +575,22 @@ fun <Id, Data> GraphInternal(
                 translate(center.x + movementOffset.x, center.y + movementOffset.y)
             }) {
                 if (groupSettings.enabled && hulls.isNotEmpty()) {
-                    val strokePx = (groupSettings.hullStrokeWidth / animZoom).coerceAtLeast(0.5f)
-                    val stroke = Stroke(
-                        width = strokePx,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    )
+                    val strokePx = (groupSettings.hullStrokeWidth / animZoom).coerceAtLeast(GraphConstants.HALF_FRACTION)
+                    val stroke =
+                        Stroke(
+                            width = strokePx,
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round,
+                        )
 
                     for (i in hulls.indices) {
                         val h = hulls[i]
                         val bounds = h.path.getBounds()
                         if (bounds.right < cullL || bounds.left > cullR ||
                             bounds.bottom < cullT || bounds.top > cullB
-                        ) continue
+                        ) {
+                            continue
+                        }
 
                         if (groupSettings.hullFill) {
                             drawPath(
@@ -503,9 +609,11 @@ fun <Id, Data> GraphInternal(
                 if (drawEdges) {
                     val strokeScale = edgeCfg.strokeScalePolicy
                     val strokeNormal = strokeScale.resolve(edgeCfg.strokeWidth, animZoom)
-                    val strokeHighlight = strokeScale.resolve(
-                        edgeCfg.strokeWidth + edgeCfg.strokeHighlightBonus, animZoom
-                    )
+                    val strokeHighlight =
+                        strokeScale.resolve(
+                            edgeCfg.strokeWidth + edgeCfg.strokeHighlightBonus,
+                            animZoom,
+                        )
 
                     val baseEdgeColor = theme.resolvedEdgeColor
                     val accentColor = theme.accentColor
@@ -560,8 +668,8 @@ fun <Id, Data> GraphInternal(
 
                             if (maxX < cullL || minX > cullR || maxY < cullT || minY > cullB) continue
 
-                            val midX = (minX + maxX) * 0.5f
-                            val midY = (minY + maxY) * 0.5f
+                            val midX = (minX + maxX) * GraphConstants.HALF_FRACTION
+                            val midY = (minY + maxY) * GraphConstants.HALF_FRACTION
                             val dx = midX - worldCenterX
                             val dy = midY - worldCenterY
                             val distSq = dx * dx + dy * dy
@@ -646,8 +754,12 @@ fun <Id, Data> GraphInternal(
                         val maxActive = if (sActive > tActive) sActive else tActive
                         val edgeDim = if (sDim < tDim) sDim else tDim
 
-                        val stroke = if (maxActive == 0f) strokeNormal
-                        else strokeNormal + (strokeHighlight - strokeNormal) * maxActive
+                        val stroke =
+                            if (maxActive == 0f) {
+                                strokeNormal
+                            } else {
+                                strokeNormal + (strokeHighlight - strokeNormal) * maxActive
+                            }
 
                         val effectiveLineStyle =
                             if (willBeStyled) conn.style.line else LineStyle.Solid
@@ -655,26 +767,36 @@ fun <Id, Data> GraphInternal(
                         val isCustomColor =
                             if (willBeStyled) conn.style.color.isSpecified else false
 
-                        val edgeColor = if (!isCustomColor && maxActive == 0f) {
-                            if (edgeDim >= 1f) defaultDimmedLine
-                            else if (edgeDim <= 0f) defaultNormalLine
-                            else {
-                                val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
-                                baseEdgeColor.copy(alpha = baseEdgeColor.alpha * alphaScale)
-                            }
-                        } else {
-                            val themedBase = if (isCustomColor) conn.style.color else baseEdgeColor
-                            val highlighted = if (maxActive > 0f) lerp(
-                                themedBase,
-                                accentColor,
-                                maxActive
-                            ) else themedBase
+                        val edgeColor =
+                            if (!isCustomColor && maxActive == 0f) {
+                                if (edgeDim >= 1f) {
+                                    defaultDimmedLine
+                                } else if (edgeDim <= 0f) {
+                                    defaultNormalLine
+                                } else {
+                                    val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
+                                    baseEdgeColor.copy(alpha = baseEdgeColor.alpha * alphaScale)
+                                }
+                            } else {
+                                val themedBase = if (isCustomColor) conn.style.color else baseEdgeColor
+                                val highlighted =
+                                    if (maxActive > 0f) {
+                                        lerp(
+                                            themedBase,
+                                            accentColor,
+                                            maxActive,
+                                        )
+                                    } else {
+                                        themedBase
+                                    }
 
-                            if (edgeDim > 0f) {
-                                val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
-                                highlighted.copy(alpha = highlighted.alpha * alphaScale)
-                            } else highlighted
-                        }
+                                if (edgeDim > 0f) {
+                                    val alphaScale = 1f - edgeDim * (1f - dimTargetAlpha)
+                                    highlighted.copy(alpha = highlighted.alpha * alphaScale)
+                                } else {
+                                    highlighted
+                                }
+                            }
 
                         val hasArrow = effectiveHead != ArrowHead.None
                         val needsOffset = hasArrow || effectiveLineStyle != LineStyle.Solid
@@ -702,7 +824,7 @@ fun <Id, Data> GraphInternal(
                             val dy = tPos.y - sPos.y
                             val lenSq = dx * dx + dy * dy
 
-                            if (lenSq < 0.0001f) continue
+                            if (lenSq < GraphConstants.EPSILON) continue
                             val invLen = 1f / kotlin.math.sqrt(lenSq)
                             ux = dx * invLen
                             uy = dy * invLen
@@ -721,30 +843,38 @@ fun <Id, Data> GraphInternal(
                         val drawEnd = Offset(drawEndX, drawEndY)
 
                         when (effectiveLineStyle) {
-                            LineStyle.Solid -> drawLine(edgeColor, drawStart, drawEnd, stroke)
-                            LineStyle.Dashed -> drawLine(
-                                edgeColor,
-                                drawStart,
-                                drawEnd,
-                                stroke,
-                                pathEffect = dashEffect
-                            )
+                            LineStyle.Solid -> {
+                                drawLine(edgeColor, drawStart, drawEnd, stroke)
+                            }
 
-                            LineStyle.Dotted -> drawLine(
-                                edgeColor,
-                                drawStart,
-                                drawEnd,
-                                stroke,
-                                cap = StrokeCap.Round,
-                                pathEffect = dotEffect
-                            )
+                            LineStyle.Dashed -> {
+                                drawLine(
+                                    edgeColor,
+                                    drawStart,
+                                    drawEnd,
+                                    stroke,
+                                    pathEffect = dashEffect,
+                                )
+                            }
+
+                            LineStyle.Dotted -> {
+                                drawLine(
+                                    edgeColor,
+                                    drawStart,
+                                    drawEnd,
+                                    stroke,
+                                    cap = StrokeCap.Round,
+                                    pathEffect = dotEffect,
+                                )
+                            }
                         }
 
                         if (hasArrow) {
                             drawArrowHead(
                                 path = arrowPath,
                                 tip = drawEnd,
-                                dirX = ux, dirY = uy,
+                                dirX = ux,
+                                dirY = uy,
                                 head = effectiveHead,
                                 length = headLenWorld,
                                 width = headWidWorld,
@@ -766,15 +896,15 @@ fun <Id, Data> GraphInternal(
                             color = theme.accentColor,
                             radius = watchRadius * watchCfg.radiusMultiplier,
                             center = watchPos,
-                            style = Stroke(width = watchCfg.strokeWidth / animZoom)
+                            style = Stroke(width = watchCfg.strokeWidth / animZoom),
                         )
                     }
                 }
 
                 if (visibleNodeCount > 0) {
-                    val vFloats = visibleNodeCount * 8
-                    val cInts = visibleNodeCount * 4
-                    val iShorts = visibleNodeCount * 6
+                    val vFloats = visibleNodeCount * GraphConstants.POS_TEX_FLOATS_PER_QUAD
+                    val cInts = visibleNodeCount * GraphConstants.VERTICES_PER_QUAD
+                    val iShorts = visibleNodeCount * GraphConstants.INDICES_PER_QUAD
 
                     val exactPos = buffers.getExactPositions(vFloats)
                     val exactTex = buffers.getExactTexCoords(vFloats)
@@ -787,57 +917,69 @@ fun <Id, Data> GraphInternal(
                     idxArray.copyInto(exactIdx, 0, 0, iShorts)
 
                     drawContext.canvas.drawVertices2(
-                        exactPos, exactCol, exactTex, exactIdx, shader = rtShader
+                        exactPos,
+                        exactCol,
+                        exactTex,
+                        exactIdx,
+                        shader = rtShader,
                     )
                 }
 
                 drawCircle(color = theme.accentColor, radius = 1f / animZoom, center = Offset.Zero)
             }
 
-            val drawHullLabels = groupSettings.enabled &&
+            val drawHullLabels =
+                groupSettings.enabled &&
                     hulls.isNotEmpty() &&
                     animZoom > groupSettings.hullLabelVisibilityZoomThreshold
 
             if (drawHullLabels) {
-                val hullTextScale = if (groupSettings.hullLabelScaleWithZoom) {
-                    animZoom.coerceIn(
-                        groupSettings.hullLabelMinScale,
-                        groupSettings.hullLabelMaxScale
-                    )
-                } else {
-                    1f
-                }
+                val hullTextScale =
+                    if (groupSettings.hullLabelScaleWithZoom) {
+                        animZoom.coerceIn(
+                            groupSettings.hullLabelMinScale,
+                            groupSettings.hullLabelMaxScale,
+                        )
+                    } else {
+                        1f
+                    }
 
-                val hullZoomAlpha = ((animZoom - groupSettings.hullLabelVisibilityZoomThreshold) /
-                        groupSettings.hullLabelVisibilityZoomFadeWidth.coerceAtLeast(0.0001f))
-                    .coerceIn(0f, 1f)
+                val hullZoomAlpha =
+                    (
+                        (animZoom - groupSettings.hullLabelVisibilityZoomThreshold) /
+                            groupSettings.hullLabelVisibilityZoomFadeWidth.coerceAtLeast(GraphConstants.EPSILON)
+                    ).coerceIn(0f, 1f)
 
-                if (hullZoomAlpha >= 0.01f) {
+                if (hullZoomAlpha >= GraphConstants.VISIBILITY_ALPHA_THRESHOLD) {
                     for (i in hulls.indices) {
                         val h = hulls[i]
                         val layout = hullLabelLayouts[h.groupId] ?: continue
 
                         val sx = (h.labelAnchor.x + movementOffset.x) * animZoom + centerX
-                        val sy = (h.labelAnchor.y + movementOffset.y) * animZoom + centerY -
+                        val sy =
+                            (h.labelAnchor.y + movementOffset.y) * animZoom + centerY -
                                 groupSettings.hullLabelVerticalOffset
 
                         val scaledW = layout.size.width * hullTextScale
                         val scaledH = layout.size.height * hullTextScale
                         if (sx + scaledW < 0f || sx - scaledW > canvasW ||
                             sy + scaledH < 0f || sy - scaledH > canvasH
-                        ) continue
+                        ) {
+                            continue
+                        }
 
-                        val topLeft = Offset(
-                            sx - layout.size.width / 2f,
-                            sy - layout.size.height / 2f
-                        )
+                        val topLeft =
+                            Offset(
+                                sx - layout.size.width / GraphConstants.MULTIPLIER_TWO,
+                                sy - layout.size.height / GraphConstants.MULTIPLIER_TWO,
+                            )
 
                         if (hullTextScale != 1f) {
                             withTransform({
                                 scale(
                                     scaleX = hullTextScale,
                                     scaleY = hullTextScale,
-                                    pivot = Offset(sx, sy)
+                                    pivot = Offset(sx, sy),
                                 )
                             }) {
                                 drawText(
@@ -860,14 +1002,20 @@ fun <Id, Data> GraphInternal(
             }
 
             if (drawText) {
-                val forceVisibleSet: Set<Id> = if (activeNodeId != null) {
-                    val conns = connections[activeNodeId]
-                    if (conns.isNullOrEmpty()) setOf(activeNodeId)
-                    else HashSet<Id>(conns.size + 1).apply {
-                        add(activeNodeId)
-                        for (c in conns) add(c.target)
+                val forceVisibleSet: Set<Id> =
+                    if (activeNodeId != null) {
+                        val conns = connections[activeNodeId]
+                        if (conns.isNullOrEmpty()) {
+                            setOf(activeNodeId)
+                        } else {
+                            HashSet<Id>(conns.size + 1).apply {
+                                add(activeNodeId)
+                                for (c in conns) add(c.target)
+                            }
+                        }
+                    } else {
+                        emptySet()
                     }
-                } else emptySet()
 
                 var visibleTextCount = 0
 
@@ -879,7 +1027,7 @@ fun <Id, Data> GraphInternal(
                     if (pos.x < cullL || pos.x > cullR || pos.y < cullT || pos.y > cullB) continue
 
                     val alpha = nodeAnimStates[node.id]?.textAlpha ?: 1f
-                    if (alpha < 0.01f) continue
+                    if (alpha < GraphConstants.VISIBILITY_ALPHA_THRESHOLD) continue
 
                     val screenX = (pos.x + movementOffset.x) * animZoom + centerX
                     val screenY = (pos.y + movementOffset.y) * animZoom + centerY
@@ -901,7 +1049,7 @@ fun <Id, Data> GraphInternal(
 
                 val activeVisibleTexts = visibleTextsPool.subList(0, visibleTextCount)
                 activeVisibleTexts.sortWith(
-                    compareByDescending<VisibleTextData> { it.forced }.thenBy { it.distSq }
+                    compareByDescending<VisibleTextData> { it.forced }.thenBy { it.distSq },
                 )
 
                 val forcedCount = forceVisibleSet.count { it != activeNodeId && it in nodeById }
@@ -923,31 +1071,32 @@ fun <Id, Data> GraphInternal(
                     val zoomAlpha = ((animZoom - zoomFadeStart) / zoomFadeWidth).coerceIn(0f, 1f)
                     val effectiveZoomAlpha = if (textData.forced) 1f else zoomAlpha
                     val finalAlpha = (nodeTextAlpha * effectiveZoomAlpha).coerceIn(0f, 1f)
-                    if (finalAlpha < 0.01f) continue
+                    if (finalAlpha < GraphConstants.VISIBILITY_ALPHA_THRESHOLD) continue
 
                     val pivotX = screenPos.x
                     val pivotY = screenPos.y + nodeRadius * animZoom + textPadding
-                    val textTopLeft = Offset(pivotX - layout.size.width / 2f, pivotY)
+                    val textTopLeft = Offset(pivotX - layout.size.width / GraphConstants.MULTIPLIER_TWO, pivotY)
 
-                    val textScale = if (textCfg.scaleLabelsWithZoom) {
-                        animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
-                    } else {
-                        1f
-                    }
+                    val textScale =
+                        if (textCfg.scaleLabelsWithZoom) {
+                            animZoom.coerceIn(textCfg.minLabelScale, textCfg.maxLabelScale)
+                        } else {
+                            1f
+                        }
 
                     if (textScale != 1f) {
                         withTransform({
                             scale(
                                 scaleX = textScale,
                                 scaleY = textScale,
-                                pivot = Offset(pivotX, pivotY)
+                                pivot = Offset(pivotX, pivotY),
                             )
                         }) {
                             drawText(
                                 textLayoutResult = layout,
                                 topLeft = textTopLeft,
                                 color = theme.textColor,
-                                alpha = finalAlpha
+                                alpha = finalAlpha,
                             )
                         }
                     } else {
@@ -955,13 +1104,15 @@ fun <Id, Data> GraphInternal(
                             textLayoutResult = layout,
                             topLeft = textTopLeft,
                             color = theme.textColor,
-                            alpha = finalAlpha
+                            alpha = finalAlpha,
                         )
                     }
                 }
             }
 
-            if (customPopup == null && activeNodeId != null && activeNodeTextLayout != null && cursorTextAlpha > 0.01f) {
+            if (customPopup == null && activeNodeId != null && activeNodeTextLayout != null &&
+                cursorTextAlpha > GraphConstants.VISIBILITY_ALPHA_THRESHOLD
+            ) {
                 val activePos = coordinates[activeNodeId]
                 if (activePos != null) {
                     val activeNodeIndex = nodes.indexOfFirst { it.id == activeNodeId }
@@ -975,45 +1126,54 @@ fun <Id, Data> GraphInternal(
                     val activeScale = lerp(1f, selectionCfg.scaleOnHover, activeKoef)
 
                     val screenX = (activePos.x + movementOffset.x) * animZoom + centerX
-                    val screenY = (activePos.y + movementOffset.y) * animZoom + centerY +
-                            (nodeRadius * activeScale * animZoom + textPadding + bgPadY +
-                                    (activeNodeTextLayout.size.height / 2f))
+                    val screenY =
+                        (activePos.y + movementOffset.y) * animZoom + centerY +
+                            (
+                                nodeRadius * activeScale * animZoom + textPadding + bgPadY +
+                                    (activeNodeTextLayout.size.height / GraphConstants.MULTIPLIER_TWO)
+                            )
 
                     val textTopLeft = Offset(screenX, screenY) - activeNodeTextLayout.half()
 
-                    val pillBgColor = if (theme.textColor.luminance() > 0.5f)
-                        theme.activeLabelBackgroundDark else theme.activeLabelBackgroundLight
+                    val pillBgColor =
+                        if (theme.textColor.luminance() > GraphConstants.HALF_FRACTION) {
+                            theme.activeLabelBackgroundDark
+                        } else {
+                            theme.activeLabelBackgroundLight
+                        }
 
                     drawRoundRect(
                         color = pillBgColor.copy(alpha = textCfg.activePillBackgroundAlpha * cursorTextAlpha),
                         topLeft = Offset(textTopLeft.x - bgPadX, textTopLeft.y - bgPadY),
-                        size = Size(
-                            width = activeNodeTextLayout.size.width + bgPadX * 2f,
-                            height = activeNodeTextLayout.size.height + bgPadY * 2f
-                        ),
-                        cornerRadius = CornerRadius(
-                            textCfg.activePillCornerRadius,
-                            textCfg.activePillCornerRadius
-                        )
+                        size =
+                            Size(
+                                width = activeNodeTextLayout.size.width + bgPadX * GraphConstants.MULTIPLIER_TWO,
+                                height = activeNodeTextLayout.size.height + bgPadY * GraphConstants.MULTIPLIER_TWO,
+                            ),
+                        cornerRadius =
+                            CornerRadius(
+                                textCfg.activePillCornerRadius,
+                                textCfg.activePillCornerRadius,
+                            ),
                     )
 
                     drawText(
                         textLayoutResult = activeNodeTextLayout,
                         topLeft = textTopLeft,
                         color = theme.textColor,
-                        alpha = cursorTextAlpha
+                        alpha = cursorTextAlpha,
                     )
                 }
             }
         }
 
-        if (customPopup != null && activeNodeId != null && cursorTextAlpha > 0.01f) {
+        if (customPopup != null && activeNodeId != null && cursorTextAlpha > GraphConstants.VISIBILITY_ALPHA_THRESHOLD) {
             val activeNode = nodeById[activeNodeId]
             val activePos = coordinates[activeNodeId]
 
             if (activeNode != null && activePos != null) {
-                val centerX = boxSize.width * 0.5f
-                val centerY = boxSize.height * 0.5f
+                val centerX = boxSize.width * GraphConstants.HALF_FRACTION
+                val centerY = boxSize.height * GraphConstants.HALF_FRACTION
 
                 val activeNodeIndex = nodes.indexOfFirst { it.id == activeNodeId }
                 val nodeRadius =
@@ -1023,22 +1183,24 @@ fun <Id, Data> GraphInternal(
                 val activeScale = lerp(1f, selectionCfg.scaleOnHover, activeKoef)
 
                 Box(
-                    modifier = Modifier
-                        .graphicsLayer { alpha = cursorTextAlpha }
-                        .layout { measurable, constraints ->
-                            val placeable = measurable.measure(constraints)
+                    modifier =
+                        Modifier
+                            .graphicsLayer { alpha = cursorTextAlpha }
+                            .layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints)
 
-                            val screenX = (activePos.x + movementOffset.x) * animZoom + centerX
-                            val screenY = (activePos.y + movementOffset.y) * animZoom + centerY +
-                                    (nodeRadius * activeScale * animZoom) + textPadding
+                                val screenX = (activePos.x + movementOffset.x) * animZoom + centerX
+                                val screenY =
+                                    (activePos.y + movementOffset.y) * animZoom + centerY +
+                                        (nodeRadius * activeScale * animZoom) + textPadding
 
-                            layout(placeable.width, placeable.height) {
-                                placeable.place(
-                                    x = (screenX - placeable.width / 2f).toInt(),
-                                    y = screenY.toInt()
-                                )
-                            }
-                        }
+                                layout(placeable.width, placeable.height) {
+                                    placeable.place(
+                                        x = (screenX - placeable.width / GraphConstants.MULTIPLIER_TWO).toInt(),
+                                        y = screenY.toInt(),
+                                    )
+                                }
+                            },
                 ) {
                     customPopup(activeNode)
                 }
@@ -1050,7 +1212,8 @@ fun <Id, Data> GraphInternal(
 private inline fun DrawScope.drawArrowHead(
     path: Path,
     tip: Offset,
-    dirX: Float, dirY: Float,
+    dirX: Float,
+    dirY: Float,
     head: ArrowHead,
     length: Float,
     width: Float,
@@ -1065,14 +1228,16 @@ private inline fun DrawScope.drawArrowHead(
     val bx = tip.x - dirX * length
     val by = tip.y - dirY * length
 
-    val half = width * 0.5f
+    val half = width * GraphConstants.HALF_FRACTION
     val leftX = bx + px * half
     val leftY = by + py * half
     val rightX = bx - px * half
     val rightY = by - py * half
 
     when (head) {
-        ArrowHead.None -> Unit
+        ArrowHead.None -> {
+            Unit
+        }
 
         ArrowHead.Open -> {
             drawLine(color, Offset(leftX, leftY), tip, strokeWidth, cap = StrokeCap.Round)
@@ -1098,8 +1263,8 @@ private inline fun DrawScope.drawArrowHead(
         }
 
         ArrowHead.FilledDiamond, ArrowHead.HollowDiamond -> {
-            val backX = tip.x - dirX * (length * 2f)
-            val backY = tip.y - dirY * (length * 2f)
+            val backX = tip.x - dirX * (length * GraphConstants.MULTIPLIER_TWO)
+            val backY = tip.y - dirY * (length * GraphConstants.MULTIPLIER_TWO)
             path.rewind()
             path.moveTo(tip.x, tip.y)
             path.lineTo(leftX, leftY)

@@ -27,15 +27,16 @@ fun ObsText(
     BasicText(
         modifier = modifier,
         text = text,
-        style = style.merge(
-            color = color,
-            fontSize = fontSize,
-            fontWeight = fontWeight
-        ),
+        style =
+            style.merge(
+                color = color,
+                fontSize = fontSize,
+                fontWeight = fontWeight,
+            ),
         softWrap = softWrap,
         overflow = overflow,
         maxLines = maxLines,
-        minLines = minLines
+        minLines = minLines,
     )
 }
 
@@ -51,20 +52,21 @@ fun ObsText(
     overflow: TextOverflow = TextOverflow.Clip,
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
-    textAlign: TextAlign = TextAlign.Unspecified
+    textAlign: TextAlign = TextAlign.Unspecified,
 ) {
     BasicText(
         modifier = modifier,
         text = text,
-        style = style.merge(
-            color = color,
-            fontSize = fontSize,
-            fontWeight = fontWeight,
-            textAlign = textAlign
-        ),
+        style =
+            style.merge(
+                color = color,
+                fontSize = fontSize,
+                fontWeight = fontWeight,
+                textAlign = textAlign,
+            ),
         softWrap = softWrap,
         overflow = overflow,
         maxLines = maxLines,
-        minLines = minLines
+        minLines = minLines,
     )
 }

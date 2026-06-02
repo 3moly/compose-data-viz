@@ -9,15 +9,18 @@ data class GraphNode<Id, Data>(
     val id: Id,
     val name: String,
     val data: Data,
-    val colorValue: ULong? = null
+    val colorValue: ULong? = null,
 ) {
     companion object {
-        fun getCircleSize(circleRadius: Float, connectionCount: Int, multiplier: Float?): Float {
-            return if (multiplier != null) {
-                circleRadius + multiplier * connectionCount.coerceIn(0, 30)
+        fun getCircleSize(
+            circleRadius: Float,
+            connectionCount: Int,
+            multiplier: Float?,
+        ): Float =
+            if (multiplier != null) {
+                circleRadius + multiplier * connectionCount
             } else {
                 circleRadius
             }
-        }
     }
 }

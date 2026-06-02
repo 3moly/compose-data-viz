@@ -10,24 +10,26 @@ actual fun Canvas.drawVertices2(
     colors: IntArray?,
     texCoords: FloatArray?,
     indices: ShortArray?,
-    shader: androidx.compose.ui.graphics.Shader
+    shader: androidx.compose.ui.graphics.Shader,
 ) {
-    val frameworkPaint = Paint().apply {
-        this.shader = shader
-    }.nativePaint
+    val frameworkPaint =
+        Paint()
+            .apply {
+                this.shader = shader
+            }.nativePaint
 
     nativeCanvas.drawVertices(
         android.graphics.Canvas.VertexMode.TRIANGLES, // Use Android's native VertexMode
         positions.size,
         positions,
-        0,                 // vertOffset
+        0, // vertOffset
         texCoords,
-        0,                 // texOffset
+        0, // texOffset
         colors,
-        0,                 // colorOffset
+        0, // colorOffset
         indices,
-        0,                 // indexOffset
+        0, // indexOffset
         indices?.size ?: 0, // indexCount
-        frameworkPaint
+        frameworkPaint,
     )
 }

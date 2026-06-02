@@ -9,5 +9,5 @@ data class WhiteboardSettings(
     val hitThreshold: Float = 15f,
     val stubLength: Float = 1f,
     val controlPointer: Float = 1f,
-    val maxHit: Float = 100f
+    val maxHit: Float = 100f,
 )

@@ -25,7 +25,7 @@ object UmlShader : Shader {
         runtimeEffect: RuntimeEffect,
         time: Float,
         width: Float,
-        height: Float
+        height: Float,
     ) {
         super.applyUniforms(runtimeEffect, time, width, height)
 
@@ -33,8 +33,9 @@ object UmlShader : Shader {
         runtimeEffect.setFloatUniform("dotColor", floatArrayOf(0.4f, 0.4f, 0.4f, 1f))
         runtimeEffect.setFloatUniform("textColor", floatArrayOf(0.5f, 0.5f, 0.5f, 1f))
 
-        runtimeEffect.setFloatUniform("backgroundColor",
-            floatArrayOf(_color.red, _color.green, _color.blue, _color.alpha)
+        runtimeEffect.setFloatUniform(
+            "backgroundColor",
+            floatArrayOf(_color.red, _color.green, _color.blue, _color.alpha),
         )
         runtimeEffect.setFloatUniform("userOffset", userCoordinates.x, userCoordinates.y)
         runtimeEffect.setFloatUniform("zoom", zoom)

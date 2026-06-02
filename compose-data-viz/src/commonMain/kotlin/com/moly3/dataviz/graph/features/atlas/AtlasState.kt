@@ -12,5 +12,5 @@ data class AtlasState(
     val columns: Int,
     val tileSizePx: Int,
     val isCircular: Boolean = true,
-    val version: Long = Clock.System.now().toEpochMilliseconds()
+    val version: Long = Clock.System.now().toEpochMilliseconds(),
 )

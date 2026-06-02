@@ -2,19 +2,14 @@ package com.moly3.dataviz.whiteboard.func
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.unit.Density
 import com.moly3.dataviz.core.whiteboard.model.Action
-import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
-import com.moly3.dataviz.core.whiteboard.model.BoxSide
 import com.moly3.dataviz.core.whiteboard.model.ConnectionConfig
 import com.moly3.dataviz.core.whiteboard.model.DetectionType
 import com.moly3.dataviz.core.whiteboard.model.DragAction
 import com.moly3.dataviz.core.whiteboard.model.DragType
-import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.PointerDetection
-import com.moly3.dataviz.core.whiteboard.model.ResizeType
-import com.moly3.dataviz.core.whiteboard.model.allSides
-import com.moly3.dataviz.func.lastNotNullOfOrNull
+import com.moly3.dataviz.core.whiteboard.model.Shape
+import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.whiteboard.func.toPointerType
 
 fun <ShapeType : Shape<Id>, Id> calculatePointer(
@@ -33,43 +28,52 @@ fun <ShapeType : Shape<Id>, Id> calculatePointer(
     detectionPercent: Float,
     circleRadius: Float?,
     roundToNearest: Int?,
-    density: Float
+    density: Float,
 ): PointerDetection {
+    val ses =
+        getShapeGlobalDragType(
+            mousePosition = mapCursor,
+            shapes = shapes,
+            action = action,
+            sizeRound = sizeRound,
+            circleRadius = circleRadius,
+        )
 
-    val ses = getShapeGlobalDragType(
-        mousePosition = mapCursor,
-        shapes = shapes,
-        action = action,
-        sizeRound = sizeRound,
-        circleRadius = circleRadius
-    )
-
-    val foundConnection = findConnection(
-        minShapeSize = minShapeSize,
-        shapes = shapes,
-        connections = connections,
-        dragAction = dragAction,
-        cursorPosition = cursorPosition,
-        centerOfScreen = centerOfScreen,
-        userCoordinate = userCoordinate,
-        zoom = zoom,
-        config = connectionConfig,
-        roundToNearest = roundToNearest,
-        density = density
-    )
+    val foundConnection =
+        findConnection(
+            minShapeSize = minShapeSize,
+            shapes = shapes,
+            connections = connections,
+            dragAction = dragAction,
+            cursorPosition = cursorPosition,
+            centerOfScreen = centerOfScreen,
+            userCoordinate = userCoordinate,
+            zoom = zoom,
+            config = connectionConfig,
+            roundToNearest = roundToNearest,
+            density = density,
+        )
 
     return if (ses != null) {
         when (val dragType = ses.first) {
-            is DragType.Connection -> PointerDetection(PointerIcon.Hand, DetectionType.SideBox)
-            is DragType.Resize -> PointerDetection(
-                getPointerIcon(dragType.type.toPointerType()),
-                DetectionType.ResizeBox
-            )
+            is DragType.Connection -> {
+                PointerDetection(PointerIcon.Hand, DetectionType.SideBox)
+            }
 
-            is DragType.ShapeDrag -> PointerDetection(PointerIcon.Hand, DetectionType.SideBox)
+            is DragType.Resize -> {
+                PointerDetection(
+                    getPointerIcon(dragType.type.toPointerType()),
+                    DetectionType.ResizeBox,
+                )
+            }
+
+            is DragType.ShapeDrag -> {
+                PointerDetection(PointerIcon.Hand, DetectionType.SideBox)
+            }
         }
     } else if (foundConnection != null) {
         PointerDetection(PointerIcon.Hand, DetectionType.Arrow)
-    } else
+    } else {
         PointerDetection(PointerIcon.Default, null)
+    }
 }

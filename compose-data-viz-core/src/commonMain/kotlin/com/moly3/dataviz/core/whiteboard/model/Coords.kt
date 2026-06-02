@@ -10,6 +10,4 @@ data class Coords(
     val y: Dp,
 )
 
-fun Coords.toOffset(): Offset {
-    return Offset(x.value, y.value)
-}
+fun Coords.toOffset(): Offset = Offset(x.value, y.value)

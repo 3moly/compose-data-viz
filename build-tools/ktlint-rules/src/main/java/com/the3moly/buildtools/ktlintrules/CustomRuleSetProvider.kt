@@ -1,4 +1,4 @@
-package com.the3moly.build_tools.ktlint_rules
+package com.the3moly.buildtools.ktlintrules
 
 import com.pinterest.ktlint.cli.ruleset.core.api.RuleSetProviderV3
 import com.pinterest.ktlint.rule.engine.core.api.RuleProvider

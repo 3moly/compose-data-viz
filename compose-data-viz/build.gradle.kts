@@ -11,29 +11,28 @@ plugins {
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 kotlin {
     jvmToolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
+        languageVersion.set(
+            JavaLanguageVersion.of(
+                libs.versions.languageVersion
+                    .get()
+                    .toInt(),
+            ),
+        )
     }
     android {
-        namespace = "io.github.moly3.composedataviz"
-        compileSdk = 36
-//    defaultConfig {
-//        minSdk = 21
-//    }
-//    compileOptions {
-//        sourceCompatibility = JavaVersion.VERSION_17
-//        targetCompatibility = JavaVersion.VERSION_17
-//    }
+        namespace = libs.versions.libraryNamespace.get()
+        compileSdk =
+            libs.versions.androidSdk
+                .get()
+                .toInt()
     }
     applyDefaultHierarchyTemplate()
 
-//    androidTarget()
     jvm()
 
-    
     iosArm64()
     iosSimulatorArm64()
 
-    
     macosArm64()
 
     js {
@@ -59,15 +58,13 @@ kotlin {
     }
 }
 
-
-
 mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
 
     coordinates(
-        "io.github.3moly",
-        "compose-data-viz",
-        libs.versions.composedataviz.get()
+        libs.versions.libraryGroup.get(),
+        libs.versions.dataVizArtifact.get(),
+        libs.versions.composedataviz.get(),
     )
 }

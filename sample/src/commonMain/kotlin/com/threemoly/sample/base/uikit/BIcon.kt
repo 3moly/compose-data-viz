@@ -24,36 +24,38 @@ fun BIcon(
     size: Int = 32,
     imageVector: ImageVector,
     isEnabled: Boolean = true,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = modifier
-            .size(size.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isEnabled) Color.Black else Color.Transparent)
-            .let {
-                if (isEnabled)
-                    it.clickable { onClick() }
-                else
-                    it
-            },
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .size(size.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isEnabled) Color.Black else Color.Transparent)
+                .let {
+                    if (isEnabled) {
+                        it.clickable { onClick() }
+                    } else {
+                        it
+                    }
+                },
+        contentAlignment = Alignment.Center,
     ) {
         Image(
             imageVector,
             contentDescription = null,
-            colorFilter = ColorFilter.tint(Color.White)
+            colorFilter = ColorFilter.tint(Color.White),
         )
     }
 }
 
-//@Composable
-//fun ObsIcon(
+// @Composable
+// fun ObsIcon(
 //    modifier: Modifier = Modifier,
 //    painter: Painter,
 //    isEnabled: Boolean = true,
 //    onClick: () -> Unit
-//) {
+// ) {
 //    ThreeDBorderButton(
 //        modifier = modifier
 //            .width(28.dp)
@@ -68,4 +70,4 @@ fun BIcon(
 //            colorFilter = ColorFilter.tint(LocalAppTheme.current.colors.icon.copy(alpha = if (isEnabled) 1f else 0.5f))
 //        )
 //    }
-//}
+// }

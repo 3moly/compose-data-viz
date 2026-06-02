@@ -16,6 +16,6 @@ rootProject.name = "compose-data-viz-lib"
 include(
     ":compose-data-viz",
     ":compose-data-viz-core",
-    ":sample"
+    ":sample",
+    ":build-tools:ktlint-rules"
 )
-include(":build-tools:ktlint-rules")

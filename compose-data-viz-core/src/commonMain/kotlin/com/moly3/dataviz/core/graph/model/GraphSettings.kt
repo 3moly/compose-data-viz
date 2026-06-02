@@ -1,10 +1,8 @@
 package com.moly3.dataviz.core.graph.model
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.ui.text.TextStyle
 import com.moly3.dataviz.core.graph.hull.GroupSettings
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
 
 @Immutable
 @Serializable

@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -14,13 +13,12 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 
 @Composable
 fun <T> rememberPainterFromComposable(
     modifier: Modifier = Modifier,
     captureKey: T? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ): Painter? {
     val graphicsLayer = rememberGraphicsLayer()
     var capturedPainter by remember { mutableStateOf<Painter?>(null) }
@@ -33,18 +31,22 @@ fun <T> rememberPainterFromComposable(
     SubcomposeLayout(modifier = Modifier) { constraints ->
         // Let content size itself freely up to a sane max, instead of being
         // clamped by a tiny parent.
-        val loose = androidx.compose.ui.unit.Constraints()  // fully unbounded
-        val measurables = subcompose("captureSlot") {
-            androidx.compose.foundation.layout.Box(
-                modifier = modifier.drawWithContent {
-                    if (size.width > 0f && size.height > 0f) {
-                        graphicsLayer.record { this@drawWithContent.drawContent() }
-                        if (!layerHasContent) layerHasContent = true
-                        captureTick++
-                    }
-                }
-            ) { content() }
-        }
+        val loose =
+            androidx.compose.ui.unit
+                .Constraints() // fully unbounded
+        val measurables =
+            subcompose("captureSlot") {
+                androidx.compose.foundation.layout.Box(
+                    modifier =
+                        modifier.drawWithContent {
+                            if (size.width > 0f && size.height > 0f) {
+                                graphicsLayer.record { this@drawWithContent.drawContent() }
+                                if (!layerHasContent) layerHasContent = true
+                                captureTick++
+                            }
+                        },
+                ) { content() }
+            }
         val placeables = measurables.map { it.measure(loose) }
         layout(0, 0) {
             placeables.forEach { it.place(IntOffset(-1_000_000, -1_000_000)) }

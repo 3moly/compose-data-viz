@@ -5,5 +5,5 @@ import androidx.compose.ui.geometry.Offset
 data class DragAction<Id>(
     val startMapPosition: Offset,
     val accelerate: Offset,
-    val dragType: DragType<Id>
+    val dragType: DragType<Id>,
 )

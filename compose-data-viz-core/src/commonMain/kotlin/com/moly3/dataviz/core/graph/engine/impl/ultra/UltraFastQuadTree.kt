@@ -3,7 +3,9 @@ package com.moly3.dataviz.core.graph.engine.impl.ultra
 import kotlin.math.max
 import kotlin.math.sqrt
 
-class UltraFastQuadTree(initialCapacity: Int = 1024) {
+class UltraFastQuadTree(
+    initialCapacity: Int = 1024,
+) {
     var nodeX = FloatArray(initialCapacity)
     var nodeY = FloatArray(initialCapacity)
     var nodeHalf = FloatArray(initialCapacity)
@@ -42,7 +44,11 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
     }
 
     // In UltraFastQuadTree, optimize for speed:
-    fun build(positionsX: FloatArray, positionsY: FloatArray, n: Int) {
+    fun build(
+        positionsX: FloatArray,
+        positionsY: FloatArray,
+        n: Int,
+    ) {
         count = 0
         if (n == 0) return
 
@@ -50,11 +56,13 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         posYRef = positionsY
 
         // More aggressive capacity estimation for complex graphs
-        ensureCapacity(n * 5 + 32)  // Increased buffer
+        ensureCapacity(n * CAPACITY_MULTIPLIER + BASE_CAPACITY_BUFFER) // Increased buffer
 
         // Use parallel min/max finding for large datasets
-        var minX = positionsX[0]; var maxX = positionsX[0]
-        var minY = positionsY[0]; var maxY = positionsY[0]
+        var minX = positionsX[0]
+        var maxX = positionsX[0]
+        var minY = positionsY[0]
+        var maxY = positionsY[0]
 
         // Vectorized-like loop for bounds finding
         for (i in 1 until n step 2) {
@@ -90,16 +98,32 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         }
     }
 
-    private fun newNode(cx: Float, cy: Float, half: Float): Int {
+    private fun newNode(
+        cx: Float,
+        cy: Float,
+        half: Float,
+    ): Int {
         ensureCapacity(count + 1)
         val i = count++
-        nodeX[i] = cx; nodeY[i] = cy; nodeHalf[i] = half
-        nodeMass[i] = 0f; nodeComX[i] = 0f; nodeComY[i] = 0f
-        firstChild[i] = -1; nodeBody[i] = -1
+        nodeX[i] = cx
+        nodeY[i] = cy
+        nodeHalf[i] = half
+        nodeMass[i] = 0f
+        nodeComX[i] = 0f
+        nodeComY[i] = 0f
+        firstChild[i] = -1
+        nodeBody[i] = -1
         return i
     }
 
-    private fun insert(nodeIdx: Int, bodyIdx: Int, x: Float, y: Float, depth: Int, updateMass: Boolean = true) {
+    private fun insert(
+        nodeIdx: Int,
+        bodyIdx: Int,
+        x: Float,
+        y: Float,
+        depth: Int,
+        updateMass: Boolean = true,
+    ) {
         if (updateMass) {
             val mass = nodeMass[nodeIdx]
             val newMass = mass + 1f
@@ -117,11 +141,12 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
         }
 
         if (fc == -1 && existingBody != -1) {
-            if (depth >= 16) return
+            if (depth >= MAX_TREE_DEPTH) return
 
             val newHalf = nodeHalf[nodeIdx] * 0.5f
-            val cx = nodeX[nodeIdx]; val cy = nodeY[nodeIdx]
-            ensureCapacity(count + 4)
+            val cx = nodeX[nodeIdx]
+            val cy = nodeY[nodeIdx]
+            ensureCapacity(count + QUAD_CHILDREN_COUNT)
             val first = count
             newNode(cx - newHalf, cy - newHalf, newHalf)
             newNode(cx + newHalf, cy - newHalf, newHalf)
@@ -129,7 +154,8 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
             newNode(cx + newHalf, cy + newHalf, newHalf)
             firstChild[nodeIdx] = first
 
-            val exX = posXRef!![existingBody]; val exY = posYRef!![existingBody]
+            val exX = posXRef!![existingBody]
+            val exY = posYRef!![existingBody]
             val exChild = first + (if (exX >= cx) 1 else 0) + (if (exY >= cy) 2 else 0)
             insert(exChild, existingBody, exX, exY, depth + 1, updateMass = false)
             nodeBody[nodeIdx] = -1
@@ -147,17 +173,24 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
      * push deeper. 512 is safer.
      */
     fun computeRepulsionIterative(
-        x: Float, y: Float, bodyIdx: Int,
-        repelStrength: Float, softening: Float,
-        thetaSq: Float, stack: IntArray, outForce: FloatArray
+        x: Float,
+        y: Float,
+        bodyIdx: Int,
+        repelStrength: Float,
+        softening: Float,
+        thetaSq: Float,
+        stack: IntArray,
+        outForce: FloatArray,
     ) {
-        outForce[0] = 0f; outForce[1] = 0f
+        outForce[0] = 0f
+        outForce[1] = 0f
         if (count == 0) return
 
         var stackSize = 0
         stack[stackSize++] = rootIndex
 
-        var fx = 0f; var fy = 0f
+        var fx = 0f
+        var fy = 0f
         val stackCap = stack.size
 
         while (stackSize > 0) {
@@ -167,7 +200,7 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
 
             val dx = nodeComX[nodeIdx] - x
             val dy = nodeComY[nodeIdx] - y
-            val distSq = max(dx * dx + dy * dy, 0.01f)
+            val distSq = max(dx * dx + dy * dy, MIN_DIST_SQ)
             val size = nodeHalf[nodeIdx] * 2f
 
             val fc = firstChild[nodeIdx]
@@ -194,14 +227,24 @@ class UltraFastQuadTree(initialCapacity: Int = 1024) {
                 fy -= dy * invDist * mag
             } else {
                 // Bounds-check stack growth (silently skip rather than crash)
-                if (stackSize + 4 <= stackCap) {
+                if (stackSize + QUAD_CHILDREN_COUNT <= stackCap) {
                     stack[stackSize++] = fc
                     stack[stackSize++] = fc + 1
                     stack[stackSize++] = fc + 2
-                    stack[stackSize++] = fc + 3
+                    stack[stackSize++] = fc + LAST_CHILD_OFFSET
                 }
             }
         }
-        outForce[0] = fx; outForce[1] = fy
+        outForce[0] = fx
+        outForce[1] = fy
+    }
+
+    companion object {
+        private const val CAPACITY_MULTIPLIER = 5
+        private const val BASE_CAPACITY_BUFFER = 32
+        private const val MAX_TREE_DEPTH = 16
+        private const val QUAD_CHILDREN_COUNT = 4
+        private const val LAST_CHILD_OFFSET = 3
+        private const val MIN_DIST_SQ = 0.01f
     }
 }

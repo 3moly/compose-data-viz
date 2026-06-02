@@ -8,7 +8,6 @@ data class CustomShape(
     override val id: Long,
     override val position: Offset,
     override val size: Offset,
-
     val backgroundColor: Color?,
-    val data: ShapeData
+    val data: ShapeData,
 ) : Shape<Long>

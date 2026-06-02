@@ -18,7 +18,6 @@ data class GraphSelectionSettings(
     val scaleAnimationMs: Int = 160,
     /** Duration in ms for the "selection-active" amount (drives edge dimming). */
     val selectionActiveAnimationMs: Int = 180,
-
     /** Alpha applied to unrelated nodes while a selection is active. */
     val fadedNodeAlpha: Float = 0.15f,
     /** Alpha applied to unrelated edges while a selection is active. */
@@ -27,7 +26,6 @@ data class GraphSelectionSettings(
     val selectedTextAlpha: Float = 1.0f,
     /** Text alpha for nodes unrelated to the active selection. */
     val unrelatedTextAlpha: Float = 0.3f,
-
     /** Per-second rate for fade-in animations. */
     val fadeInRatePerSec: Float = 6.0f,
     /** Per-second rate for fade-out animations. */

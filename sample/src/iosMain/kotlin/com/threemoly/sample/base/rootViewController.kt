@@ -4,8 +4,7 @@ import androidx.compose.ui.window.ComposeUIViewController
 import com.threemoly.sample.ExampleApp
 import platform.UIKit.UIViewController
 
-fun RootViewController(): UIViewController {
-    return ComposeUIViewController {
+fun rootViewController(): UIViewController =
+    ComposeUIViewController {
         ExampleApp()
     }
-}

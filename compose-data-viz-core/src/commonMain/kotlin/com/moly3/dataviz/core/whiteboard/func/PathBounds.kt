@@ -7,7 +7,7 @@ import com.moly3.dataviz.core.whiteboard.model.StylusPath
 data class PathBounds(
     val size: Size,
     val localCenter: Offset,
-    val globalPosition: Offset
+    val globalPosition: Offset,
 )
 
 fun StylusPath.calculateBounds(): PathBounds {

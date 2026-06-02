@@ -7,21 +7,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-fun SwitchOption(modifier: Modifier = Modifier, text: String, value: Boolean, onClick: () -> Unit) {
+fun SwitchOption(
+    modifier: Modifier = Modifier,
+    text: String,
+    value: Boolean,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         ObsText(
             text = text,
             modifier = Modifier.weight(1f),
-            softWrap = false
+            softWrap = false,
         )
         ObsSwitch(
             modifier = Modifier,
             checked = value,
             onCheckedChange = {
                 onClick()
-            })
+            },
+        )
     }
 }

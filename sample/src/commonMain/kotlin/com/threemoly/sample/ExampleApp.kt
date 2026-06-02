@@ -19,18 +19,18 @@ import coil3.compose.AsyncImage
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.request.crossfade
 import com.moly3.dataviz.core.graph.engine.impl.ultra.UltraFastEngine
-import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.BoxSide
+import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.threemoly.sample.base.Page
-import com.threemoly.sample.base.uikit.BottomNavigationBar
-import com.threemoly.sample.base.uikit.NavigationItem
 import com.threemoly.sample.base.block.CustomShape
 import com.threemoly.sample.base.block.ShapeData
 import com.threemoly.sample.base.func.generateRandomGraphState
 import com.threemoly.sample.base.func.openUrl
 import com.threemoly.sample.base.graph.ObsidianGraphData
 import com.threemoly.sample.base.io
+import com.threemoly.sample.base.uikit.BottomNavigationBar
+import com.threemoly.sample.base.uikit.NavigationItem
 import com.threemoly.sample.base.uikit.icons.GithubSvgrepoCom
 import com.threemoly.sample.base.uikit.icons.Scale
 import com.threemoly.sample.base.uikit.icons.Share
@@ -44,90 +44,96 @@ const val imgGraphPage = "ImgGraph"
 fun ExampleApp() {
     val engine = rememberSaveable("huh") { UltraFastEngine<String, ObsidianGraphData>() }
     setSingletonImageLoaderFactory { context ->
-        ImageLoader.Builder(context)
-
+        ImageLoader
+            .Builder(context)
             .crossfade(true)
             .build()
     }
     val nodeCountState = remember { mutableStateOf(10_0f) }
     val density = LocalDensity.current
-    val graphState = remember(density) {
-        mutableStateOf(
-            generateRandomGraphState(
-                nodeCount = nodeCountState.value.toInt(),
-                maxBranchingFactor = 10
-            ).copy(zoom = density.density)
-        )
-    }
+    val graphState =
+        remember(density) {
+            mutableStateOf(
+                generateRandomGraphState(
+                    nodeCount = nodeCountState.value.toInt(),
+                    maxBranchingFactor = 10,
+                ).copy(zoom = density.density),
+            )
+        }
     LaunchedEffect(nodeCountState.value) {
         launch(io) {
-            val newState = generateRandomGraphState(
-                nodeCount = nodeCountState.value.toInt(),
-                maxBranchingFactor = 3
-            )
-            graphState.value = graphState.value.copy(
-                graphNodes = newState.graphNodes,
-                connections = newState.connections
-            )
+            val newState =
+                generateRandomGraphState(
+                    nodeCount = nodeCountState.value.toInt(),
+                    maxBranchingFactor = 3,
+                )
+            graphState.value =
+                graphState.value.copy(
+                    graphNodes = newState.graphNodes,
+                    connections = newState.connections,
+                )
         }
     }
 
-    val shapes = remember {
-        mutableStateListOf(
-            CustomShape(
-                id = 1L,
-                backgroundColor = Color.Red,
-                position = Offset(-200f, -100f),
-                size = Offset(250f, 100f),
-                data = ShapeData.Text("click, drag, resize")
-            ),
-            CustomShape(
-                id = 2L,
-                backgroundColor = Color.Cyan,
-                position = Offset(150f, -200f),
-                size = Offset(150f, 250f),
-                data = ShapeData.ImageUrl(catUrl)
-            ),
-            CustomShape(
-                id = 3L,
-                backgroundColor = Color.Black,
-                position = Offset(0f, 100f),
-                size = Offset(250f, 70f),
-                data = ShapeData.Text("double click on the picture")
-            ),
-        )
-    }
-    val connections = remember {
-        mutableStateListOf(
-            ShapeConnection(
-                id = 0L,
-                fromSide = BoxSide.RIGHT,
-                toSide = BoxSide.LEFT,
-                fromBoxId = 1L,
-                toBoxId = 2L,
-                color = Color.Magenta
-            ),
-            ShapeConnection(
-                id = 1L,
-                fromSide = BoxSide.TOP,
-                toSide = BoxSide.BOTTOM,
-                fromBoxId = 2L,
-                toBoxId = 1L,
-                color = Color.Green
-            ),
-            ShapeConnection(
-                id = 2L,
-                fromSide = BoxSide.LEFT,
-                toSide = BoxSide.RIGHT,
-                fromBoxId = 3L,
-                toBoxId = 2L,
-                color = Color.Yellow
+    val shapes =
+        remember {
+            mutableStateListOf(
+                CustomShape(
+                    id = 1L,
+                    backgroundColor = Color.Red,
+                    position = Offset(-200f, -100f),
+                    size = Offset(250f, 100f),
+                    data = ShapeData.Text("click, drag, resize"),
+                ),
+                CustomShape(
+                    id = 2L,
+                    backgroundColor = Color.Cyan,
+                    position = Offset(150f, -200f),
+                    size = Offset(150f, 250f),
+                    data = ShapeData.ImageUrl(catUrl),
+                ),
+                CustomShape(
+                    id = 3L,
+                    backgroundColor = Color.Black,
+                    position = Offset(0f, 100f),
+                    size = Offset(250f, 70f),
+                    data = ShapeData.Text("double click on the picture"),
+                ),
             )
-        )
-    }
-    val paths = remember<SnapshotStateList<StylusPath>> {
-        mutableStateListOf()
-    }
+        }
+    val connections =
+        remember {
+            mutableStateListOf(
+                ShapeConnection(
+                    id = 0L,
+                    fromSide = BoxSide.RIGHT,
+                    toSide = BoxSide.LEFT,
+                    fromBoxId = 1L,
+                    toBoxId = 2L,
+                    color = Color.Magenta,
+                ),
+                ShapeConnection(
+                    id = 1L,
+                    fromSide = BoxSide.TOP,
+                    toSide = BoxSide.BOTTOM,
+                    fromBoxId = 2L,
+                    toBoxId = 1L,
+                    color = Color.Green,
+                ),
+                ShapeConnection(
+                    id = 2L,
+                    fromSide = BoxSide.LEFT,
+                    toSide = BoxSide.RIGHT,
+                    fromBoxId = 3L,
+                    toBoxId = 2L,
+                    color = Color.Yellow,
+                ),
+            )
+        }
+    val paths =
+        remember<SnapshotStateList<StylusPath>> {
+            mutableStateListOf()
+        }
     MaterialTheme {
         val pages =
             remember {
@@ -135,18 +141,18 @@ fun ExampleApp() {
                     Page(
                         key = canvasPage,
                         text = "Canvas",
-                        icon = Scale
+                        icon = Scale,
                     ),
                     Page(
                         key = graphPage,
                         text = "Graph",
-                        icon = Share
+                        icon = Share,
                     ),
                     Page(
                         key = imgGraphPage,
                         text = "ImgGraph",
-                        icon = Share
-                    )
+                        icon = Share,
+                    ),
                 )
             }
         var selectedPage by remember(pages) { mutableStateOf(pages.first()) }
@@ -160,12 +166,13 @@ fun ExampleApp() {
                     if (isMobile) {
                         BottomNavigationBar(pages, selectedPage, onSelect = { selectedPage = it })
                     }
-                }
+                },
             ) { innerPadding ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
                 ) {
                     if (!isMobile) {
                         NavigationRail(
@@ -175,10 +182,10 @@ fun ExampleApp() {
                                         "3moly/\ncompose-data-diz\nSamples",
                                         style = MaterialTheme.typography.labelSmall,
                                         modifier = Modifier.padding(16.dp),
-                                        textAlign = TextAlign.Center
+                                        textAlign = TextAlign.Center,
                                     )
                                 }
-                            }
+                            },
                         ) {
                             for (page in pages) {
                                 NavigationItem(page, selectedPage) { selectedPage = it }
@@ -196,29 +203,35 @@ fun ExampleApp() {
                                         modifier = Modifier.size(24.dp),
                                     )
                                 },
-                                label = { Text("Github") }
+                                label = { Text("Github") },
                             )
                         }
                     }
                     Box(
                         modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         when (selectedPage.key) {
-                            canvasPage -> CanvasSample(
-                                shapes = shapes,
-                                connections = connections,
-                                paths = paths
-                            )
+                            canvasPage -> {
+                                CanvasSample(
+                                    shapes = shapes,
+                                    connections = connections,
+                                    paths = paths,
+                                )
+                            }
 
-                            graphPage -> GraphSample(
-                                engine = engine,
-                                state = graphState,
-                                nodeCountState = nodeCountState
-                            )
+                            graphPage -> {
+                                GraphSample(
+                                    engine = engine,
+                                    state = graphState,
+                                    nodeCountState = nodeCountState,
+                                )
+                            }
 
-                            imgGraphPage -> Box(Modifier.fillMaxSize().background(Color.White)) {
-                                GraphSampleWithComposer(graphState)
+                            imgGraphPage -> {
+                                Box(Modifier.fillMaxSize().background(Color.White)) {
+                                    GraphSampleWithComposer(graphState)
+                                }
                             }
                         }
                     }

@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.dp
 @Stable
 fun Modifier.absoluteOffset(coords: Offset) =
     this then
-            absoluteOffset(
-                x = coords.x.dp,
-                y = coords.y.dp
-            )
+        absoluteOffset(
+            x = coords.x.dp,
+            y = coords.y.dp,
+        )

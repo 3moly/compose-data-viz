@@ -16,7 +16,7 @@ import kotlin.math.sqrt
 fun createSvgAtlas(
     painters: List<Painter>,
     density: Density,
-    tileSizePx: Int = 128
+    tileSizePx: Int = 128,
 ): TextureAtlas {
     var ppaineters = painters
     if (ppaineters.isEmpty()) {
@@ -35,7 +35,7 @@ fun createSvgAtlas(
         density = density,
         layoutDirection = LayoutDirection.Ltr,
         canvas = canvas,
-        size = Size(atlasWidth.toFloat(), atlasHeight.toFloat())
+        size = Size(atlasWidth.toFloat(), atlasHeight.toFloat()),
     ) {
         ppaineters.forEachIndexed { index, painter ->
             val col = index % columns

@@ -42,18 +42,26 @@ import kotlin.time.Clock
 /** How a tier picks which nodes to include. */
 sealed interface TierSelection {
     data object All : TierSelection
+
     data object AllVisible : TierSelection
-    data class TopByDistance(val count: Int) : TierSelection
+
+    data class TopByDistance(
+        val count: Int,
+    ) : TierSelection
 }
 
 typealias AtlasPainterLoader<Id, Data> = suspend (GraphNode<Id, Data>) -> Painter?
 
 @Stable
 class AtlasComposerHandle<Id, Data> internal constructor(
-    private val state: AtlasComposerState<Id, Data>
+    private val state: AtlasComposerState<Id, Data>,
 ) {
     val atlasLayers: AtlasLayers get() = state.atlasLayers
-    fun resolveIconKey(nodeId: Id, data: Data?): String? = state.resolveIconKey(nodeId, data)
+
+    fun resolveIconKey(
+        nodeId: Id,
+        data: Data?,
+    ): String? = state.resolveIconKey(nodeId, data)
 }
 
 // =====================================================================
@@ -81,10 +89,11 @@ class MovementTracker internal constructor(
     fun trigger() {
         _isMoving.value = true
         idleJob?.cancel()
-        idleJob = scope.launch {
-            delay(idleMillis)
-            _isMoving.value = false
-        }
+        idleJob =
+            scope.launch {
+                delay(idleMillis)
+                _isMoving.value = false
+            }
     }
 
     fun stopImmediately() {
@@ -154,8 +163,12 @@ fun <Id, Data> rememberAtlasComposer(
         var lastComputeTime = 0L
         snapshotFlow {
             VisibilityInputs(
-                state.userPosition, state.zoom, state.viewport,
-                state.coordinates, state.nodes.size, state.isMoving
+                state.userPosition,
+                state.zoom,
+                state.viewport,
+                state.coordinates,
+                state.nodes.size,
+                state.isMoving,
             )
         }.collect { inputs ->
             val now = Clock.System.now().toEpochMilliseconds()
@@ -189,8 +202,9 @@ fun <Id, Data> rememberAtlasComposer(
 // =====================================================================
 
 @Stable
-internal class AtlasComposerState<Id, Data>(private val density: Density) {
-
+internal class AtlasComposerState<Id, Data>(
+    private val density: Density,
+) {
     var nodes by mutableStateOf<List<GraphNode<Id, Data>>>(emptyList())
     var isMoving by mutableStateOf(false)
     var tiers by mutableStateOf<List<AtlasTier>>(emptyList())
@@ -217,8 +231,11 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
 
     private fun classifyNode(node: GraphNode<Id, Data>): NodeIconKind {
         val key = staticIconKey(node.id, node.data) ?: return NodeIconKind.ColorOnly
-        return if (staticIcons.containsKey(key)) NodeIconKind.Static(key)
-        else NodeIconKind.Composable
+        return if (staticIcons.containsKey(key)) {
+            NodeIconKind.Static(key)
+        } else {
+            NodeIconKind.Composable
+        }
     }
 
     fun recomputeVisibility() {
@@ -240,17 +257,26 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         }
         scored.sortBy { it.second }
 
-        val ids: ImmutableList<Id> = if (scored.isEmpty() && nodes.isNotEmpty()) {
-            val maxFallback = (tiers.maxOfOrNull {
-                when (val sel = it.selection) {
-                    TierSelection.All, TierSelection.AllVisible -> 60
-                    is TierSelection.TopByDistance -> sel.count
-                }
-            } ?: 60).coerceAtLeast(1)
-            nodes.asSequence().take(maxFallback).map { it.id }.toList().toImmutableList()
-        } else {
-            scored.map { it.first }.toImmutableList()
-        }
+        val ids: ImmutableList<Id> =
+            if (scored.isEmpty() && nodes.isNotEmpty()) {
+                val maxFallback =
+                    (
+                        tiers.maxOfOrNull {
+                            when (val sel = it.selection) {
+                                TierSelection.All, TierSelection.AllVisible -> 60
+                                is TierSelection.TopByDistance -> sel.count
+                            }
+                        } ?: 60
+                    ).coerceAtLeast(1)
+                nodes
+                    .asSequence()
+                    .take(maxFallback)
+                    .map { it.id }
+                    .toList()
+                    .toImmutableList()
+            } else {
+                scored.map { it.first }.toImmutableList()
+            }
 
         if (ids != visibleNodeIds) visibleNodeIds = ids
 
@@ -266,11 +292,12 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         }
 
         val needAllNodes = tiers.any { it.selection is TierSelection.All }
-        val keep: HashSet<Id> = if (needAllNodes) {
-            HashSet<Id>(nodes.size).also { set -> nodes.forEach { set.add(it.id) } }
-        } else {
-            ids.toHashSet()
-        }
+        val keep: HashSet<Id> =
+            if (needAllNodes) {
+                HashSet<Id>(nodes.size).also { set -> nodes.forEach { set.add(it.id) } }
+            } else {
+                ids.toHashSet()
+            }
         loadedPainters.keys.retainAll(keep)
     }
 
@@ -298,20 +325,28 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         return out.toImmutableList()
     }
 
-    suspend fun ensurePaintersLoaded(ids: List<Id>, scope: CoroutineScope) {
+    suspend fun ensurePaintersLoaded(
+        ids: List<Id>,
+        scope: CoroutineScope,
+    ) {
         val ldr = loader ?: return
         val nodesById = nodes.associateBy { it.id }
         for (id in ids) {
             if (loadedPainters.containsKey(id)) continue
             if (!inFlight.add(id)) continue
-            val node = nodesById[id] ?: run { inFlight.remove(id); continue }
-            scope.launch {
-                val painter: Painter? = try {
-                    loadSemaphore.withPermit { ldr(node) }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    null
+            val node =
+                nodesById[id] ?: run {
+                    inFlight.remove(id)
+                    continue
                 }
+            scope.launch {
+                val painter: Painter? =
+                    try {
+                        loadSemaphore.withPermit { ldr(node) }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        null
+                    }
                 loadedPainters[id] = painter
                 inFlight.remove(id)
             }
@@ -328,13 +363,16 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
 
     fun atlasBuildInputs(): AtlasBuildInputs<Id> {
         val hasAllTier = tiers.any { it.selection is TierSelection.All }
-        val allIds: List<Id> = if (hasAllTier) {
-            val out = ArrayList<Id>(nodes.size)
-            for (node in nodes) {
-                if (classifyNode(node) is NodeIconKind.Composable) out += node.id
+        val allIds: List<Id> =
+            if (hasAllTier) {
+                val out = ArrayList<Id>(nodes.size)
+                for (node in nodes) {
+                    if (classifyNode(node) is NodeIconKind.Composable) out += node.id
+                }
+                out
+            } else {
+                emptyList()
             }
-            out
-        } else emptyList()
         return AtlasBuildInputs(
             tiers = tiers,
             composableVisible = composableVisibleByDistance,
@@ -348,11 +386,12 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         for (tier in inputs.tiers) {
             if (inputs.isMoving && tier.freezeOnMove) continue
 
-            val candidates: List<Id> = when (val sel = tier.selection) {
-                TierSelection.All -> inputs.nodeIdsForAll
-                TierSelection.AllVisible -> inputs.composableVisible
-                is TierSelection.TopByDistance -> inputs.composableVisible.take(sel.count)
-            }
+            val candidates: List<Id> =
+                when (val sel = tier.selection) {
+                    TierSelection.All -> inputs.nodeIdsForAll
+                    TierSelection.AllVisible -> inputs.composableVisible
+                    is TierSelection.TopByDistance -> inputs.composableVisible.take(sel.count)
+                }
 
             val selected = ArrayList<Id>(candidates.size)
             val painters = ArrayList<Painter>(candidates.size)
@@ -367,28 +406,30 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
                 continue
             }
 
-            val signature = TierAtlasSignature(
-                ids = selected.toList(),
-                painterIdentities = painters.toList(),
-                tileSizePx = tier.tileSizePx,
-                isCircular = tier.isCircular,
-            )
+            val signature =
+                TierAtlasSignature(
+                    ids = selected.toList(),
+                    painterIdentities = painters.toList(),
+                    tileSizePx = tier.tileSizePx,
+                    isCircular = tier.isCircular,
+                )
 
             if (tierBuildSignatures[tier.name] == signature) continue
 
-            val atlas = withContext(Dispatchers.Default) {
-                val result = createSvgAtlas(painters, density, tier.tileSizePx)
-                val indexes = HashMap<String, Int>(selected.size)
-                for ((i, id) in selected.withIndex()) indexes[nodeKey(id)] = i
-                AtlasState(
-                    bitmap = result.imageBitmap,
-                    indexMap = indexes.toPersistentMap(),
-                    columns = result.columns,
-                    tileSizePx = result.tileSizePx,
-                    isCircular = tier.isCircular,
-                    version = Clock.System.now().toEpochMilliseconds(),
-                )
-            }
+            val atlas =
+                withContext(Dispatchers.Default) {
+                    val result = createSvgAtlas(painters, density, tier.tileSizePx)
+                    val indexes = HashMap<String, Int>(selected.size)
+                    for ((i, id) in selected.withIndex()) indexes[nodeKey(id)] = i
+                    AtlasState(
+                        bitmap = result.imageBitmap,
+                        indexMap = indexes.toPersistentMap(),
+                        columns = result.columns,
+                        tileSizePx = result.tileSizePx,
+                        isCircular = tier.isCircular,
+                        version = Clock.System.now().toEpochMilliseconds(),
+                    )
+                }
 
             tierAtlases[tier.name] = atlas
             tierBuildSignatures[tier.name] = signature
@@ -412,14 +453,15 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
         val indexes = keys.mapIndexed { i, k -> k to i }.toMap()
         val tileSize = tiers.maxOfOrNull { it.tileSizePx } ?: 64
         val result = createSvgAtlas(painters, density, tileSize)
-        val atlas = AtlasState(
-            bitmap = result.imageBitmap,
-            indexMap = indexes.toPersistentMap(),
-            columns = result.columns,
-            tileSizePx = result.tileSizePx,
-            isCircular = true,
-            version = 0L,
-        )
+        val atlas =
+            AtlasState(
+                bitmap = result.imageBitmap,
+                indexMap = indexes.toPersistentMap(),
+                columns = result.columns,
+                tileSizePx = result.tileSizePx,
+                isCircular = true,
+                version = 0L,
+            )
         cachedStaticAtlas = staticIcons to atlas
         return atlas
     }
@@ -427,14 +469,18 @@ internal class AtlasComposerState<Id, Data>(private val density: Density) {
     val atlasLayers: AtlasLayers by derivedStateOf {
         val tierLayers = tiers.mapNotNull { tierAtlases[it.name] }
         val staticLayer = buildStaticAtlas()
-        val all = buildList {
-            addAll(tierLayers)
-            staticLayer?.let { add(it) }
-        }
+        val all =
+            buildList {
+                addAll(tierLayers)
+                staticLayer?.let { add(it) }
+            }
         if (all.isEmpty()) AtlasLayers.EMPTY else AtlasLayers(all.toPersistentList())
     }
 
-    fun resolveIconKey(nodeId: Id, data: Data?): String? {
+    fun resolveIconKey(
+        nodeId: Id,
+        data: Data?,
+    ): String? {
         val userKey = staticIconKey(nodeId, data) ?: return null
         if (staticIcons.containsKey(userKey)) {
             return if (atlasLayers.resolve(userKey) != null) userKey else null
@@ -455,7 +501,11 @@ private data class TierAtlasSignature(
 
 private sealed interface NodeIconKind {
     data object ColorOnly : NodeIconKind
-    data class Static(val key: String) : NodeIconKind
+
+    data class Static(
+        val key: String,
+    ) : NodeIconKind
+
     data object Composable : NodeIconKind
 }
 

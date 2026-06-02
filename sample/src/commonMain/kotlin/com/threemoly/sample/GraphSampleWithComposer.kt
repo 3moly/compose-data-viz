@@ -21,14 +21,16 @@ fun GraphSampleWithComposer(state: MutableState<GraphState>) {
 
     val folder = rememberVectorPainter(Icons.Default.Folder)
     val tag = rememberVectorPainter(Icons.Default.Tag)
-    val staticIcons = remember(folder, tag) {
-        persistentMapOf("folder" to folder, "tag" to tag)
-    }
+    val staticIcons =
+        remember(folder, tag) {
+            persistentMapOf("folder" to folder, "tag" to tag)
+        }
 
     // Heuristic: Are physics active?
-    val isGraphMoving = remember(s.velocities) {
-        s.velocities.values.any { it.getDistance() > 0.5f }
-    }
+    val isGraphMoving =
+        remember(s.velocities) {
+            s.velocities.values.any { it.getDistance() > 0.5f }
+        }
 
 //    val atlasHandle = rememberAtlasComposer(
 //        nodes = s.graphNodes,

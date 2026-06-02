@@ -73,9 +73,8 @@ private const val KEY_CAT = "icon_cat"
 fun GraphSample(
     engine: UltraFastEngine<String, ObsidianGraphData>,
     state: MutableState<GraphState>,
-    nodeCountState: MutableState<Float>
+    nodeCountState: MutableState<Float>,
 ) {
-
     val s = state.value
     val scale: Painter = rememberVectorPainter(Scale)
     val share: Painter = rememberVectorPainter(Share)
@@ -101,91 +100,104 @@ fun GraphSample(
     LaunchedEffect(s.velocities) { if (s.velocities.isNotEmpty()) movement.trigger() }
     LaunchedEffect(s.zoom) { movement.trigger() }
     LaunchedEffect(s.graphUserPosition) { movement.trigger() }
-    val handle = rememberAtlasComposer(
-        nodes = state.value.graphNodes,
-        tiers = listOf(
-            AtlasTier(
-                name = "hq",
-                tileSizePx = 256,
-                selection = TierSelection.TopByDistance(3),
-                isCircular = false,
-                freezeOnMove = true,   // <-- was false
-            ),
-            AtlasTier(
-                name = "lq",
-                tileSizePx = 48,
-                selection = TierSelection.All,
-                isCircular = false,
-                freezeOnMove = false,  // LQ can keep updating; it's cheap
-            )
-        ),
-
-        viewport = viewport,
-        userPosition = s.graphUserPosition,
-        zoom = s.zoom,
-        coordinates = s.coordinates,
-        loader = loader,
-        loaderKey = state.value.graphNodes.size, // or any token that should invalidate
-        staticIcons = persistentMapOf(
-            KEY_FOLDER to scale,
-            KEY_SHARE to share,
-            KEY_CAT to catPainter
-        ),
-        staticIconKey = { id, data -> /* return KEY_FOLDER / null / etc */ null },
-        isMoving = movement.isMoving
-    )
+    val handle =
+        rememberAtlasComposer(
+            nodes = state.value.graphNodes,
+            tiers =
+                listOf(
+                    AtlasTier(
+                        name = "hq",
+                        tileSizePx = 256,
+                        selection = TierSelection.TopByDistance(3),
+                        isCircular = false,
+                        freezeOnMove = true, // <-- was false
+                    ),
+                    AtlasTier(
+                        name = "lq",
+                        tileSizePx = 48,
+                        selection = TierSelection.All,
+                        isCircular = false,
+                        freezeOnMove = false, // LQ can keep updating; it's cheap
+                    ),
+                ),
+            viewport = viewport,
+            userPosition = s.graphUserPosition,
+            zoom = s.zoom,
+            coordinates = s.coordinates,
+            loader = loader,
+            loaderKey = state.value.graphNodes.size, // or any token that should invalidate
+            staticIcons =
+                persistentMapOf(
+                    KEY_FOLDER to scale,
+                    KEY_SHARE to share,
+                    KEY_CAT to catPainter,
+                ),
+            staticIconKey = { id, data ->
+                // return KEY_FOLDER / null / etc
+                null
+            },
+            isMoving = movement.isMoving,
+        )
 // 1. Add a seed state to force group regeneration
     var groupSeed by remember { mutableIntStateOf(0) }
 
 // Stable group identities — these never change on rename.
-    val groupIds = remember {
-        listOf(GroupId("collection"), GroupId("row"), GroupId("file"), GroupId("tag"))
-    }
+    val groupIds =
+        remember {
+            listOf(GroupId("collection"), GroupId("row"), GroupId("file"), GroupId("tag"))
+        }
 // Editable display names, keyed by stable GroupId. Renaming touches ONLY this.
-    val groupNames = remember {
-        mutableStateMapOf(
-            GroupId("collection") to "Collection",
-            GroupId("row") to "Row",
-            GroupId("file") to "File",
-            GroupId("tag") to "Tag",
-        )
-    }
-    val groupColors = remember {
-        mapOf(
-            GroupId("collection") to Color.Black,
-            GroupId("row") to Color.Magenta,
-            GroupId("file") to Color.Blue,
-            GroupId("tag") to Color.Cyan,
-        )
-    }
-    val groupModel = remember(s.graphNodes, groupSeed, groupNames.toMap()) {
-        val defs = groupIds.map { id ->
-            GroupHullDef(
-                id = id,
-                name = groupNames[id] ?: id.raw,
-                color = groupColors[id] ?: Color.Red,
+    val groupNames =
+        remember {
+            mutableStateMapOf(
+                GroupId("collection") to "Collection",
+                GroupId("row") to "Row",
+                GroupId("file") to "File",
+                GroupId("tag") to "Tag",
             )
         }
+    val groupColors =
+        remember {
+            mapOf(
+                GroupId("collection") to Color.Black,
+                GroupId("row") to Color.Magenta,
+                GroupId("file") to Color.Blue,
+                GroupId("tag") to Color.Cyan,
+            )
+        }
+    val groupModel =
+        remember(s.graphNodes, groupSeed, groupNames.toMap()) {
+            val defs =
+                groupIds.map { id ->
+                    GroupHullDef(
+                        id = id,
+                        name = groupNames[id] ?: id.raw,
+                        color = groupColors[id] ?: Color.Red,
+                    )
+                }
 
-        val memberships = s.graphNodes.mapNotNull { node ->
-            // Seed BOTH the inclusion check AND the group pick from the node id +
-            // groupSeed, so remounting doesn't reshuffle memberships.
-            val rng = Random(node.id.hashCode() + groupSeed)
-            if (rng.nextFloat() > 0.2f) {
-                val randomGroupId = groupIds.random(rng)
-                GroupMembership(nodeId = node.id, groupId = randomGroupId)
-            } else null
+            val memberships =
+                s.graphNodes.mapNotNull { node ->
+                    // Seed BOTH the inclusion check AND the group pick from the node id +
+                    // groupSeed, so remounting doesn't reshuffle memberships.
+                    val rng = Random(node.id.hashCode() + groupSeed)
+                    if (rng.nextFloat() > 0.2f) {
+                        val randomGroupId = groupIds.random(rng)
+                        GroupMembership(nodeId = node.id, groupId = randomGroupId)
+                    } else {
+                        null
+                    }
+                }
+            GroupModel(defs = defs, memberships = memberships).also {
+                println("groupModel built, hash=${it.hashCode()}, mems=${it.memberships.size}")
+            }
         }
-        GroupModel(defs = defs, memberships = memberships).also {
-            println("groupModel built, hash=${it.hashCode()}, mems=${it.memberships.size}")
-        }
-    }
 
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.White.darker(0.5f))
-            .onGloballyPositioned { viewport = it.size }
+            .onGloballyPositioned { viewport = it.size },
     ) {
         Graph(
             textStyle = TextStyle.Default.copy(color = Color.Magenta),
@@ -196,7 +208,6 @@ fun GraphSample(
             groupModel = groupModel,
             isImmediateReheatOnUpdate = false,
             settings = s.graphSettings,
-
 //            textStyle = TextStyle.Default.copy(color = Color.Magenta),
 //            engine = engine,
 //            atlasLayers = handle.atlasLayers,
@@ -237,11 +248,12 @@ fun GraphSample(
             velocities = s.velocities,
             zoom = s.zoom,
             onZoomChange = { isGesture, newValue ->
-                val newZoom = if (isGesture) {
-                    newValue * state.value.zoom
-                } else {
-                    newValue * state.value.zoom * 0.05f + state.value.zoom
-                }
+                val newZoom =
+                    if (isGesture) {
+                        newValue * state.value.zoom
+                    } else {
+                        newValue * state.value.zoom * 0.05f + state.value.zoom
+                    }
                 state.value = state.value.copy(zoom = newZoom)
 //                state.value = if (isGesture) {
 //                    state.value.copy(zoom = newValue * state.value.zoom)
@@ -259,7 +271,7 @@ fun GraphSample(
                 state.value = state.value.copy(graphUserPosition = offset)
             },
             onNodeClick = { node ->
-                //watchNodeState.value = node.id
+                // watchNodeState.value = node.id
             },
             onCoordinatesUpdate = {
                 state.value = state.value.copy(coordinates = it.toPersistentMap())
@@ -276,7 +288,7 @@ fun GraphSample(
             // Trigger random group assignments
             Button(
                 onClick = { groupSeed++ },
-                modifier = Modifier.padding(horizontal = 8.dp)
+                modifier = Modifier.padding(horizontal = 8.dp),
             ) {
                 Text("Scramble Groups")
             }
@@ -285,24 +297,25 @@ fun GraphSample(
                 Image(
                     modifier = Modifier.padding(16.dp).size(100.dp),
                     bitmap = atlas.bitmap,
-                    contentDescription = "layer 1"
+                    contentDescription = "layer 1",
                 )
             }
         }
         // Trigger random group assignments
         Button(
             onClick = { groupSeed++ },
-            modifier = Modifier.padding(horizontal = 8.dp)
+            modifier = Modifier.padding(horizontal = 8.dp),
         ) {
             Text("Scramble Groups")
         }
 
 // Rename groups individually
         Column(
-            modifier = Modifier
-                .background(Color.White)
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier =
+                Modifier
+                    .background(Color.White)
+                    .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text("Rename groups:")
             for (id in groupIds) {
@@ -313,7 +326,7 @@ fun GraphSample(
                     Box(
                         Modifier
                             .size(14.dp)
-                            .background(groupColors[id] ?: Color.Red)
+                            .background(groupColors[id] ?: Color.Red),
                     )
                     Spacer(Modifier.size(8.dp))
 
@@ -322,7 +335,7 @@ fun GraphSample(
                             value = draft,
                             onValueChange = { draft = it },
                             singleLine = true,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         Button(onClick = {
                             val trimmed = draft.trim()
@@ -332,7 +345,7 @@ fun GraphSample(
                     } else {
                         Text(
                             text = groupNames[id].orEmpty(),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         Button(onClick = {
                             draft = groupNames[id].orEmpty()
@@ -350,7 +363,6 @@ fun GraphSample(
             isShowSettings = s.isShowSettings,
             onSetSettings = {
                 state.value = state.value.copy(isShowSettings = !state.value.isShowSettings)
-
             },
         ) {
             GraphSettingsContent(
@@ -362,7 +374,7 @@ fun GraphSample(
                 },
                 zoom = s.zoom,
                 nodeCount = s.graphNodes.size,
-                onNodeCountChange = { nodeCountState.value = it.toFloat() }
+                onNodeCountChange = { nodeCountState.value = it.toFloat() },
             )
         }
     }
@@ -373,22 +385,25 @@ private fun MutableState<GraphState>.spawnConnectedNode(sourceId: String) {
     val newId = "node ${random.nextInt()}"
     val nextSize = current.graphNodes.size + 1
 
-    val newNode = ObsidianGraphNode(
-        newId,
-        name = newId,
-        data = ObsidianGraphData.File(""),
-        colorValue = Color.Red.darker(1f - nextSize / 100f).value
-    )
+    val newNode =
+        ObsidianGraphNode(
+            newId,
+            name = newId,
+            data = ObsidianGraphData.File(""),
+            colorValue = Color.Red.darker(1f - nextSize / 100f).value,
+        )
 
     val nodes = current.graphNodes.toMutableList().apply { add(newNode) }
-    val connections = current.connections.toMutableMap().apply {
-        put(newId, persistentListOf(Connection(target = sourceId)))
-        val existing = this[sourceId] ?: persistentListOf()
-        put(sourceId, (existing + Connection(target = newId)).toPersistentList())
-    }
+    val connections =
+        current.connections.toMutableMap().apply {
+            put(newId, persistentListOf(Connection(target = sourceId)))
+            val existing = this[sourceId] ?: persistentListOf()
+            put(sourceId, (existing + Connection(target = newId)).toPersistentList())
+        }
 
-    value = current.copy(
-        graphNodes = nodes.toPersistentList(),
-        connections = connections.toPersistentMap(),
-    )
+    value =
+        current.copy(
+            graphNodes = nodes.toPersistentList(),
+            connections = connections.toPersistentMap(),
+        )
 }

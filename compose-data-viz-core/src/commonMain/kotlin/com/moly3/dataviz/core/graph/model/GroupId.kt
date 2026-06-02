@@ -9,7 +9,9 @@ import kotlin.jvm.JvmInline
  * but type-safe — you can't accidentally pass a node Id where a group Id goes.
  */
 @JvmInline
-value class GroupId(val raw: String)
+value class GroupId(
+    val raw: String,
+)
 
 /**
  * Definition of a single group hull: identity + appearance only.

@@ -59,18 +59,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil3.compose.rememberAsyncImagePainter
 import com.moly3.dataviz.core.whiteboard.func.calculateBounds
-import com.moly3.dataviz.whiteboard.func.absoluteOffset
-import com.moly3.dataviz.whiteboard.ui.Whiteboard
 import com.moly3.dataviz.core.whiteboard.model.Action
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
-import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
+import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.func.darker
+import com.moly3.dataviz.whiteboard.func.absoluteOffset
+import com.moly3.dataviz.whiteboard.ui.Whiteboard
 import com.moly3.dataviz.whiteboard.ui.drawCompletedPath
 import com.moly3.shaders.shaderBackground
 import com.threemoly.sample.base.block.CustomShape
 import com.threemoly.sample.base.block.ShapeData
-import com.threemoly.sample.base.uikit.shader.UmlShader
 import com.threemoly.sample.base.uikit.BButton
 import com.threemoly.sample.base.uikit.ButtonIcon
 import com.threemoly.sample.base.uikit.ObsCheckbox
@@ -81,6 +80,7 @@ import com.threemoly.sample.base.uikit.icons.Edit1
 import com.threemoly.sample.base.uikit.icons.Plus
 import com.threemoly.sample.base.uikit.icons.TrashCan
 import com.threemoly.sample.base.uikit.icons.UpCircle
+import com.threemoly.sample.base.uikit.shader.UmlShader
 import dev.chrisbanes.haze.HazeDefaults
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -105,20 +105,20 @@ const val anotherCatUrl =
 fun CanvasSample(
     shapes: SnapshotStateList<CustomShape>,
     connections: SnapshotStateList<ShapeConnection<Long>>,
-    paths: SnapshotStateList<StylusPath>
+    paths: SnapshotStateList<StylusPath>,
 ) {
-
     val isDrawingState = remember { mutableStateOf(false) }
     val backgroundSecondary = Color.Black.darker(0.8f)
     val hazeState = rememberHazeState(blurEnabled = true)
-    val hazeStyle = remember(backgroundSecondary) {
-        HazeStyle(
-            backgroundColor = backgroundSecondary,
-            tints = listOf(HazeTint(backgroundSecondary.copy(0.1f))),
-            blurRadius = 4.dp,
-            noiseFactor = HazeDefaults.noiseFactor
-        )
-    }
+    val hazeStyle =
+        remember(backgroundSecondary) {
+            HazeStyle(
+                backgroundColor = backgroundSecondary,
+                tints = listOf(HazeTint(backgroundSecondary.copy(0.1f))),
+                blurRadius = 4.dp,
+                noiseFactor = HazeDefaults.noiseFactor,
+            )
+        }
     val actionState = remember { mutableStateOf<Action<CustomShape, Long>?>(value = null) }
 
     val isShowSettings = remember { mutableStateOf(false) }
@@ -136,20 +136,27 @@ fun CanvasSample(
         selectedShader.zoom = zoomState.value
         selectedShader.dotSpacing = 50f
     }
-    val whiteboardSettings = remember(strokeWidthState.value, density.density) {
-        WhiteboardSettings(
-            strokeWidth = strokeWidthState.value,
-            defaultLineColor = Color.Cyan,
-            sideCircleColor = Color.Blue
-        )
-    }
+    val whiteboardSettings =
+        remember(strokeWidthState.value, density.density) {
+            WhiteboardSettings(
+                strokeWidth = strokeWidthState.value,
+                defaultLineColor = Color.Cyan,
+                sideCircleColor = Color.Blue,
+            )
+        }
 
-    fun changePicture(shape: CustomShape, newPictureUrl: String) {
+    fun changePicture(
+        shape: CustomShape,
+        newPictureUrl: String,
+    ) {
         val index = shapes.indexOf(shape)
         shapes[index] = shapes[index].copy(data = ShapeData.ImageUrl(newPictureUrl))
     }
 
-    fun changeText(shape: CustomShape, newText: String) {
+    fun changeText(
+        shape: CustomShape,
+        newText: String,
+    ) {
         val index = shapes.indexOf(shape)
         shapes[index] = shapes[index].copy(data = ShapeData.Text(newText))
     }
@@ -159,10 +166,11 @@ fun CanvasSample(
     Row(Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(hazeState, zIndex = 0f)
-                    .shaderBackground(shader = selectedShader)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .hazeSource(hazeState, zIndex = 0f)
+                        .shaderBackground(shader = selectedShader),
             )
             Whiteboard(
                 minShapeSize = 0f,
@@ -202,47 +210,52 @@ fun CanvasSample(
                             fromSide = addConnection.fromSide,
                             toSide = addConnection.toSide,
                             arcHeight = 80f,
-                            color = null
-                        )
+                            color = null,
+                        ),
                     )
                 },
                 isDrawing = isDrawingState.value,
                 onDrawBlock = { shapeState ->
                     val borderCoef by animateFloatAsState(
-                        if (shapeState.isSelected) 3f else 1f
+                        if (shapeState.isSelected) 3f else 1f,
                     )
-                    val bgColor = if (shapeState.isDoubleClicked) {
-                        Color.Yellow.copy(alpha = 0.2f)
-                    } else {
-                        (shapeState.shape.backgroundColor
-                            ?: Color.Black).copy(alpha = 0.3f) // Dark semi-transparent
-                    }
-                    val isDrawBack = remember(shapeState.shape) {
-                        when (shapeState.shape.data) {
-                            is ShapeData.Drawing -> false
-                            is ShapeData.ImageUrl -> true
-                            is ShapeData.Text -> true
+                    val bgColor =
+                        if (shapeState.isDoubleClicked) {
+                            Color.Yellow.copy(alpha = 0.2f)
+                        } else {
+                            (
+                                shapeState.shape.backgroundColor
+                                    ?: Color.Black
+                            ).copy(alpha = 0.3f) // Dark semi-transparent
                         }
-                    }
+                    val isDrawBack =
+                        remember(shapeState.shape) {
+                            when (shapeState.shape.data) {
+                                is ShapeData.Drawing -> false
+                                is ShapeData.ImageUrl -> true
+                                is ShapeData.Text -> true
+                            }
+                        }
                     Box(
                         shapeState.modifier
                             .let {
                                 if (shapeState.isDoubleClicked) {
                                     it.zIndex(100f)
-                                } else
+                                } else {
                                     it
-                            }
-                            .fillMaxSize()
+                                }
+                            }.fillMaxSize()
                             .let {
                                 if (isDrawBack) {
-                                    it.hazeSource(hazeState, zIndex = 2f + shapeState.index)
+                                    it
+                                        .hazeSource(hazeState, zIndex = 2f + shapeState.index)
                                         .hazeEffect(hazeState, hazeStyle)
                                         .background(bgColor)
                                         .border((1f * zoomState.value * borderCoef).dp, Color.White)
                                 } else {
                                     it
                                 }
-                            }
+                            },
                     ) {
                         when (val data = shapeState.shape.data) {
                             is ShapeData.ImageUrl -> {
@@ -250,33 +263,33 @@ fun CanvasSample(
                                     Column(
                                         modifier = Modifier.align(Alignment.Center),
                                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                        horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
                                         BButton(text = "cat", fontColor = Color.White) {
                                             changePicture(
                                                 shapeState.shape,
-                                                catUrl
+                                                catUrl,
                                             )
                                             actionState.value = null
                                         }
                                         BButton(text = "dog", fontColor = Color.White) {
                                             changePicture(
                                                 shapeState.shape,
-                                                dogUrl
+                                                dogUrl,
                                             )
                                             actionState.value = null
                                         }
                                         BButton(text = "shark", fontColor = Color.White) {
                                             changePicture(
                                                 shapeState.shape,
-                                                sharkUrl
+                                                sharkUrl,
                                             )
                                             actionState.value = null
                                         }
                                         BButton(text = "cat2", fontColor = Color.White) {
                                             changePicture(
                                                 shapeState.shape,
-                                                anotherCatUrl
+                                                anotherCatUrl,
                                             )
                                             actionState.value = null
                                         }
@@ -285,10 +298,9 @@ fun CanvasSample(
                                     Image(
                                         modifier = Modifier.fillMaxSize(),
                                         painter = rememberAsyncImagePainter(data.url),
-                                        contentDescription = null
+                                        contentDescription = null,
                                     )
                                 }
-
                             }
 
                             is ShapeData.Text -> {
@@ -298,32 +310,35 @@ fun CanvasSample(
                                             mutableStateOf(
                                                 TextFieldValue(
                                                     data.text,
-                                                    selection = TextRange(data.text.length)
-                                                )
+                                                    selection = TextRange(data.text.length),
+                                                ),
                                             )
                                         }
                                     val focusRequest = remember { FocusRequester() }
                                     OutlinedTextField(
-                                        modifier = Modifier
-                                            .padding(4.dp)
-                                            .fillMaxWidth()
-                                            .focusRequester(focusRequest),
+                                        modifier =
+                                            Modifier
+                                                .padding(4.dp)
+                                                .fillMaxWidth()
+                                                .focusRequester(focusRequest),
                                         value = textState.value,
                                         singleLine = true,
                                         onValueChange = {
                                             textState.value = it
                                         },
-                                        keyboardActions = KeyboardActions {
-                                            changeText(
-                                                shapeState.shape,
-                                                newText = textState.value.text
-                                            )
-                                            actionState.value = null
-                                        },
+                                        keyboardActions =
+                                            KeyboardActions {
+                                                changeText(
+                                                    shapeState.shape,
+                                                    newText = textState.value.text,
+                                                )
+                                                actionState.value = null
+                                            },
                                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                        colors = TextFieldDefaults.colors(
-                                            unfocusedContainerColor = Color.White
-                                        )
+                                        colors =
+                                            TextFieldDefaults.colors(
+                                                unfocusedContainerColor = Color.White,
+                                            ),
                                     )
                                     LaunchedEffect(Unit) {
                                         focusRequest.requestFocus()
@@ -333,50 +348,55 @@ fun CanvasSample(
                                         modifier = Modifier.align(Alignment.Center),
                                         text = data.text,
                                         color = Color.White,
-                                        fontSize = (12 * zoomState.value / density.density).sp
+                                        fontSize = (12 * zoomState.value / density.density).sp,
                                     )
                                 }
                             }
 
                             is ShapeData.Drawing -> {
-                                val bounds = remember(data.value) {
-                                    data.value.calculateBounds()
-                                }
+                                val bounds =
+                                    remember(data.value) {
+                                        data.value.calculateBounds()
+                                    }
                                 val pathData = data.value
 
-                                val drawingBitmap = remember(pathData, bounds) {
-                                    val bitmap = ImageBitmap(
-                                        bounds.size.width.toInt(),
-                                        bounds.size.height.toInt()
-                                    )
-                                    val canvas = Canvas(bitmap)
-                                    val paint = Paint().apply {
-                                        color = pathData.color
-                                        strokeWidth =
-                                            pathData.points.firstOrNull()?.strokeWidth ?: 5f
-                                        style = PaintingStyle.Stroke
-                                        strokeCap = StrokeCap.Round
-                                        strokeJoin = StrokeJoin.Round
-                                    }
-
-                                    val composePath = Path().apply {
-                                        if (pathData.points.isNotEmpty()) {
-                                            moveTo(
-                                                pathData.points.first().x,
-                                                pathData.points.first().y
+                                val drawingBitmap =
+                                    remember(pathData, bounds) {
+                                        val bitmap =
+                                            ImageBitmap(
+                                                bounds.size.width.toInt(),
+                                                bounds.size.height.toInt(),
                                             )
-                                            pathData.points.forEach { lineTo(it.x, it.y) }
-                                        }
-                                    }
+                                        val canvas = Canvas(bitmap)
+                                        val paint =
+                                            Paint().apply {
+                                                color = pathData.color
+                                                strokeWidth =
+                                                    pathData.points.firstOrNull()?.strokeWidth ?: 5f
+                                                style = PaintingStyle.Stroke
+                                                strokeCap = StrokeCap.Round
+                                                strokeJoin = StrokeJoin.Round
+                                            }
 
-                                    canvas.drawPath(composePath, paint)
-                                    bitmap
-                                }
+                                        val composePath =
+                                            Path().apply {
+                                                if (pathData.points.isNotEmpty()) {
+                                                    moveTo(
+                                                        pathData.points.first().x,
+                                                        pathData.points.first().y,
+                                                    )
+                                                    pathData.points.forEach { lineTo(it.x, it.y) }
+                                                }
+                                            }
+
+                                        canvas.drawPath(composePath, paint)
+                                        bitmap
+                                    }
                                 Image(
                                     bitmap = drawingBitmap,
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.FillBounds // This ensures it scales with the Box
+                                    contentScale = ContentScale.FillBounds, // This ensures it scales with the Box
                                 )
 //                                val composePath = remember(data.value.points) {
 //                                    Path().apply {
@@ -416,19 +436,24 @@ fun CanvasSample(
                         is Action.DoubleClicked -> {}
 
                         is Action.Connection,
-                        is Action.ShapeAction -> {
+                        is Action.ShapeAction,
+                        -> {
                             Row(
                                 Modifier
                                     .absoluteOffset(
-                                        ((offset / LocalDensity.current.density - Offset(
-                                            centerWidth / 2f,
-                                            50f
-                                        ) - Offset(0f, 8f)))
-                                    )
-                                    .onGloballyPositioned {
+                                        (
+                                            (
+                                                offset / LocalDensity.current.density -
+                                                    Offset(
+                                                        centerWidth / 2f,
+                                                        50f,
+                                                    ) - Offset(0f, 8f)
+                                            )
+                                        ),
+                                    ).onGloballyPositioned {
                                         centerWidth =
                                             it.size.width.toFloat() / actualDensity.density
-                                    }
+                                    },
                             ) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     ButtonIcon(
@@ -438,10 +463,12 @@ fun CanvasSample(
                                         onClick = {
                                             when (action) {
                                                 is Action.Connection -> {
-
                                                 }
 
-                                                is Action.DoubleClicked -> TODO()
+                                                is Action.DoubleClicked -> {
+                                                    TODO()
+                                                }
+
                                                 is Action.ShapeAction -> {
                                                     val foundOld =
                                                         shapes.indexOfFirst { d -> d.id == action.shape.id }
@@ -453,7 +480,8 @@ fun CanvasSample(
                                                 }
                                             }
                                             onDoneAction()
-                                        })
+                                        },
+                                    )
                                     ButtonIcon(
                                         modifier = Modifier,
                                         color = Color.White,
@@ -461,10 +489,12 @@ fun CanvasSample(
                                         onClick = {
                                             when (action) {
                                                 is Action.Connection -> {
-
                                                 }
 
-                                                is Action.DoubleClicked -> TODO()
+                                                is Action.DoubleClicked -> {
+                                                    TODO()
+                                                }
+
                                                 is Action.ShapeAction -> {
                                                     val foundOld =
                                                         shapes.indexOfFirst { d -> d.id == action.shape.id }
@@ -476,7 +506,8 @@ fun CanvasSample(
                                                 }
                                             }
                                             onDoneAction()
-                                        })
+                                        },
+                                    )
                                     ButtonIcon(
                                         modifier = Modifier,
                                         color = Color.White,
@@ -487,13 +518,17 @@ fun CanvasSample(
                                                     connections.remove(action.selectedConnection.connection)
                                                 }
 
-                                                is Action.DoubleClicked -> TODO()
+                                                is Action.DoubleClicked -> {
+                                                    TODO()
+                                                }
+
                                                 is Action.ShapeAction -> {
                                                     shapes.remove(action.shape)
                                                 }
                                             }
                                             onDoneAction()
-                                        })
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -507,18 +542,20 @@ fun CanvasSample(
                     val pathBounds = path.calculateBounds()
 
                     // 1. Shift every point's coordinates to be relative to the path's bounding box
-                    val localizedPoints = path.points.map { point ->
-                        point.copy(
-                            x = point.x - pathBounds.globalPosition.x,
-                            y = point.y - pathBounds.globalPosition.y
-                        )
-                    }
+                    val localizedPoints =
+                        path.points.map { point ->
+                            point.copy(
+                                x = point.x - pathBounds.globalPosition.x,
+                                y = point.y - pathBounds.globalPosition.y,
+                            )
+                        }
 
                     // 2. Create a new path with the localized points and the updated color
-                    val localizedPath = path.copy(
-                        points = localizedPoints,
-                        color = Color.Cyan
-                    )
+                    val localizedPath =
+                        path.copy(
+                            points = localizedPoints,
+                            color = Color.Cyan,
+                        )
 
                     // 3. Add the shape using the global position and the localized path data
                     shapes.add(
@@ -527,32 +564,37 @@ fun CanvasSample(
                             position = pathBounds.globalPosition,
                             size = Offset(pathBounds.size.width, pathBounds.size.height),
                             backgroundColor = Color.Gray,
-                            data = ShapeData.Drawing(localizedPath)
-                        )
+                            data = ShapeData.Drawing(localizedPath),
+                        ),
                     )
                 },
                 connectionDragBlankId = 1L,
                 circleRadius = 12f,
                 onDrawConnectionCircle = { shape, modifier ->
-                    Box(modifier = modifier.background(Color.White, shape).innerShadow(shape) {
-                        color = Color.Black
-                        radius = 4f
-                    })
-                }
+                    Box(
+                        modifier =
+                            modifier.background(Color.White, shape).innerShadow(shape) {
+                                color = Color.Black
+                                radius = 4f
+                            },
+                    )
+                },
             )
             SettingsPanel(
                 backgroundColor = Color.White,
                 isShowSettings = isShowSettings.value,
                 onSetSettings = {
                     isShowSettings.value = !isShowSettings.value
-                }) {
+                },
+            ) {
                 Slider(
                     modifier = Modifier,
                     value = zoomState.value,
                     valueRange = 0.1f..5f,
                     onValueChange = {
                         zoomState.value = it
-                    })
+                    },
+                )
                 Text(text = "round to nearest (${roundToNearest.value}):")
                 Slider(
                     modifier = Modifier,
@@ -560,7 +602,8 @@ fun CanvasSample(
                     valueRange = 0f..100f,
                     onValueChange = {
                         roundToNearest.value = it.toInt()
-                    })
+                    },
+                )
                 Text(text = "stroke width (${strokeWidthState.value}):")
                 Slider(
                     modifier = Modifier,
@@ -568,14 +611,15 @@ fun CanvasSample(
                     valueRange = 0.5f..20f,
                     onValueChange = {
                         strokeWidthState.value = it
-                    })
+                    },
+                )
                 ObsCheckbox(isDensity, onCheckedChange = {
                     isDensity = it
                 })
             }
             Row(
                 modifier = Modifier.padding(bottom = 46.dp).align(Alignment.BottomCenter),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ButtonIcon(modifier = Modifier, painter = rememberVectorPainter(Plus), onClick = {
                     shapes.add(
@@ -584,16 +628,18 @@ fun CanvasSample(
                             position = userCoordinateState.value,
                             size = Offset(100f, 50f),
                             backgroundColor = Color.Gray,
-                            data = ShapeData.Text("change me")
-                        )
+                            data = ShapeData.Text("change me"),
+                        ),
                     )
                 })
                 ButtonIcon(
                     modifier = Modifier,
                     color = animateColorAsState(if (isDrawingState.value) Color.Green else Color.White).value,
-                    painter = rememberVectorPainter(Edit1), onClick = {
+                    painter = rememberVectorPainter(Edit1),
+                    onClick = {
                         isDrawingState.value = !isDrawingState.value
-                    })
+                    },
+                )
             }
         }
     }

@@ -48,65 +48,90 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
 import kotlin.time.Clock
 
+// --- Engine Configuration Constants ---
+private const val ENGINE_POS_UPDATE_BLEND = 0.4f
+private const val ENGINE_POS_UPDATE_ALPHA_SCALE = 0.3f
+private const val ENGINE_BASE_ALPHA_DECAY = 0.0228f
+private const val ENGINE_DRAG_REHEAT_ALPHA = 0.02f
+private const val ENGINE_NUDGE_ALPHA = 0.05f
+private const val ENGINE_MODERATE_CHANGE_ALPHA = 0.1f
+private const val ENGINE_REHEAT_ALPHA = 0.2f
+private const val ENGINE_GLOBAL_MOTION_SCALE = 0.5f
+private const val ENGINE_MAX_DISPLACEMENT_PER_FRAME = 4f
+private const val ENGINE_VELOCITY_SMOOTHING = 0.15f
+private const val ENGINE_MAX_SUB_STEPS = 5
+private const val ENGINE_SUB_STEP_NODE_CEILING = 80
+private const val ENGINE_DRAG_NEIGHBORHOOD_HOPS = 2
+private const val ENGINE_PARTIAL_DRAG_ALPHA = 0.15f
+private const val ENGINE_CLUMP_DETECT_RADIUS_MUL = 3.5f
+private const val ENGINE_CLUMP_NEIGHBOR_THRESHOLD = 6
+private const val ENGINE_CLUMP_SPREAD_FORCE = 0.4f
+
+// --- Timing and Delay Constants ---
+private const val GROUP_SYNC_TIMEOUT_MS = 1000
+private const val SYNC_POLL_INTERVAL_MS = 16L
+private const val SYNC_POLL_INTERVAL_INT = 16
+private const val WATCH_NODE_POLL_INTERVAL_MS = 16L
+private const val MIN_TARGET_FRAME_MS = 8L
+private const val IDLE_DELAY_SHORT_MS = 100L
+private const val IDLE_DELAY_LONG_MS = 200L
+private const val PERIODIC_SAVE_INTERVAL_MS = 1000L
+
+// --- Math and Structural Constants ---
+private const val STRUCTURE_HASH_MULTIPLIER = 31
+private const val COORD_DEADBAND_THRESHOLD = 0.005f
+private const val CENTER_DIVISOR = 2f
+private const val ZOOM_POINTER_COUNT = 2
+
 @OptIn(ExperimentalAtomicApi::class)
 @Composable
 fun <Id, Data> Graph(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = TextStyle.Default,
     settings: GraphSettings = GraphSettings.Default,
-    engine: IGraphEngine<Id, Data> = remember {
-        UltraFastEngine(
-            UltraFastEngineConfig(
-                posUpdateBlend = 0.4f,
-                posUpdateAlphaScale = 0.3f,
-                baseAlphaDecay = 0.0228f,
-                dragReheatAlpha = 0.02f,
-                nudgeAlpha = 0.05f,
-                moderateChangeAlpha = 0.1f,
-                reheatAlpha = 0.2f,
-
-                // ===== SMOOTHNESS — the actual smoothness knobs =====
-                // Global speed governor. THIS is the "make it slower" lever.
-                globalMotionScale = 0.5f,
-
-                // Per-frame displacement cap (the safety net).
-                maxDisplacementPerFrame = 4f,
-
-                // Velocity smoothing — 0.15 = ~6-frame ease-in/out lag.
-                // Drop toward 0.08 for very cinematic, raise toward 0.3 for snappy.
-                velocitySmoothing = 0.15f,
-
-                // Sub-stepping kicks in for graphs <= 80 nodes when hot.
-                maxSubSteps = 5,
-                subStepNodeCeiling = 80,
-
-                // Partial freeze
-                dragNeighborhoodHops = 2,
-                partialDragAlpha = 0.15f,
-
-                // Anti-clump
-                clumpDetectRadiusMul = 3.5f,
-                clumpNeighborThreshold = 6,
-                clumpSpreadForce = 0.4f,
+    engine: IGraphEngine<Id, Data> =
+        remember {
+            UltraFastEngine(
+                UltraFastEngineConfig(
+                    posUpdateBlend = ENGINE_POS_UPDATE_BLEND,
+                    posUpdateAlphaScale = ENGINE_POS_UPDATE_ALPHA_SCALE,
+                    baseAlphaDecay = ENGINE_BASE_ALPHA_DECAY,
+                    dragReheatAlpha = ENGINE_DRAG_REHEAT_ALPHA,
+                    nudgeAlpha = ENGINE_NUDGE_ALPHA,
+                    moderateChangeAlpha = ENGINE_MODERATE_CHANGE_ALPHA,
+                    reheatAlpha = ENGINE_REHEAT_ALPHA,
+                    // ===== SMOOTHNESS — the actual smoothness knobs =====
+                    // Global speed governor. THIS is the "make it slower" lever.
+                    globalMotionScale = ENGINE_GLOBAL_MOTION_SCALE,
+                    // Per-frame displacement cap (the safety net).
+                    maxDisplacementPerFrame = ENGINE_MAX_DISPLACEMENT_PER_FRAME,
+                    // Velocity smoothing — 0.15 = ~6-frame ease-in/out lag.
+                    // Drop toward 0.08 for very cinematic, raise toward 0.3 for snappy.
+                    velocitySmoothing = ENGINE_VELOCITY_SMOOTHING,
+                    // Sub-stepping kicks in for graphs <= 80 nodes when hot.
+                    maxSubSteps = ENGINE_MAX_SUB_STEPS,
+                    subStepNodeCeiling = ENGINE_SUB_STEP_NODE_CEILING,
+                    // Partial freeze
+                    dragNeighborhoodHops = ENGINE_DRAG_NEIGHBORHOOD_HOPS,
+                    partialDragAlpha = ENGINE_PARTIAL_DRAG_ALPHA,
+                    // Anti-clump
+                    clumpDetectRadiusMul = ENGINE_CLUMP_DETECT_RADIUS_MUL,
+                    clumpNeighborThreshold = ENGINE_CLUMP_NEIGHBOR_THRESHOLD,
+                    clumpSpreadForce = ENGINE_CLUMP_SPREAD_FORCE,
+                ),
             )
-        )
-    },
+        },
     consume: Boolean,
     userPosition: Offset,
     zoom: Float,
-
     atlasLayers: AtlasLayers = AtlasLayers.EMPTY,
     getIconKey: (Id, Data) -> String? = { _, _ -> null },
-
     groupModel: GroupModel<Id> = GroupModel.empty(),
-
     isImmediateReheatOnUpdate: Boolean = false,
-
     stateNodes: List<GraphNode<Id, Data>>,
     coordinates: Map<Id, Offset>,
     velocities: Map<Id, Offset>,
     connections: Map<Id, List<Connection<Id>>>,
-
     onPanDelta: (Offset) -> Unit,
     onWatchPosition: (Offset) -> Unit,
     onZoomChange: (Boolean, Float) -> Unit,
@@ -114,7 +139,7 @@ fun <Id, Data> Graph(
     io: CoroutineContext,
     onNodeClick: (GraphNode<Id, Data>) -> Unit,
     onCoordinatesUpdate: (Map<Id, Offset>) -> Unit = {},
-    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null
+    customPopup: (@Composable (node: GraphNode<Id, Data>) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var centerSizeState by remember { mutableStateOf(Offset.Zero) }
@@ -183,13 +208,13 @@ fun <Id, Data> Graph(
         }
 
         var waitedMs = 0
-        val timeoutMs = 1000
+        val timeoutMs = GROUP_SYNC_TIMEOUT_MS
         while (isActive &&
             waitedMs < timeoutMs &&
             !engine.hasSyncedGroupIndex(groupIndexIdentity)
         ) {
-            delay(16L)
-            waitedMs += 16
+            delay(SYNC_POLL_INTERVAL_MS)
+            waitedMs += SYNC_POLL_INTERVAL_INT
         }
 
         hullController.submit(engine, groupIndex, groupSettings)
@@ -198,8 +223,12 @@ fun <Id, Data> Graph(
     LaunchedEffect(hullController, engine, groupSettings, groupIndex) {
         if (!groupSettings.enabled) return@LaunchedEffect
         while (isActive) {
-            val interval = if (engine.isAsleep) groupSettings.hullSettledIntervalMs
-            else groupSettings.hullRecomputeIntervalMs
+            val interval =
+                if (engine.isAsleep) {
+                    groupSettings.hullSettledIntervalMs
+                } else {
+                    groupSettings.hullRecomputeIntervalMs
+                }
             hullController.submit(engine, groupIndex, groupSettings)
             delay(interval)
         }
@@ -211,7 +240,7 @@ fun <Id, Data> Graph(
                 while (isActive) {
                     val foundOffset = engineCoords[watchNodeId]
                     if (foundOffset != null) onWatchPosition(-foundOffset)
-                    delay(16L)
+                    delay(WATCH_NODE_POLL_INTERVAL_MS)
                 }
             }
         }
@@ -237,7 +266,7 @@ fun <Id, Data> Graph(
             // THE single biggest contributor to perceived smoothness: physics that
             // runs at 200Hz on a fast machine and 60Hz on a slow one looks wildly
             // different. Pacing makes motion velocity-consistent across machines.
-            val targetFrameMs = latestSettings.view.targetFrameMs.coerceAtLeast(8L)
+            val targetFrameMs = latestSettings.view.targetFrameMs.coerceAtLeast(MIN_TARGET_FRAME_MS)
 
             delay(targetFrameMs)
 
@@ -246,35 +275,36 @@ fun <Id, Data> Graph(
 
                 val nodes = latestNodes
                 if (nodes.isEmpty()) {
-                    delay(100L)
+                    delay(IDLE_DELAY_SHORT_MS)
                     continue
                 }
 
                 if (!latestSettings.isMoving && latestDragged == null) {
-                    delay(100L)
+                    delay(IDLE_DELAY_SHORT_MS)
                     continue
                 }
 
                 val conns = latestConnections
-                val currentStructureSig = run {
-                    var h = nodes.size
-                    for (i in nodes.indices) {
-                        val id = nodes[i].id
-                        val list = conns[id]
-                        h = h * 31 + id.hashCode()
-                        if (list != null) {
-                            h = h * 31 + list.size
-                            for (c in list) h = h * 31 + c.target.hashCode()
-                        } else {
-                            h *= 31
+                val currentStructureSig =
+                    run {
+                        var h = nodes.size
+                        for (i in nodes.indices) {
+                            val id = nodes[i].id
+                            val list = conns[id]
+                            h = h * STRUCTURE_HASH_MULTIPLIER + id.hashCode()
+                            if (list != null) {
+                                h = h * STRUCTURE_HASH_MULTIPLIER + list.size
+                                for (c in list) h = h * STRUCTURE_HASH_MULTIPLIER + c.target.hashCode()
+                            } else {
+                                h *= STRUCTURE_HASH_MULTIPLIER
+                            }
                         }
+                        h
                     }
-                    h
-                }
                 val structureChanged = currentStructureSig != lastStructureSig
 
                 if (!structureChanged && engine.isAsleep && latestDragged == null) {
-                    delay(200L)
+                    delay(IDLE_DELAY_LONG_MS)
                     continue
                 }
                 lastStructureSig = currentStructureSig
@@ -290,9 +320,10 @@ fun <Id, Data> Graph(
                 }
 
                 if (latestConnections !== lastConnectionsRefHolder[0]) {
-                    engineConnectionsRef[0] = latestConnections.mapValues { (_, list) ->
-                        list.map { it.target }
-                    }
+                    engineConnectionsRef[0] =
+                        latestConnections.mapValues { (_, list) ->
+                            list.map { it.target }
+                        }
                     lastConnectionsRefHolder[0] = latestConnections
                 }
 
@@ -304,7 +335,7 @@ fun <Id, Data> Graph(
                     velsScratch,
                     latestDragged,
                     isMoving = latestSettings.isMoving,
-                    moveConnectedWhenPaused = latestSettings.moveConnectedWhenPaused
+                    moveConnectedWhenPaused = latestSettings.moveConnectedWhenPaused,
                 )
 
                 stateMutex.withLock {
@@ -314,8 +345,8 @@ fun <Id, Data> Graph(
                         // Lower the deadband — at 60Hz, 0.05f/frame = 3 units/sec
                         // which is enough to feel "jumpy". 0.005f = 0.3 units/sec.
                         if (prev == null ||
-                            abs(prev.x - off.x) > 0.005f ||
-                            abs(prev.y - off.y) > 0.005f
+                            abs(prev.x - off.x) > COORD_DEADBAND_THRESHOLD ||
+                            abs(prev.y - off.y) > COORD_DEADBAND_THRESHOLD
                         ) {
                             engineCoords[id] = off
                             updated = true
@@ -341,7 +372,7 @@ fun <Id, Data> Graph(
     LaunchedEffect(Unit) {
         launch(io) {
             while (isActive) {
-                delay(1000L)
+                delay(PERIODIC_SAVE_INTERVAL_MS)
                 // Skip routine ticks while paused (and no drag in flight). The
                 // end-of-drag save below is unconditional — a release must always
                 // persist the final position.
@@ -400,69 +431,67 @@ fun <Id, Data> Graph(
         }
     }
 
-    val graphModifier = modifier
-        .fillMaxSize()
-        .onGloballyPositioned {
-            centerSizeState = Offset(it.size.width.toFloat(), it.size.height.toFloat()) / 2f
-        }
-        .pointerInput(watchNodeId) {
-            detectPointerTransformGestures(
-                consume = consume,
-                numberOfPointers = 0,
-                requisite = PointerRequisite.GreaterThan,
-                onScrollChange = {
-                    if (it.y != 0f) {
-                        onZoomChange(false, it.y)
-                    }
-                },
-                onClick = { position ->
-                    scope.launch(io) {
-                        val tapOffset = (position - centerSizeState) / latestZoom
-                        hitTest(tapOffset)?.let(onNodeClick)
-                    }
-                },
-                onCursorMove = { position ->
-                    scope.launch(io) {
-                        val tapOffset = (position - centerSizeState) / latestZoom
-                        if (draggedNodeState != null) {
-                            draggedNodeState =
-                                draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
-                        } else {
-                            cursorNodeState = hitTest(tapOffset)
+    val graphModifier =
+        modifier
+            .fillMaxSize()
+            .onGloballyPositioned {
+                centerSizeState = Offset(it.size.width.toFloat(), it.size.height.toFloat()) / CENTER_DIVISOR
+            }.pointerInput(watchNodeId) {
+                detectPointerTransformGestures(
+                    consume = consume,
+                    numberOfPointers = 0,
+                    requisite = PointerRequisite.GreaterThan,
+                    onScrollChange = {
+                        if (it.y != 0f) {
+                            onZoomChange(false, it.y)
                         }
-                    }
-                },
-                onGestureStart = { pointer ->
-                    val tapOffset = (pointer.position - centerSizeState) / latestZoom
+                    },
+                    onClick = { position ->
+                        scope.launch(io) {
+                            val tapOffset = (position - centerSizeState) / latestZoom
+                            hitTest(tapOffset)?.let(onNodeClick)
+                        }
+                    },
+                    onCursorMove = { position ->
+                        scope.launch(io) {
+                            val tapOffset = (position - centerSizeState) / latestZoom
+                            if (draggedNodeState != null) {
+                                draggedNodeState =
+                                    draggedNodeState?.copy(offset = tapOffset - latestUserPosition)
+                            } else {
+                                cursorNodeState = hitTest(tapOffset)
+                            }
+                        }
+                    },
+                    onGestureStart = { pointer ->
+                        val tapOffset = (pointer.position - centerSizeState) / latestZoom
 
-                    // Seed the node state with the initial offset immediately upon touch
-                    hitTest(tapOffset)?.let {
-                        draggedNodeState =
-                            DragNodeData(it.id).copy(offset = tapOffset - latestUserPosition)
-                    }
-                },
-                onGesture = { _, gesturePan, gestureZoom, _, _, pointerList ->
-                    if (draggedNodeState != null && pointerList.size == 1) {
-                        // drag handled via onCursorMove
-                    } else {
-                        if (watchNodeId == null && pointerList.size == 1) {
-                            onPanDelta(gesturePan)
+                        // Seed the node state with the initial offset immediately upon touch
+                        hitTest(tapOffset)?.let {
+                            draggedNodeState =
+                                DragNodeData(it.id).copy(offset = tapOffset - latestUserPosition)
                         }
-                        if (pointerList.size == 2 && gestureZoom != 1f) {
-                            onZoomChange(true, gestureZoom)
+                    },
+                    onGesture = { _, gesturePan, gestureZoom, _, _, pointerList ->
+                        if (draggedNodeState != null && pointerList.size == 1) {
+                            // drag handled via onCursorMove
+                        } else {
+                            if (watchNodeId == null && pointerList.size == 1) {
+                                onPanDelta(gesturePan)
+                            }
+                            if (pointerList.size == ZOOM_POINTER_COUNT && gestureZoom != 1f) {
+                                onZoomChange(true, gestureZoom)
+                            }
                         }
-                    }
-                },
-                onGestureEnd = { draggedNodeState = null },
-                onGestureCancel = { draggedNodeState = null }
-            )
-        }
-        .clip(RoundedCornerShape(0.dp))
+                    },
+                    onGestureEnd = { draggedNodeState = null },
+                    onGestureCancel = { draggedNodeState = null },
+                )
+            }.clip(RoundedCornerShape(0.dp))
 
     GraphInternal(
         atlasLayers = atlasLayers,
         getIconKey = getIconKey,
-
         textStyle = textStyle,
         customPopup = customPopup,
         modifier = graphModifier,
@@ -476,7 +505,6 @@ fun <Id, Data> Graph(
         movementOffset = userPosition,
         zoom = zoom,
         watchNodeId = watchNodeId,
-
         hulls = hulls,
         groupSettings = groupSettings,
     )

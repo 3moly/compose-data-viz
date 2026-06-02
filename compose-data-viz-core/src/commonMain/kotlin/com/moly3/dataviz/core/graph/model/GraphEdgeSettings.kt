@@ -32,7 +32,6 @@ import kotlinx.serialization.Serializable
 @Immutable
 @Serializable
 sealed class ZoomScalePolicy {
-
     /** Constant on-screen size. `effective = base / zoom`. */
     @Immutable
     @Serializable
@@ -63,6 +62,8 @@ sealed class ZoomScalePolicy {
     ) : ZoomScalePolicy()
 }
 
+const val SAFE_MIN_ZOOM = 0.0001f
+
 /**
  * Resolve a base value into a world-space value the renderer can use directly.
  *
@@ -77,21 +78,32 @@ sealed class ZoomScalePolicy {
  * over a sealed class compiles to a small jump table — no allocations,
  * no virtual calls.
  */
-inline fun ZoomScalePolicy.resolve(base: Float, zoom: Float): Float {
-    val z = if (zoom < 0.0001f) 0.0001f else zoom
+inline fun ZoomScalePolicy.resolve(
+    base: Float,
+    zoom: Float,
+): Float {
+    val z = if (zoom < SAFE_MIN_ZOOM) SAFE_MIN_ZOOM else zoom
     return when (this) {
-        ZoomScalePolicy.ScreenConstant -> base / z
-        ZoomScalePolicy.WorldConstant  -> base
+        ZoomScalePolicy.ScreenConstant -> {
+            base / z
+        }
+
+        ZoomScalePolicy.WorldConstant -> {
+            base
+        }
+
         is ZoomScalePolicy.Clamped -> {
-            val clampedZoom = when {
-                z < minScale -> minScale
-                z > maxScale -> maxScale
-                else -> z
-            }
+            val clampedZoom =
+                when {
+                    z < minScale -> minScale
+                    z > maxScale -> maxScale
+                    else -> z
+                }
             base / clampedZoom
         }
     }
 }
+
 /**
  * Edge (connection line) rendering settings.
  *
@@ -113,22 +125,16 @@ data class GraphEdgeSettings(
     val dashOffPx: Float = 8f,
     val dotOnPx: Float = 2f,
     val dotOffPx: Float = 6f,
-
-    // ---- NEW: Performance & Rendering Overrides --------------------------
-
     /** * If true, forces ALL connections to be drawn as basic solid lines,
      * completely ignoring dash patterns, dot patterns, and arrowheads.
      */
     val drawPureLines: Boolean = false,
-
     /** * The maximum number of connections per node to draw with their complex
      * authored styles (arrows, dashes, etc.). Connections beyond this limit
      * fall back to being drawn as pure solid lines to save rendering performance.
      */
     val maxStyledEdgesTotal: Int = 150,
-
     // ---- Zoom-response policies ------------------------------------------
-
     val strokeScalePolicy: ZoomScalePolicy = ZoomScalePolicy.WorldConstant,
     val arrowHeadScalePolicy: ZoomScalePolicy = ZoomScalePolicy.WorldConstant,
     val dashPatternScalePolicy: ZoomScalePolicy = ZoomScalePolicy.WorldConstant,

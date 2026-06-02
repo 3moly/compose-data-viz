@@ -20,6 +20,6 @@ fun ObsSlider(
         onValueChange = onValueChange,
         valueRange = valueRange,
         onValueChangeFinished = onValueChangeFinished,
-        colors = SliderDefaults.colors(thumbColor = Color.White)
+        colors = SliderDefaults.colors(thumbColor = Color.White),
     )
 }

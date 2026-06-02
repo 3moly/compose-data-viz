@@ -9,7 +9,7 @@ actual fun Canvas.drawVertices2(
     colors: IntArray?,
     texCoords: FloatArray?,
     indices: ShortArray?,
-    shader:  androidx.compose.ui.graphics.Shader
+    shader: androidx.compose.ui.graphics.Shader,
 ) {
     skiaCanvas.drawVertices(
         org.jetbrains.skia.VertexMode.TRIANGLES,
@@ -18,6 +18,8 @@ actual fun Canvas.drawVertices2(
         texCoords,
         indices,
         org.jetbrains.skia.BlendMode.MODULATE,
-        org.jetbrains.skia.Paint().apply { this.shader = shader.skiaShader }
+        org.jetbrains.skia
+            .Paint()
+            .apply { this.shader = shader.skiaShader },
     )
 }

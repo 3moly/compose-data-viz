@@ -11,6 +11,7 @@ import com.moly3.dataviz.core.graph.model.GroupIndex
 @Stable
 interface IGraphEngine<Id, Data> {
     val isAsleep: Boolean
+
     suspend fun step(
         nodes: List<GraphNode<Id, Data>>,
         connections: Map<Id, List<Id>>,
@@ -23,6 +24,7 @@ interface IGraphEngine<Id, Data> {
     )
 
     fun reheat()
+
     fun nudge()
 
     /**

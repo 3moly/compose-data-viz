@@ -16,6 +16,12 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+private const val MIN_DRAW_DISTANCE_SQUARED = 0.1f
+private const val MIN_ORIGINAL_DISTANCE = 0.1f
+private const val SELECTED_CONNECTION_ALPHA = 0.4f
+private const val DEFAULT_MAX_ARC_HEIGHT = 100f
+private const val ARROW_HEAD_ANGLE_DIVISOR = 6
+
 fun <ShapeType : Shape<Id>, Id> DrawScope.drawSmoothArrow(
     id: Id,
     startPoint: Offset,
@@ -26,7 +32,7 @@ fun <ShapeType : Shape<Id>, Id> DrawScope.drawSmoothArrow(
     config: ConnectionConfig,
     zoom: Float = 1f,
     action: Action<ShapeType, Id>?,
-    selectedConnectionStrokeWidth: Float = 1f
+    selectedConnectionStrokeWidth: Float = 1f,
 ) {
     val strokeWidth = config.strokeWidth.toPx()
     val arrowHeadSize = config.arrowHeadSize.toPx()
@@ -46,60 +52,64 @@ fun <ShapeType : Shape<Id>, Id> DrawScope.drawSmoothArrow(
     val scaledMaxArcHeight = maxArcHeight * zoom
 
     // 1. Calculate stub start/end points and curve start/end points
-    val (stubStartPoint, curveStartPoint) = calculateStubAndCurvePoints(
-        startPoint,
-        fromSide,
-        scaledStubLength
-    )
-    val (stubEndPoint, curveEndPoint) = calculateStubAndCurvePoints(
-        endPoint,
-        toSide,
-        scaledStubLength
-    )
+    val (stubStartPoint, curveStartPoint) =
+        calculateStubAndCurvePoints(
+            startPoint,
+            fromSide,
+            scaledStubLength,
+        )
+    val (stubEndPoint, curveEndPoint) =
+        calculateStubAndCurvePoints(
+            endPoint,
+            toSide,
+            scaledStubLength,
+        )
 
     // Avoid drawing if points are identical or too close after stub calculation
-    if (((curveStartPoint - curveEndPoint)).getDistanceSquared() < 0.1f) return
+    if (((curveStartPoint - curveEndPoint)).getDistanceSquared() < MIN_DRAW_DISTANCE_SQUARED) return
 
     // 3. Create the path
-    val path = Path().apply {
-        moveTo(stubStartPoint.x, stubStartPoint.y)
-        lineTo(curveStartPoint.x, curveStartPoint.y)
+    val path =
+        Path().apply {
+            moveTo(stubStartPoint.x, stubStartPoint.y)
+            lineTo(curveStartPoint.x, curveStartPoint.y)
 
-        val controlPoints = calculateControlPoints(
-            curveStartPoint,
-            curveEndPoint,
-            fromSide,
-            toSide,
-            controlPointFactor,
-            originalStartPoint, // Pass original start point
-            originalEndPoint,   // Pass original end point
-            scaledMaxArcHeight  // Pass the scaled maximum arc height
-        )
-        cubicTo(
-            controlPoints.first.x,
-            controlPoints.first.y,
-            controlPoints.second.x,
-            controlPoints.second.y,
-            curveEndPoint.x,
-            curveEndPoint.y
-        )
-        lineTo(stubEndPoint.x, stubEndPoint.y)
-    }
+            val controlPoints =
+                calculateControlPoints(
+                    curveStartPoint,
+                    curveEndPoint,
+                    fromSide,
+                    toSide,
+                    controlPointFactor,
+                    originalStartPoint, // Pass original start point
+                    originalEndPoint, // Pass original end point
+                    scaledMaxArcHeight, // Pass the scaled maximum arc height
+                )
+            cubicTo(
+                controlPoints.first.x,
+                controlPoints.first.y,
+                controlPoints.second.x,
+                controlPoints.second.y,
+                curveEndPoint.x,
+                curveEndPoint.y,
+            )
+            lineTo(stubEndPoint.x, stubEndPoint.y)
+        }
 
     // 4. Draw the path
     if (action is Action.Connection) {
         if (action.selectedConnection.connection.id == id) {
             drawPath(
                 path = path,
-                color = color.copy(alpha = 0.4f),
-                style = Stroke(width = scaledStrokeWidth * selectedConnectionStrokeWidth)
+                color = color.copy(alpha = SELECTED_CONNECTION_ALPHA),
+                style = Stroke(width = scaledStrokeWidth * selectedConnectionStrokeWidth),
             )
         }
     }
     drawPath(
         path = path,
         color = color,
-        style = Stroke(width = scaledStrokeWidth)
+        style = Stroke(width = scaledStrokeWidth),
     )
 
     // Draw the arrowhead
@@ -108,28 +118,34 @@ fun <ShapeType : Shape<Id>, Id> DrawScope.drawSmoothArrow(
         from = curveEndPoint, // Use curveEndPoint directly for cleaner arrow direction
         color = color,
         strokeWidth = scaledStrokeWidth,
-        arrowHeadSize = scaledArrowHeadSize
+        arrowHeadSize = scaledArrowHeadSize,
     )
 }
-
 
 // Helper to calculate points based on side and stub length
 // Revised to ensure arrows always point outward from shapes
 fun calculateStubAndCurvePoints(
     point: Offset,
     side: BoxSide,
-    stubLength: Float
+    stubLength: Float,
 ): Pair<Offset, Offset> {
     val stubPoint = point // The point on the "box" edge
 
     // Always direct stubs outward from the shape
     // For start points and end points, we ensure consistent outward direction
-    val curvePoint = when (side) {
-        BoxSide.TOP -> point.copy(y = point.y - stubLength) // Always upward (outward from top edge)
-        BoxSide.BOTTOM -> point.copy(y = point.y + stubLength) // Always downward (outward from bottom edge)
-        BoxSide.LEFT -> point.copy(x = point.x - stubLength) // Always leftward (outward from left edge)
-        BoxSide.RIGHT -> point.copy(x = point.x + stubLength) // Always rightward (outward from right edge)
-    }
+    val curvePoint =
+        when (side) {
+            BoxSide.TOP -> point.copy(y = point.y - stubLength)
+
+            // Always upward (outward from top edge)
+            BoxSide.BOTTOM -> point.copy(y = point.y + stubLength)
+
+            // Always downward (outward from bottom edge)
+            BoxSide.LEFT -> point.copy(x = point.x - stubLength)
+
+            // Always leftward (outward from left edge)
+            BoxSide.RIGHT -> point.copy(x = point.x + stubLength) // Always rightward (outward from right edge)
+        }
     return Pair(stubPoint, curvePoint)
 }
 
@@ -143,7 +159,8 @@ fun calculateControlPoints(
     // Add original points for symmetric distance calculation
     originalStartPoint: Offset,
     originalEndPoint: Offset,
-    maxArcHeight: Float = 100f // Maximum arc height in pixels
+    // Maximum arc height in pixels
+    maxArcHeight: Float = DEFAULT_MAX_ARC_HEIGHT,
 ): Pair<Offset, Offset> {
     // --- SYMMETRY FIX ---
     // Calculate distance based on the *original* points for consistency
@@ -151,24 +168,38 @@ fun calculateControlPoints(
     val dyOriginal = originalEndPoint.y - originalStartPoint.y
     val originalDistance = sqrt(dxOriginal * dxOriginal + dyOriginal * dyOriginal)
     // Avoid division by zero or tiny lengths if points are coincident
-    var controlLength = if (originalDistance < 0.1f) 0f else originalDistance * factor
+    var controlLength = if (originalDistance < MIN_ORIGINAL_DISTANCE) 0f else originalDistance * factor
     // --- END SYMMETRY FIX ---
     controlLength = min(controlLength, maxArcHeight)
     // Control point 1 extends from curveStart in the direction of the stub (outward from the box)
-    val control1 = when (fromSide) {
-        BoxSide.TOP -> curveStart.copy(y = curveStart.y - controlLength) // Continue upward
-        BoxSide.BOTTOM -> curveStart.copy(y = curveStart.y + controlLength) // Continue downward
-        BoxSide.LEFT -> curveStart.copy(x = curveStart.x - controlLength) // Continue leftward
-        BoxSide.RIGHT -> curveStart.copy(x = curveStart.x + controlLength) // Continue rightward
-    }
+    val control1 =
+        when (fromSide) {
+            BoxSide.TOP -> curveStart.copy(y = curveStart.y - controlLength)
+
+            // Continue upward
+            BoxSide.BOTTOM -> curveStart.copy(y = curveStart.y + controlLength)
+
+            // Continue downward
+            BoxSide.LEFT -> curveStart.copy(x = curveStart.x - controlLength)
+
+            // Continue leftward
+            BoxSide.RIGHT -> curveStart.copy(x = curveStart.x + controlLength) // Continue rightward
+        }
 
     // Control point 2 extends from curveEnd approaching from the direction outside the box
-    val control2 = when (toSide) {
-        BoxSide.TOP -> curveEnd.copy(y = curveEnd.y - controlLength) // Approach from above
-        BoxSide.BOTTOM -> curveEnd.copy(y = curveEnd.y + controlLength) // Approach from below
-        BoxSide.LEFT -> curveEnd.copy(x = curveEnd.x - controlLength) // Approach from left
-        BoxSide.RIGHT -> curveEnd.copy(x = curveEnd.x + controlLength) // Approach from right
-    }
+    val control2 =
+        when (toSide) {
+            BoxSide.TOP -> curveEnd.copy(y = curveEnd.y - controlLength)
+
+            // Approach from above
+            BoxSide.BOTTOM -> curveEnd.copy(y = curveEnd.y + controlLength)
+
+            // Approach from below
+            BoxSide.LEFT -> curveEnd.copy(x = curveEnd.x - controlLength)
+
+            // Approach from left
+            BoxSide.RIGHT -> curveEnd.copy(x = curveEnd.x + controlLength) // Approach from right
+        }
 
     return Pair(control1, control2)
 }
@@ -179,7 +210,7 @@ private fun DrawScope.drawArrowHead(
     from: Offset,
     color: Color,
     strokeWidth: Float,
-    arrowHeadSize: Float
+    arrowHeadSize: Float,
 ) {
     val deltaX = tip.x - from.x
     val deltaY = tip.y - from.y
@@ -188,7 +219,7 @@ private fun DrawScope.drawArrowHead(
     val angleRad = atan2(deltaY, deltaX) // Angle of the final segment
 
     // Arrowhead lines relative angle (e.g., +/- 30 degrees)
-    val arrowAngle = (PI / 6).toFloat() // 30 degrees
+    val arrowAngle = (PI / ARROW_HEAD_ANGLE_DIVISOR).toFloat() // 30 degrees
 
     // Calculate points for the two lines of the arrowhead
     val point1X = tip.x - arrowHeadSize * cos(angleRad + arrowAngle)

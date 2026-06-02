@@ -7,5 +7,5 @@ import androidx.compose.ui.graphics.Color
 internal class NodeStaticData(
     val baseRadius: Float,
     val baseColor: Color,
-    val iconLookup: AtlasLookup?
+    val iconLookup: AtlasLookup?,
 )

@@ -17,25 +17,27 @@ suspend fun createAtlasFromUrlsSuspend(
     tileSizePx: Int = 128,
     concurrencyLimit: Int = 20,
     fallbackPainter: Painter = ColorPainter(Color.Transparent),
-    imageLoader: suspend (url: String) -> Painter?
-): TextureAtlas = coroutineScope {
-    val semaphore = Semaphore(concurrencyLimit)
-    val deferredPainters = urls.map { url ->
-        async {
-            semaphore.withPermit {
-                try {
-                    imageLoader(url) ?: fallbackPainter
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    fallbackPainter
+    imageLoader: suspend (url: String) -> Painter?,
+): TextureAtlas =
+    coroutineScope {
+        val semaphore = Semaphore(concurrencyLimit)
+        val deferredPainters =
+            urls.map { url ->
+                async {
+                    semaphore.withPermit {
+                        try {
+                            imageLoader(url) ?: fallbackPainter
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            fallbackPainter
+                        }
+                    }
                 }
             }
-        }
+        val painters = deferredPainters.awaitAll()
+        createSvgAtlas(
+            painters = painters,
+            density = density,
+            tileSizePx = tileSizePx,
+        )
     }
-    val painters = deferredPainters.awaitAll()
-    createSvgAtlas(
-        painters = painters,
-        density = density,
-        tileSizePx = tileSizePx
-    )
-}

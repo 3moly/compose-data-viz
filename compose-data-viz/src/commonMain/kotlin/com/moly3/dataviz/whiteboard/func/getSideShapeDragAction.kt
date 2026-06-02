@@ -8,21 +8,22 @@ import com.moly3.dataviz.core.whiteboard.model.allSides
 fun <Id> getSideShapeDragAction(
     mousePosition: Offset,
     sizeRound: Int,
-    shape: Shape<Id>
+    shape: Shape<Id>,
 ): DragType.Connection<Id>? {
     for (side in allSides) {
-        val isInSide = isInSidePosition(
-            mousePosition = mousePosition,
-            itemPosition = shape.position,
-            boxSize = shape.size,
-            side = side,
-            radius = sizeRound / 2f
-        )
+        val isInSide =
+            isInSidePosition(
+                mousePosition = mousePosition,
+                itemPosition = shape.position,
+                boxSize = shape.size,
+                side = side,
+                radius = sizeRound / 2f,
+            )
         if (isInSide) {
             return DragType.Connection(
                 startShapeId = shape.id,
                 startShapeType = side,
-                boxSide = shape
+                boxSide = shape,
             )
         }
     }

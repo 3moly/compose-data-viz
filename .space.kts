@@ -7,7 +7,7 @@ job("publish wasm") {
             }
         }
     }
-    container(image = "gradle:9.0-jdk17"){
+    container(image = "gradle:9.0-jdk17") {
         env["SSH_HOST"] = "{{ project:SSH_HOST }}"
         env["SSH_PRIVATE_KEY"] = "{{ project:SSH_PRIVATE_KEY }}"
         env["BOT_TG_TOKEN"] = "{{ project:BOT_TG_TOKEN }}"

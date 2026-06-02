@@ -4,8 +4,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import kotlin.math.PI
 import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -22,29 +20,30 @@ import kotlin.math.sqrt
  * practice. NOT valid for crescent / multi-lobe groups — see fallback note.
  */
 internal object AngularHullBuilder {
-
     fun build(
         pointsXY: FloatArray,
-        sectors: Int = 64,
+        sectors: Int,
         padding: Float = 0f,
     ): HullResult? {
         val n = pointsXY.size / 2
         if (n < 3) return null
 
         // Centroid.
-        var cx = 0f; var cy = 0f
+        var cx = 0f
+        var cy = 0f
         for (i in 0 until n) {
             cx += pointsXY[i * 2]
             cy += pointsXY[i * 2 + 1]
         }
-        cx /= n; cy /= n
+        cx /= n
+        cy /= n
 
         // Per-sector farthest point. farR2 holds squared radius so we avoid
         // a sqrt per point; we only sqrt the survivors at the end.
-        val farR2 = FloatArray(sectors)        // 0 == empty sector
+        val farR2 = FloatArray(sectors) // 0 == empty sector
         val farX = FloatArray(sectors)
         val farY = FloatArray(sectors)
-        val twoPi = (2.0 * PI).toFloat()
+        val twoPi = (2f * PI).toFloat()
         val invSector = sectors / twoPi
 
         for (i in 0 until n) {
@@ -55,7 +54,7 @@ internal object AngularHullBuilder {
             val r2 = dx * dx + dy * dy
             if (r2 == 0f) continue
 
-            var ang = atan2(dy, dx)            // -PI..PI
+            var ang = atan2(dy, dx) // -PI..PI
             if (ang < 0f) ang += twoPi
             var s = (ang * invSector).toInt()
             if (s >= sectors) s = sectors - 1
@@ -75,7 +74,7 @@ internal object AngularHullBuilder {
         var started = false
         var first = true
         var anchorX = 0f
-        var anchorY = Float.POSITIVE_INFINITY   // minimise: smallest y == topmost
+        var anchorY = Float.POSITIVE_INFINITY // minimise: smallest y == topmost
 
         for (s in 0 until sectors) {
             if (farR2[s] == 0f) continue
@@ -95,8 +94,12 @@ internal object AngularHullBuilder {
                 anchorY = py
                 anchorX = px
             }
-            if (first) { path.moveTo(px, py); first = false }
-            else path.lineTo(px, py)
+            if (first) {
+                path.moveTo(px, py)
+                first = false
+            } else {
+                path.lineTo(px, py)
+            }
             started = true
         }
         if (!started) return null

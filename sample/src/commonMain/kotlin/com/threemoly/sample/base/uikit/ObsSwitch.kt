@@ -11,13 +11,13 @@ fun ObsSwitch(
     checked: Boolean,
     onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
 ) {
     Switch(
         checked = checked,
         onCheckedChange = onCheckedChange,
         modifier = modifier,
         enabled = enabled,
-        colors = SwitchDefaults.colors(checkedThumbColor = Color.Red)
+        colors = SwitchDefaults.colors(checkedThumbColor = Color.Red),
     )
 }

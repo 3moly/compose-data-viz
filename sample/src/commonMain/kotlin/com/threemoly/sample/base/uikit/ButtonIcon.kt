@@ -18,14 +18,15 @@ fun ButtonIcon(
     modifier: Modifier,
     painter: Painter,
     color: Color = Color.White,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = modifier
-            .size(32.dp)
-            .background(color, shape = RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .size(32.dp)
+                .background(color, shape = RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
         Image(painter = painter, contentDescription = null, modifier = Modifier.size(24.dp))
     }

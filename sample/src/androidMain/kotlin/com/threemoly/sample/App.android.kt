@@ -18,12 +18,12 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 
 class AndroidApp : Application() {
     companion object {
-        lateinit var INSTANCE: AndroidApp
+        lateinit var instance: AndroidApp
     }
 
     override fun onCreate() {
         super.onCreate()
-        INSTANCE = this
+        instance = this
     }
 }
 
@@ -34,11 +34,11 @@ class AppActivity : ComponentActivity() {
 
         setContent {
             setSingletonImageLoaderFactory {
-                ImageLoader.Builder(this)
+                ImageLoader
+                    .Builder(this)
                     .components {
                         add(KtorNetworkFetcherFactory())
-                    }
-                    .build()
+                    }.build()
             }
             val view = LocalView.current
             val isLightStatusBars by remember { mutableStateOf(false) }

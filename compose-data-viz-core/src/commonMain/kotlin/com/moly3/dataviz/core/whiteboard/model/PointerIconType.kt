@@ -8,5 +8,5 @@ enum class PointerIconType {
     ResizeTopLeft,
     ResizeTopRight,
     ResizeBottomLeft,
-    ResizeBottomRight
+    ResizeBottomRight,
 }

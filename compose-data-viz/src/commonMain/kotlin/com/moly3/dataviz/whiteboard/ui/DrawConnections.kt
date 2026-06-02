@@ -10,17 +10,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
-import com.moly3.dataviz.whiteboard.func.makeSideOffset
-import com.moly3.dataviz.whiteboard.func.reverse
 import com.moly3.dataviz.core.whiteboard.model.Action
-import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.ConnectionConfig
 import com.moly3.dataviz.core.whiteboard.model.DragAction
 import com.moly3.dataviz.core.whiteboard.model.DragType
 import com.moly3.dataviz.core.whiteboard.model.Shape
+import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.moly3.dataviz.core.whiteboard.model.StylusPoint
 import com.moly3.dataviz.func.drawSmoothArrow
+import com.moly3.dataviz.whiteboard.func.makeSideOffset
+import com.moly3.dataviz.whiteboard.func.reverse
 
 @Composable
 fun <ShapeType : Shape<Id>, Id> DrawConnections(
@@ -44,13 +44,13 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
         withTransform({
-
         }) {
             for (connection in connections) {
                 val fromBox = shapes.lastOrNull { b -> b.id == connection.fromBoxId }
                 val toBox = shapes.lastOrNull { b -> b.id == connection.toBoxId }
-                if (fromBox == null || toBox == null)
+                if (fromBox == null || toBox == null) {
                     continue
+                }
                 val startPoint =
                     makeSideOffset(
                         minShapeSize = minShapeSize,
@@ -69,7 +69,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                         boxSide = toBox,
                         zoom = zoom,
                         side = connection.toSide,
-                        roundToNearest = roundToNearest
+                        roundToNearest = roundToNearest,
                     )
                 drawSmoothArrow(
                     id = connection.id,
@@ -79,22 +79,23 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     fromSide = connection.fromSide,
                     toSide = connection.toSide,
                     color = connection.color ?: lineColor,
-                    zoom = zoom / density,  //ISSUE 01: Density
+                    zoom = zoom / density, // ISSUE 01: Density
                     config = config,
-                    selectedConnectionStrokeWidth = selectedConnectionStrokeWidth
+                    selectedConnectionStrokeWidth = selectedConnectionStrokeWidth,
                 )
             }
             if (dragActionState.value != null && dragActionState.value!!.dragType is DragType.Connection) {
                 val connection =
                     (dragActionState.value!!.dragType as DragType.Connection)
 
-                val startPoint = makeSideOffset(
-                    itemPosition = connection.boxSide.position,
-                    userCoordinate = userCoordinate,
-                    shapeSize = connection.boxSide.size,
-                    zoom = zoom,
-                    side = connection.startShapeType
-                )
+                val startPoint =
+                    makeSideOffset(
+                        itemPosition = connection.boxSide.position,
+                        userCoordinate = userCoordinate,
+                        shapeSize = connection.boxSide.size,
+                        zoom = zoom,
+                        side = connection.startShapeType,
+                    )
                 val endPoint = cursorPosition
                 drawSmoothArrow(
                     id = connectionDragBlankId,
@@ -103,9 +104,9 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
                     fromSide = connection.startShapeType,
                     toSide = connection.startShapeType.reverse(),
                     color = lineColor,
-                    zoom = zoom / density,  //ISSUE 01: Density
+                    zoom = zoom / density, // ISSUE 01: Density
                     config = config,
-                    action = null
+                    action = null,
                 )
             }
         }
@@ -114,8 +115,8 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
             movementOffset = -userCoordinate,
             StylusPath(
                 points = stylusPoint,
-                color = drawColor
-            )
+                color = drawColor,
+            ),
         )
     }
 }
@@ -123,7 +124,7 @@ fun <ShapeType : Shape<Id>, Id> DrawConnections(
 fun DrawScope.drawCompletedPath(
     zoom: Float,
     movementOffset: Offset,
-    path: StylusPath
+    path: StylusPath,
 ) {
     withTransform({
         scale(zoom, zoom)
@@ -137,7 +138,7 @@ fun DrawScope.drawCompletedPath(
             drawCircle(
                 color = path.color,
                 radius = point.strokeWidth / 2f,
-                center = Offset(point.x, point.y)
+                center = Offset(point.x, point.y),
             )
             return
         }
@@ -154,7 +155,7 @@ fun DrawScope.drawCompletedPath(
                 start = Offset(startPoint.x, startPoint.y),
                 end = Offset(endPoint.x, endPoint.y),
                 strokeWidth = avgStrokeWidth,
-                cap = StrokeCap.Round
+                cap = StrokeCap.Round,
             )
         }
 
@@ -163,7 +164,7 @@ fun DrawScope.drawCompletedPath(
             drawCircle(
                 color = path.color,
                 radius = point.strokeWidth / 2f,
-                center = Offset(point.x, point.y)
+                center = Offset(point.x, point.y),
             )
         }
     }

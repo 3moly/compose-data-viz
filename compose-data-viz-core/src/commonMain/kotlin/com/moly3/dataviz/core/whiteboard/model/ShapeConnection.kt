@@ -9,5 +9,5 @@ data class ShapeConnection<Id>(
     val fromSide: BoxSide,
     val toSide: BoxSide,
     val arcHeight: Float = 80f,
-    val color: Color?
+    val color: Color?,
 )

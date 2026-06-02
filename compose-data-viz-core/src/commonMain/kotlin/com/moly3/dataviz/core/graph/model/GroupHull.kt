@@ -10,8 +10,8 @@ import com.moly3.dataviz.core.graph.model.GroupId
 @Immutable
 data class GroupHull(
     val groupId: GroupId,
-    val label: String,        // copied from GroupHullDef.name at compute time
-    val color: Color,         // copied from GroupHullDef.color
+    val label: String, // copied from GroupHullDef.name at compute time
+    val color: Color, // copied from GroupHullDef.color
     val path: Path,
     val labelAnchor: Offset,
 )

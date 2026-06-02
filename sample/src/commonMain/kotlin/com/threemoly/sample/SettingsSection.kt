@@ -47,24 +47,26 @@ fun SettingsSection(
     var expanded by remember { mutableStateOf(initiallyExpanded) }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF7F7F7))
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFF7F7F7)),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(accentColor)
+                    .background(accentColor),
             )
             Spacer(Modifier.width(10.dp))
             ObsText(
@@ -78,12 +80,13 @@ fun SettingsSection(
         AnimatedVisibility(
             visible = expanded,
             enter = fadeIn() + expandVertically(),
-            exit  = fadeOut() + shrinkVertically(),
+            exit = fadeOut() + shrinkVertically(),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 content()
                 Spacer(Modifier.height(6.dp))
@@ -148,10 +151,11 @@ fun ToggleRow(
     onValueChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clickable { onValueChange(!value) },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp)
+                .clickable { onValueChange(!value) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ObsText(text = label, modifier = Modifier.weight(1f))
@@ -167,7 +171,7 @@ fun ToggleRow(
                 Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(Color.White)
+                    .background(Color.White),
             )
         }
     }
@@ -177,12 +181,25 @@ fun ToggleRow(
 // ColorRow — label + selectable color swatches
 // =====================================================================================
 
-private val DefaultPalette = listOf(
-    Color(0xFF000000), Color(0xFF424242), Color(0xFF9E9E9E), Color(0xFFE0E0E0), Color(0xFFFFFFFF),
-    Color(0xFFEF5350), Color(0xFFFF7043), Color(0xFFFFB300), Color(0xFFFFEE58),
-    Color(0xFF66BB6A), Color(0xFF26A69A), Color(0xFF42A5F5), Color(0xFF5C6BC0),
-    Color(0xFFAB47BC), Color(0xFFEC407A), Color(0xFF7E57C2),
-)
+private val DefaultPalette =
+    listOf(
+        Color(0xFF000000),
+        Color(0xFF424242),
+        Color(0xFF9E9E9E),
+        Color(0xFFE0E0E0),
+        Color(0xFFFFFFFF),
+        Color(0xFFEF5350),
+        Color(0xFFFF7043),
+        Color(0xFFFFB300),
+        Color(0xFFFFEE58),
+        Color(0xFF66BB6A),
+        Color(0xFF26A69A),
+        Color(0xFF42A5F5),
+        Color(0xFF5C6BC0),
+        Color(0xFFAB47BC),
+        Color(0xFFEC407A),
+        Color(0xFF7E57C2),
+    )
 
 @Composable
 fun ColorRow(
@@ -199,7 +216,7 @@ fun ColorRow(
                     .size(20.dp)
                     .clip(CircleShape)
                     .background(value)
-                    .border(1.dp, Color.Black.copy(alpha = 0.2f), CircleShape)
+                    .border(1.dp, Color.Black.copy(alpha = 0.2f), CircleShape),
             )
         }
         Row(
@@ -217,8 +234,7 @@ fun ColorRow(
                             width = if (selected) 2.dp else 1.dp,
                             color = if (selected) Color(0xFF7E57C2) else Color.Black.copy(alpha = 0.15f),
                             shape = CircleShape,
-                        )
-                        .clickable { onValueChange(swatch) }
+                        ).clickable { onValueChange(swatch) },
                 )
             }
         }

@@ -44,7 +44,10 @@ internal class GroupSnapshot private constructor(
      * on the next poll. The thing that MUST be consistent is the topology
      * itself, and that is fully captured by this immutable snapshot.
      */
-    fun buildHullPoints(posX: FloatArray, posY: FloatArray): List<Pair<GroupId, FloatArray>> {
+    fun buildHullPoints(
+        posX: FloatArray,
+        posY: FloatArray,
+    ): List<Pair<GroupId, FloatArray>> {
         if (groupCount == 0 || nodeCount == 0) return emptyList()
 
         // How many positions land in each group.
@@ -87,14 +90,15 @@ internal class GroupSnapshot private constructor(
 
     companion object {
         /** Published before the first sync — reads return empty, never crash. */
-        val EMPTY = GroupSnapshot(
-            groupCount = 0,
-            nodeCount = 0,
-            groupIds = emptyArray(),
-            nodeGroupOffset = IntArray(1),
-            nodeGroupId = IntArray(0),
-            nodeGroupWeight = FloatArray(0),
-        )
+        val EMPTY =
+            GroupSnapshot(
+                groupCount = 0,
+                nodeCount = 0,
+                groupIds = emptyArray(),
+                nodeGroupOffset = IntArray(1),
+                nodeGroupId = IntArray(0),
+                nodeGroupWeight = FloatArray(0),
+            )
 
         /**
          * Construct a snapshot from the engine's live arrays. Every array is

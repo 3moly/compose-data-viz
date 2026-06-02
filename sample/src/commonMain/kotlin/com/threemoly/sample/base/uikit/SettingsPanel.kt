@@ -25,21 +25,22 @@ fun BoxScope.SettingsPanel(
     backgroundColor: Color,
     isShowSettings: Boolean,
     onSetSettings: (Boolean) -> Unit,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val settingsWidth by animateDpAsState(if (isShowSettings) 300.dp else 48.dp)
     Column(
-        modifier = Modifier
-            .padding(16.dp)
-            .align(Alignment.TopEnd)
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .verticalScroll(rememberScrollState())
+        modifier =
+            Modifier
+                .padding(16.dp)
+                .align(Alignment.TopEnd)
+                .clip(RoundedCornerShape(8.dp))
+                .background(backgroundColor)
+                .verticalScroll(rememberScrollState()),
     ) {
         Column(
             modifier = Modifier.width(settingsWidth).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.End
+            horizontalAlignment = Alignment.End,
         ) {
             BIcon(imageVector = Settings, onClick = {
                 onSetSettings(!isShowSettings)

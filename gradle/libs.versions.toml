@@ -13,11 +13,10 @@ jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrai
 
 [versions]
 
-composedataviz = "0.1.63"
-
 agp = "9.2.1"
 kotlin = "2.3.21"
 compose = "1.11.0"
+
 maven-publish = "0.36.0"
 serialization = "1.11.0"
 immutablelist = "0.4.0"
@@ -26,10 +25,21 @@ jetbrains-kotlin-jvm = "2.3.21"
 # FOR UNIT TEST
 ktlint = "14.2.0"
 slf4j = "2.0.18"
+ktlintRule = "1.8.0"
+
+# CONST
+composedataviz = "0.1.63"
+androidSdk = "36"
+languageVersion = "17"
+libraryNamespace = "io.github.moly3.composedatavizcore"
+libraryGroup = "io.github.3moly"
+dataVizCoreArtifact = "compose-data-viz-core"
+dataVizArtifact = "compose-data-viz"
 
 [libraries]
 
 foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
+
 
 serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 immutablelist = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "immutablelist" }
@@ -37,3 +47,6 @@ immutablelist = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable"
 # FOR UNIT TEST
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 slf4j = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
+ktlint-rule-engine = { module = "com.pinterest.ktlint:ktlint-rule-engine", version.ref = "ktlintRule" }
+ktlint-ruleset-standard = { module = "com.pinterest.ktlint:ktlint-ruleset-standard", version.ref = "ktlintRule" }
+ktlint-test = { module = "com.pinterest.ktlint:ktlint-test", version.ref = "ktlintRule" }

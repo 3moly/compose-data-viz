@@ -48,13 +48,14 @@ class GroupHullController(
 
     fun start(scope: CoroutineScope) {
         if (worker?.isActive == true) return
-        worker = scope.launch(ioContext) {
-            for (req in requestChannel) {
-                if (!isActive) break
-                val result = computeAll(req)
-                _hulls.value = result
+        worker =
+            scope.launch(ioContext) {
+                for (req in requestChannel) {
+                    if (!isActive) break
+                    val result = computeAll(req)
+                    _hulls.value = result
+                }
             }
-        }
     }
 
     fun stop() {
@@ -90,22 +91,23 @@ class GroupHullController(
         val out = ArrayList<GroupHull>(req.snapshot.size)
         for ((groupId, points) in req.snapshot) {
             val pointCount = points.size / 2
-            val r = if (pointCount > req.settings.angularHullThreshold) {
-                // Large group — physics keeps it blob-shaped; angular sweep is safe.
-                AngularHullBuilder.build(
-                    pointsXY = points,
-                    sectors = req.settings.angularHullSectors,
-                    padding = req.settings.hullPadding,
-                )
-            } else {
-                // Small group — concave detail is cheap and worth keeping.
-                HullBuilder.build(
-                    pointsXY = points,
-                    k = req.settings.hullK,
-                    padding = req.settings.hullPadding,
-                    smoothing = req.settings.hullSmoothing,
-                )
-            } ?: continue
+            val r =
+                if (pointCount > req.settings.angularHullThreshold) {
+                    // Large group — physics keeps it blob-shaped; angular sweep is safe.
+                    AngularHullBuilder.build(
+                        pointsXY = points,
+                        sectors = req.settings.angularHullSectors,
+                        padding = req.settings.hullPadding,
+                    )
+                } else {
+                    // Small group — concave detail is cheap and worth keeping.
+                    HullBuilder.build(
+                        pointsXY = points,
+                        k = req.settings.hullK,
+                        padding = req.settings.hullPadding,
+                        smoothing = req.settings.hullSmoothing,
+                    )
+                } ?: continue
 
             val def = req.index.defOf(groupId) ?: continue
             out.add(
@@ -115,7 +117,7 @@ class GroupHullController(
                     color = def.color,
                     path = r.path,
                     labelAnchor = r.labelAnchor,
-                )
+                ),
             )
         }
         return out.toImmutableList()

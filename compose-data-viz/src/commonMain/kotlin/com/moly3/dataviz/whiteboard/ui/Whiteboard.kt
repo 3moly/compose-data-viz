@@ -22,21 +22,21 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.moly3.dataviz.whiteboard.func.calculatePointer
-import com.moly3.dataviz.whiteboard.func.dashboard
-import com.moly3.dataviz.whiteboard.func.getMapPosition
-import com.moly3.dataviz.whiteboard.func.roundToNearest
 import com.moly3.dataviz.core.whiteboard.model.Action
 import com.moly3.dataviz.core.whiteboard.model.AddShapeConnection
-import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
-import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
 import com.moly3.dataviz.core.whiteboard.model.ConnectionConfig
 import com.moly3.dataviz.core.whiteboard.model.DragAction
 import com.moly3.dataviz.core.whiteboard.model.DragType
 import com.moly3.dataviz.core.whiteboard.model.DrawShapeState
 import com.moly3.dataviz.core.whiteboard.model.Shape
+import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.StylusPath
 import com.moly3.dataviz.core.whiteboard.model.StylusPoint
+import com.moly3.dataviz.core.whiteboard.model.WhiteboardSettings
+import com.moly3.dataviz.whiteboard.func.calculatePointer
+import com.moly3.dataviz.whiteboard.func.dashboard
+import com.moly3.dataviz.whiteboard.func.getMapPosition
+import com.moly3.dataviz.whiteboard.func.roundToNearest
 import kotlin.math.abs
 
 @Composable
@@ -65,7 +65,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     onUserCoordinateChange: (Offset) -> Unit,
     settingsPanel: @Composable (position: Offset, action: Action<ShapeType, Id>, onDoneAction: () -> Unit) -> Unit,
     onDrawBlock: @Composable (DrawShapeState<ShapeType, Id>) -> Unit,
-    onDrawConnectionCircle: @Composable (RoundedCornerShape, Modifier) -> Unit
+    onDrawConnectionCircle: @Composable (RoundedCornerShape, Modifier) -> Unit,
 ) {
     var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
     val scaleMovementModifier = 5f
@@ -77,9 +77,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     val strokeWidth = remember { Animatable(1f) }
 
     val isHomeHoldState = remember { mutableStateOf(false) }
-    val cursorPositionState = remember { mutableStateOf(Offset(0.0F, 0.0F)) }
-    val centerOfScreenState = remember { mutableStateOf(Offset(0.0F, 0.0F)) }
-
+    val cursorPositionState = remember { mutableStateOf(Offset.Zero) }
+    val centerOfScreenState = remember { mutableStateOf(Offset.Zero) }
 
     val centerOfScreen = remember(centerOfScreenState.value) { centerOfScreenState.value }
 
@@ -91,15 +90,16 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
             strokeWidth.animateTo(4f)
         }
     }
-    val connectionConfig = remember(actualDensity, settings) {
-        ConnectionConfig(
-            stubLength = actualDensity.run { settings.stubLength.dp.toPx() },
-            controlPointFactor = settings.controlPointer,
-            maxArcHeight = actualDensity.run { settings.maxHit.dp.toPx() },
-            strokeWidth = settings.strokeWidth.dp,
-            hitThreshold = settings.hitThreshold.dp
-        )
-    }
+    val connectionConfig =
+        remember(actualDensity, settings) {
+            ConnectionConfig(
+                stubLength = actualDensity.run { settings.stubLength.dp.toPx() },
+                controlPointFactor = settings.controlPointer,
+                maxArcHeight = actualDensity.run { settings.maxHit.dp.toPx() },
+                strokeWidth = settings.strokeWidth.dp,
+                hitThreshold = settings.hitThreshold.dp,
+            )
+        }
 
     val mapCursor =
         remember(cursorPosition, centerOfScreen, zoom, userCoordinate) {
@@ -107,7 +107,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                 cursorPosition,
                 centerOfScreen,
                 zoom,
-                userCoordinate
+                userCoordinate,
             )
         }
     val dragActionState = remember { mutableStateOf<DragAction<Id>?>(null) }
@@ -125,7 +125,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
             roundToNearest,
             action,
             circleRadius,
-            actualDensity.density
+            actualDensity.density,
         ) {
             calculatePointer(
                 minShapeSize = minShapeSize,
@@ -143,17 +143,18 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                 circleRadius = circleRadius,
                 roundToNearest = roundToNearest,
                 action = action,
-                density = 1f / actualDensity.density //ISSUE 01: Density
+                density = 1f / actualDensity.density, // ISSUE 01: Density
             )
         }
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(0.dp))
+        modifier =
+            modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(0.dp)),
     ) {
         Box(backgroundModifier.fillMaxSize())
         Row(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 DrawConnections(
@@ -173,7 +174,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                     lineColor = settings.defaultLineColor,
                     drawColor = Color.White,
                     roundToNearest = roundToNearest,
-                    connectionDragBlankId = connectionDragBlankId
+                    connectionDragBlankId = connectionDragBlankId,
                 )
                 DrawShapes(
                     minShapeSize = minShapeSize,
@@ -186,7 +187,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                     action = action,
                     onDrawBlock = onDrawBlock,
                     roundToNearest = roundToNearest,
-                    onDrawConnectionCircle = onDrawConnectionCircle
+                    onDrawConnectionCircle = onDrawConnectionCircle,
                 )
                 val actionState = rememberUpdatedState(action)
                 val updatedShapes = rememberUpdatedState(shapes)
@@ -197,72 +198,69 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                 val roundToNearestState = rememberUpdatedState(roundToNearest)
                 val circleRadiusState = rememberUpdatedState(circleRadius)
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .onGloballyPositioned {
-                            centerOfScreenState.value =
-                                Offset(
-                                    it.size.width.toFloat(),
-                                    it.size.height.toFloat()
-                                ) / 2f
-                        }
-                        .dashboard(
-                            consume = consume,
-                            roundToNearestState = roundToNearestState,
-                            zoomState = zoomState,
-                            sizeRound = sizeRound,
-                            circleRadiusState = circleRadiusState,
-                            cursorPositionState = cursorPositionState,
-                            centerOfScreenState = centerOfScreenState,
-                            userCoordinateState = userCoordinateState,
-                            connectionConfig = connectionConfig,
-                            isDrawingState = isDrawingState,
-                            actionState = actionState,
-                            onActionSet = onActionSet,
-
-                            shapes = updatedShapes,
-                            connections = updatedConnections,
-
-                            onScrollChange = {
-                                if (isHomeHoldState.value && it.y != 0f) {
-                                    onZoomChange(abs(zoomState.value + it.y / 100f))
-                                } else {
-                                    val userCoordinate = userCoordinateState.value
-                                    onUserCoordinateChange(userCoordinate - it * scaleMovementModifier)
-                                }
-                            },
-                            onDrawStart = { point ->
-                                val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
-                                val pointWithStroke = point.copy(strokeWidth = strokeWidth)
-                                currentPath = (currentPath + pointWithStroke)
-                            },
-                            onDrawChange = { point ->
-                                val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
-                                val pointWithStroke = point.copy(strokeWidth = strokeWidth)
-                                currentPath =
-                                    (currentPath.toMutableList() + pointWithStroke)
-                            },
-                            onDrawEnd = {
-                                if (currentPath.isNotEmpty()) {
-                                    onAddPath(
-                                        StylusPath(
-                                            points = currentPath.toList(),
-                                            color = Color.Red
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .onGloballyPositioned {
+                                centerOfScreenState.value =
+                                    Offset(
+                                        it.size.width.toFloat(),
+                                        it.size.height.toFloat(),
+                                    ) / 2f
+                            }.dashboard(
+                                consume = consume,
+                                roundToNearestState = roundToNearestState,
+                                zoomState = zoomState,
+                                sizeRound = sizeRound,
+                                circleRadiusState = circleRadiusState,
+                                cursorPositionState = cursorPositionState,
+                                centerOfScreenState = centerOfScreenState,
+                                userCoordinateState = userCoordinateState,
+                                connectionConfig = connectionConfig,
+                                isDrawingState = isDrawingState,
+                                actionState = actionState,
+                                onActionSet = onActionSet,
+                                shapes = updatedShapes,
+                                connections = updatedConnections,
+                                onScrollChange = {
+                                    if (isHomeHoldState.value && it.y != 0f) {
+                                        onZoomChange(abs(zoomState.value + it.y / 100f))
+                                    } else {
+                                        val userCoordinate = userCoordinateState.value
+                                        onUserCoordinateChange(userCoordinate - it * scaleMovementModifier)
+                                    }
+                                },
+                                onDrawStart = { point ->
+                                    val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
+                                    val pointWithStroke = point.copy(strokeWidth = strokeWidth)
+                                    currentPath = (currentPath + pointWithStroke)
+                                },
+                                onDrawChange = { point ->
+                                    val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
+                                    val pointWithStroke = point.copy(strokeWidth = strokeWidth)
+                                    currentPath =
+                                        (currentPath.toMutableList() + pointWithStroke)
+                                },
+                                onDrawEnd = {
+                                    if (currentPath.isNotEmpty()) {
+                                        onAddPath(
+                                            StylusPath(
+                                                points = currentPath.toList(),
+                                                color = Color.Red,
+                                            ),
                                         )
-                                    )
-                                    currentPath = listOf()
-                                }
-                            },
-                            dragActionState = dragActionState,
-                            onClick = { },
-                            onMoveShape = onMoveShape,
-                            onResizeShape = onResizeShape,
-                            onAddConnection = onAddConnection,
-                            onZoomChange = onZoomChange,
-                            onUserCoordinateChange = onUserCoordinateChange,
-                            minShapeSize = minShapeSize
-                        )
-                        .pointerHoverIcon(pointer.pointerIcon)
+                                        currentPath = listOf()
+                                    }
+                                },
+                                dragActionState = dragActionState,
+                                onClick = { },
+                                onMoveShape = onMoveShape,
+                                onResizeShape = onResizeShape,
+                                onAddConnection = onAddConnection,
+                                onZoomChange = onZoomChange,
+                                onUserCoordinateChange = onUserCoordinateChange,
+                                minShapeSize = minShapeSize,
+                            ).pointerHoverIcon(pointer.pointerIcon),
                 ) {}
             }
         }
@@ -275,48 +273,68 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                     centerOfScreen,
                     shapes.map { x -> x.position },
                     dragActionState.value,
-                    roundToNearest
+                    roundToNearest,
                 ) {
-                    if (action == null)
+                    if (action == null) {
                         null
-                    else {
+                    } else {
                         val dragAction = dragActionState.value
-                        val addOffset = if (dragAction != null) {
-                            when (dragAction.dragType) {
-                                is DragType.Connection -> Offset.Zero
-                                is DragType.Resize -> {
-                                    when (action) {
-                                        is Action.Connection -> Offset.Zero
-                                        is Action.DoubleClicked -> Offset.Zero
-                                        is Action.ShapeAction -> {
-                                            if (action.shape.id == (dragAction.dragType as DragType.Resize).shapeId) {
-                                                dragAction.accelerate.copy(y = 0f) / 2f
-                                            } else {
+                        val addOffset =
+                            if (dragAction != null) {
+                                when (dragAction.dragType) {
+                                    is DragType.Connection -> {
+                                        Offset.Zero
+                                    }
+
+                                    is DragType.Resize -> {
+                                        when (action) {
+                                            is Action.Connection -> {
                                                 Offset.Zero
                                             }
-                                        }
-                                    }
-                                }
 
-                                is DragType.ShapeDrag -> {
-                                    when (action) {
-                                        is Action.Connection -> Offset.Zero
-                                        is Action.DoubleClicked -> Offset.Zero
-                                        is Action.ShapeAction -> {
-                                            if (action.shape.id == (dragAction.dragType as DragType.ShapeDrag).shapeId) {
-                                                dragAction.accelerate - dragAction.startMapPosition
-                                            } else {
+                                            is Action.DoubleClicked -> {
                                                 Offset.Zero
+                                            }
+
+                                            is Action.ShapeAction -> {
+                                                if (action.shape.id == (dragAction.dragType as DragType.Resize).shapeId) {
+                                                    dragAction.accelerate.copy(y = 0f) / 2f
+                                                } else {
+                                                    Offset.Zero
+                                                }
                                             }
                                         }
                                     }
 
+                                    is DragType.ShapeDrag -> {
+                                        when (action) {
+                                            is Action.Connection -> {
+                                                Offset.Zero
+                                            }
+
+                                            is Action.DoubleClicked -> {
+                                                Offset.Zero
+                                            }
+
+                                            is Action.ShapeAction -> {
+                                                if (action.shape.id == (dragAction.dragType as DragType.ShapeDrag).shapeId) {
+                                                    dragAction.accelerate - dragAction.startMapPosition
+                                                } else {
+                                                    Offset.Zero
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
+                            } else {
+                                Offset.Zero
                             }
-                        } else Offset.Zero
-                        (action.getOffsetMenu<ShapeType>(shapes = shapes) - userCoordinate + addOffset.roundToNearest(
-                            roundToNearest
-                        )) * zoom + centerOfScreen
+                        (
+                            action.getOffsetMenu<ShapeType>(shapes = shapes) - userCoordinate +
+                                addOffset.roundToNearest(
+                                    roundToNearest,
+                                )
+                        ) * zoom + centerOfScreen
                     }
                 }
             if (center != null && action != null) {

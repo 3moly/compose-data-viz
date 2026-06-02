@@ -5,5 +5,5 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class AtlasLookup(
     val layerIndex: Int,
-    val tileIndex: Int
+    val tileIndex: Int,
 )

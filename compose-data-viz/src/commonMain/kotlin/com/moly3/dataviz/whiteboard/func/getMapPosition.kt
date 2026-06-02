@@ -6,7 +6,7 @@ fun getMapPosition(
     position: Offset,
     centerOfScreen: Offset,
     zoom: Float,
-    userCoordinate: Offset
+    userCoordinate: Offset,
 ): Offset {
     val position = (position - centerOfScreen) / zoom + userCoordinate
     return position

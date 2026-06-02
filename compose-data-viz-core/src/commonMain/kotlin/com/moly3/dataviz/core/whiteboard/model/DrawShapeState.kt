@@ -7,5 +7,5 @@ data class DrawShapeState<ShapeType : Shape<Id>, Id>(
     val shape: ShapeType,
     val isSelected: Boolean,
     val isDoubleClicked: Boolean,
-    val index: Int
+    val index: Int,
 )

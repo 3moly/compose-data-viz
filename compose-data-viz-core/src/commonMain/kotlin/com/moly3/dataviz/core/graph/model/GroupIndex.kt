@@ -13,7 +13,7 @@ class GroupIndex<Id> private constructor(
     private val byNode: Map<Id, List<GroupMembership<Id>>>,
     private val byGroup: Map<GroupId, List<GroupMembership<Id>>>,
     private val defById: Map<GroupId, GroupHullDef>,
-    val identity: Int
+    val identity: Int,
 ) {
     /**
      * Stable identity of the membership topology this index represents.
@@ -22,20 +22,16 @@ class GroupIndex<Id> private constructor(
      * can confirm a snapshot was built from the index they expect.
      */
 
-
     val groupIds: List<GroupId> get() = model.defs.map { it.id }
 
-    fun membershipsOf(nodeId: Id): List<GroupMembership<Id>> =
-        byNode[nodeId] ?: emptyList()
+    fun membershipsOf(nodeId: Id): List<GroupMembership<Id>> = byNode[nodeId] ?: emptyList()
 
-    fun membersOf(groupId: GroupId): List<GroupMembership<Id>> =
-        byGroup[groupId] ?: emptyList()
+    fun membersOf(groupId: GroupId): List<GroupMembership<Id>> = byGroup[groupId] ?: emptyList()
 
     fun defOf(groupId: GroupId): GroupHullDef? = defById[groupId]
 
     /** Group ids a node belongs to — replaces the old getNodeGroups lambda. */
-    fun groupsForNode(nodeId: Id): List<GroupId> =
-        membershipsOf(nodeId).map { it.groupId }
+    fun groupsForNode(nodeId: Id): List<GroupId> = membershipsOf(nodeId).map { it.groupId }
 
     companion object {
         fun <Id> build(model: GroupModel<Id>): GroupIndex<Id> {
@@ -43,8 +39,11 @@ class GroupIndex<Id> private constructor(
             val byGroup = model.memberships.groupBy { it.groupId }
             val defById = model.defs.associateBy { it.id }
             return GroupIndex(
-                model, byNode, byGroup, defById,
-                identity = model.hashCode()
+                model,
+                byNode,
+                byGroup,
+                defById,
+                identity = model.hashCode(),
             )
         }
     }

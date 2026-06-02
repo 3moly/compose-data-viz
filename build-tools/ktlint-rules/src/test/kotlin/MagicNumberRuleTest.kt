@@ -1,6 +1,6 @@
 import com.pinterest.ktlint.test.KtLintAssertThat.Companion.assertThatRule
-import com.the3moly.build_tools.ktlint_rules.Constants
-import com.the3moly.build_tools.ktlint_rules.MagicNumberRule
+import com.the3moly.buildtools.ktlintrules.Constants
+import com.the3moly.buildtools.ktlintrules.MagicNumberRule
 import kotlin.test.Test
 
 class MagicNumberRuleTest {
