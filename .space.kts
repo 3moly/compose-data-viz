@@ -45,6 +45,7 @@ job("publish docs") {
         gitPush {
             anyBranchMatching {
                 +"main"
+                +"readme"
             }
         }
     }
