@@ -3,7 +3,7 @@ theme:
   name: material
 
 # Tell MkDocs to look one folder up (the root of the 'docs' folder) for .md files
-docs_dir: '../'
+# docs_dir: '../'
 
 # Tell MkDocs to output the built site to the root of your project
 # (so you don't end up with docs/site-deps/site/)
