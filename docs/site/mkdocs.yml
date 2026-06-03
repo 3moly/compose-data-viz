@@ -7,4 +7,4 @@ docs_dir: '../'
 
 # Tell MkDocs to output the built site to the root of your project
 # (so you don't end up with docs/site-deps/site/)
-site_dir: '../../site'
+# site_dir: '../../site'
