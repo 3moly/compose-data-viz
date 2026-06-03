@@ -18,11 +18,13 @@ fun isInShape(
     return mouseX in left..right && mouseY in top..bottom
 }
 
+private const val DETECTION_PERCENT_DEFAULT = 0.1f
+
 fun isInShapeComplex(
     mousePosition: Offset,
     shapePosition: Offset,
     shapeSize: Offset,
-    detectionPercent: Float = 0.1f,
+    detectionPercent: Float = DETECTION_PERCENT_DEFAULT,
     circleRadius: Float? = null,
 ): InShape? {
     val left = shapePosition.x

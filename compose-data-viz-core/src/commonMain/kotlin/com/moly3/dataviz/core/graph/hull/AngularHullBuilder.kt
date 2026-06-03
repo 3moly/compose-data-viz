@@ -10,23 +10,18 @@ import kotlin.math.sqrt
  * Fast angular-sweep hull. Produces a star-shaped polygon around the group
  * centroid by bucketing points by angle and keeping the farthest point per
  * bucket, then connecting them in angular order.
- *
- * O(n) — single pass, no sort. Bucket count [sectors] is fixed, so the
- * polygon has at most [sectors] vertices regardless of group size. This is
- * the key win for large groups: a 5000-node group still yields a ~64-gon.
- *
- * Valid when the group is roughly centroid-blob-shaped. Group physics
- * (cohesionForce pulling members toward the centroid) makes that hold in
- * practice. NOT valid for crescent / multi-lobe groups — see fallback note.
  */
 internal object AngularHullBuilder {
+    private const val MIN_POINTS_FOR_HULL = 3
+    private const val EPSILON = 1e-3f
+
     fun build(
         pointsXY: FloatArray,
         sectors: Int,
         padding: Float = 0f,
     ): HullResult? {
         val n = pointsXY.size / 2
-        if (n < 3) return null
+        if (n < MIN_POINTS_FOR_HULL) return null
 
         // Centroid.
         var cx = 0f
@@ -38,9 +33,8 @@ internal object AngularHullBuilder {
         cx /= n
         cy /= n
 
-        // Per-sector farthest point. farR2 holds squared radius so we avoid
-        // a sqrt per point; we only sqrt the survivors at the end.
-        val farR2 = FloatArray(sectors) // 0 == empty sector
+        // Per-sector farthest point.
+        val farR2 = FloatArray(sectors)
         val farX = FloatArray(sectors)
         val farY = FloatArray(sectors)
         val twoPi = (2f * PI).toFloat()
@@ -54,7 +48,7 @@ internal object AngularHullBuilder {
             val r2 = dx * dx + dy * dy
             if (r2 == 0f) continue
 
-            var ang = atan2(dy, dx) // -PI..PI
+            var ang = atan2(dy, dx)
             if (ang < 0f) ang += twoPi
             var s = (ang * invSector).toInt()
             if (s >= sectors) s = sectors - 1
@@ -66,15 +60,11 @@ internal object AngularHullBuilder {
             }
         }
 
-        // Collect non-empty sectors in angular order. Track the topmost
-        // emitted vertex — that's the label anchor, matching HullBuilder's
-        // "anchor sits on the hull boundary" contract so the renderer's
-        // upward hullLabelVerticalOffset nudge works for both builders.
         val path = Path()
         var started = false
         var first = true
         var anchorX = 0f
-        var anchorY = Float.POSITIVE_INFINITY // minimise: smallest y == topmost
+        var anchorY = Float.POSITIVE_INFINITY
 
         for (s in 0 until sectors) {
             if (farR2[s] == 0f) continue
@@ -84,7 +74,7 @@ internal object AngularHullBuilder {
                 val dx = px - cx
                 val dy = py - cy
                 val r = sqrt(dx * dx + dy * dy)
-                if (r > 1e-3f) {
+                if (r > EPSILON) {
                     val scale = (r + padding) / r
                     px = cx + dx * scale
                     py = cy + dy * scale

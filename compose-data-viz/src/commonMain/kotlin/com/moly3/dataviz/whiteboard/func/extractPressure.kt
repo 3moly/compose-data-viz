@@ -3,16 +3,18 @@ package com.moly3.dataviz.whiteboard.func
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
 
+private const val DEFAULT_PRESSURE = 0.6f
+
 fun extractPressure(change: PointerInputChange): Float =
     when (change.type) {
         PointerType.Stylus -> {
             // Extract pressure from stylus input
-            change.pressure.takeIf { it > 0f } ?: 0.8f
+            change.pressure.takeIf { it > 0f } ?: DEFAULT_PRESSURE
         }
 
         else -> {
-            0.6f
-        } // Default pressure for touch
+            DEFAULT_PRESSURE
+        }
     }
 
 fun extractTilt(change: PointerInputChange): Pair<Float, Float> =

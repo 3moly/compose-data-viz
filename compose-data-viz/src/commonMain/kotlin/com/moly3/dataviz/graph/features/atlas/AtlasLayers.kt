@@ -17,9 +17,14 @@ data class AtlasLayers(
     }
 
     val isEmpty: Boolean get() = layers.isEmpty()
-    val combinedVersion: Long get() = layers.fold(0L) { acc, a -> acc * 31 + a.version }
+
+    val combinedVersion: Long get() =
+        layers.fold(0L) { acc, a ->
+            acc * HASH_PRIME_MULTIPLIER + a.version
+        }
 
     companion object {
+        private const val HASH_PRIME_MULTIPLIER = 31
         val EMPTY = AtlasLayers(persistentListOf())
     }
 }

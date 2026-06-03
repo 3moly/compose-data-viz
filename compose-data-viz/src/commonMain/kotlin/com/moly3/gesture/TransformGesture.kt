@@ -18,6 +18,10 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.time.Clock
 
+private const val DEFAULT_DOUBLE_CLICK_TIMEOUT_MS = 300L
+private const val DEFAULT_DOUBLE_CLICK_THRESHOLD = 100f
+private const val DEGREES_IN_HALF_CIRCLE = 180f
+
 suspend fun PointerInputScope.detectPointerTransformGestures(
     panZoomLock: Boolean = false,
     numberOfPointers: Int = 1,
@@ -69,8 +73,8 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
             // Double-click detection variables
             var lastClickTime = 0L
             var lastClickPosition = Offset.Zero
-            val doubleClickTimeoutMs = doubleClickDelay ?: 300L
-            val doubleClickThreshold = 100f
+            val doubleClickTimeoutMs = doubleClickDelay ?: DEFAULT_DOUBLE_CLICK_TIMEOUT_MS
+            val doubleClickThreshold = DEFAULT_DOUBLE_CLICK_THRESHOLD
 
             awaitEachGesture {
                 var rotation = 0f
@@ -128,7 +132,7 @@ suspend fun PointerInputScope.detectPointerTransformGestures(
 
                             val centroidSize = event.calculateCentroidSize(useCurrent = false)
                             val zoomMotion = abs(1 - zoom) * centroidSize
-                            val rotationMotion = abs(rotation * PI.toFloat() * centroidSize / 180f)
+                            val rotationMotion = abs(rotation * PI.toFloat() * centroidSize / DEGREES_IN_HALF_CIRCLE)
                             val panMotion = pan.getDistance()
 
                             if (zoomMotion > touchSlop ||

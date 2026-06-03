@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.IntOffset
 
+private const val OFF_SCREEN_COORDINATE = -1_000_000
+
 @Composable
 fun <T> rememberPainterFromComposable(
     modifier: Modifier = Modifier,
@@ -49,7 +51,7 @@ fun <T> rememberPainterFromComposable(
             }
         val placeables = measurables.map { it.measure(loose) }
         layout(0, 0) {
-            placeables.forEach { it.place(IntOffset(-1_000_000, -1_000_000)) }
+            placeables.forEach { it.place(IntOffset(OFF_SCREEN_COORDINATE, OFF_SCREEN_COORDINATE)) }
         }
     }
 

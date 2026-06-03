@@ -13,10 +13,12 @@ import com.moly3.dataviz.graph.features.atlas.TextureAtlas
 import kotlin.math.ceil
 import kotlin.math.sqrt
 
+private const val DEFAULT_TILE_SIZE_PX = 128
+
 fun createSvgAtlas(
     painters: List<Painter>,
     density: Density,
-    tileSizePx: Int = 128,
+    tileSizePx: Int = DEFAULT_TILE_SIZE_PX,
 ): TextureAtlas {
     var ppaineters = painters
     if (ppaineters.isEmpty()) {

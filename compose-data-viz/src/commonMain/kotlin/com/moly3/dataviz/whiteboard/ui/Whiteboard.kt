@@ -39,6 +39,17 @@ import com.moly3.dataviz.whiteboard.func.getMapPosition
 import com.moly3.dataviz.whiteboard.func.roundToNearest
 import kotlin.math.abs
 
+private const val SCALE_MOVEMENT_MODIFIER = 5f
+private const val SIZE_ROUND = 25
+private const val CONNECTION_STROKE_WIDTH = 4f
+private const val ZOOM_SCROLL_DIVISOR = 100f
+private const val STROKE_PRESSURE_FACTOR = 15f
+private const val MIN_STROKE_WIDTH = 2f
+private const val MAX_STROKE_WIDTH = 20f
+
+fun StylusPoint.withPressureStroke(): StylusPoint =
+    copy(strokeWidth = (pressure * STROKE_PRESSURE_FACTOR).coerceIn(MIN_STROKE_WIDTH, MAX_STROKE_WIDTH))
+
 @Composable
 fun <ShapeType : Shape<Id>, Id> Whiteboard(
     minShapeSize: Float,
@@ -68,8 +79,8 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     onDrawConnectionCircle: @Composable (RoundedCornerShape, Modifier) -> Unit,
 ) {
     var currentPath by remember { mutableStateOf<List<StylusPoint>>(listOf()) }
-    val scaleMovementModifier = 5f
-    val sizeRound = 25
+    val scaleMovementModifier = SCALE_MOVEMENT_MODIFIER
+    val sizeRound = SIZE_ROUND
     val actualDensity = LocalDensity.current
 
     val scope = rememberCoroutineScope()
@@ -87,7 +98,7 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
     LaunchedEffect(action) {
         strokeWidth.snapTo(1f)
         if (action is Action.Connection) {
-            strokeWidth.animateTo(4f)
+            strokeWidth.animateTo(CONNECTION_STROKE_WIDTH)
         }
     }
     val connectionConfig =
@@ -224,20 +235,18 @@ fun <ShapeType : Shape<Id>, Id> Whiteboard(
                                 connections = updatedConnections,
                                 onScrollChange = {
                                     if (isHomeHoldState.value && it.y != 0f) {
-                                        onZoomChange(abs(zoomState.value + it.y / 100f))
+                                        onZoomChange(abs(zoomState.value + it.y / ZOOM_SCROLL_DIVISOR))
                                     } else {
                                         val userCoordinate = userCoordinateState.value
                                         onUserCoordinateChange(userCoordinate - it * scaleMovementModifier)
                                     }
                                 },
                                 onDrawStart = { point ->
-                                    val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
-                                    val pointWithStroke = point.copy(strokeWidth = strokeWidth)
+                                    val pointWithStroke = point.withPressureStroke()
                                     currentPath = (currentPath + pointWithStroke)
                                 },
                                 onDrawChange = { point ->
-                                    val strokeWidth = (point.pressure * 15f).coerceIn(2f, 20f)
-                                    val pointWithStroke = point.copy(strokeWidth = strokeWidth)
+                                    val pointWithStroke = point.withPressureStroke()
                                     currentPath =
                                         (currentPath.toMutableList() + pointWithStroke)
                                 },

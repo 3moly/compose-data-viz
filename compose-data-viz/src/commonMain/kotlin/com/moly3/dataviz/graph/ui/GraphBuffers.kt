@@ -3,6 +3,13 @@ package com.moly3.dataviz.graph.ui
 import androidx.compose.ui.graphics.Path
 
 class GraphBuffers {
+    companion object {
+        private const val VERTICES_PER_QUAD = 4
+        private const val INDICES_PER_QUAD = 6
+        private const val BUFFER_GROWTH_FACTOR = 2
+        private const val COORDINATE_COMPONENTS = 2
+    }
+
     var positions = FloatArray(0)
     var texCoords = FloatArray(0)
     var colors = IntArray(0)
@@ -15,18 +22,26 @@ class GraphBuffers {
 
     /**
      * Reusable scratch path for arrow heads. Rewound (not re-allocated)
-     * on every use in drawArrowHead so per-edge Path() allocation —
-     * previously a real GC pressure point on large graphs — goes away.
+     * on every use in drawArrowHead.
      */
     val arrowPath: Path = Path()
 
     fun ensureCapacity(nodeCount: Int) {
-        val reqVerts = nodeCount * 4
-        val reqIndices = nodeCount * 6
-        if (positions.size < reqVerts * 2) positions = FloatArray(reqVerts * 4)
-        if (texCoords.size < reqVerts * 2) texCoords = FloatArray(reqVerts * 4)
-        if (colors.size < reqVerts) colors = IntArray(reqVerts * 2)
-        if (indices.size < reqIndices) indices = ShortArray(reqIndices * 2)
+        val reqVerts = nodeCount * VERTICES_PER_QUAD
+        val reqIndices = nodeCount * INDICES_PER_QUAD
+
+        if (positions.size < reqVerts * COORDINATE_COMPONENTS) {
+            positions = FloatArray(reqVerts * VERTICES_PER_QUAD)
+        }
+        if (texCoords.size < reqVerts * COORDINATE_COMPONENTS) {
+            texCoords = FloatArray(reqVerts * VERTICES_PER_QUAD)
+        }
+        if (colors.size < reqVerts) {
+            colors = IntArray(reqVerts * BUFFER_GROWTH_FACTOR)
+        }
+        if (indices.size < reqIndices) {
+            indices = ShortArray(reqIndices * BUFFER_GROWTH_FACTOR)
+        }
     }
 
     fun getExactPositions(size: Int): FloatArray {

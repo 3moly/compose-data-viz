@@ -18,6 +18,7 @@ import com.moly3.dataviz.core.whiteboard.model.Shape
 import com.moly3.dataviz.core.whiteboard.model.ShapeConnection
 import com.moly3.dataviz.core.whiteboard.model.StylusPoint
 import com.moly3.dataviz.core.whiteboard.model.allSides
+import com.moly3.dataviz.whiteboard.ui.withPressureStroke
 import com.moly3.gesture.PointerRequisite
 import com.moly3.gesture.detectPointerTransformGestures
 import kotlin.time.ExperimentalTime
@@ -239,7 +240,6 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                         if (isDrawingState.value) {
                             val pressure = extractPressure(mainPointerInputChange)
                             val tilt = extractTilt(mainPointerInputChange)
-                            val strokeWidth = (pressure * 15f).coerceIn(2f, 20f)
                             currentOnDrawChange(
                                 StylusPoint(
                                     x = mousePosition.x,
@@ -247,9 +247,8 @@ fun <ShapeType : Shape<Id>, Id> Modifier.dashboard(
                                     pressure = pressure,
                                     tiltX = tilt.first,
                                     tiltY = tilt.second,
-                                    strokeWidth = strokeWidth,
                                     timestamp = 0L,
-                                ),
+                                ).withPressureStroke(),
                             )
                         } else {
                             val off = (gesturePan / safeZoom)

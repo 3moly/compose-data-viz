@@ -91,7 +91,8 @@ class StringLiteralRule : Rule(RuleId(Constants.RAW_STRING_RULE_ID), About()) {
                 "buildString",
                 "id",
                 "PrimitiveSerialDescriptor",
-                "setFloatUniform"
+                "setFloatUniform",
+                "subcompose"
             )
     }
 }

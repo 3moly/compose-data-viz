@@ -28,6 +28,16 @@ class MagicNumberRule : Rule(RuleId(Constants.MAGIC_NUMBERS_RULE_ID), About()) {
             Constants.ALLOWED_FLOAT_HALF_ONE,
         )
 
+    private val preconditionFunctions =
+        setOf(
+            Constants.PRECONDITION_REQUIRE,
+            Constants.PRECONDITION_REQUIRE_NOT_NULL,
+            Constants.PRECONDITION_CHECK,
+            Constants.PRECONDITION_CHECK_NOT_NULL,
+            Constants.PRECONDITION_ERROR,
+            Constants.PRECONDITION_ASSERT,
+        )
+
     @Suppress("OVERRIDE_DEPRECATION")
     override fun beforeVisitChildNodes(
         node: ASTNode,
@@ -59,6 +69,7 @@ class MagicNumberRule : Rule(RuleId(Constants.MAGIC_NUMBERS_RULE_ID), About()) {
         }
 
 
+
         val dotExpression = node.psi.parent as? KtDotQualifiedExpression
         val isComposeUnit = dotExpression?.selectorExpression?.text in setOf("dp", "sp", "px", "em")
         if (isComposeUnit) {
@@ -66,12 +77,20 @@ class MagicNumberRule : Rule(RuleId(Constants.MAGIC_NUMBERS_RULE_ID), About()) {
         }
 
         val callExpression = node.psi.getParentOfType<KtCallExpression>(true)
+        if (callExpression?.calleeExpression?.text in preconditionFunctions) {
+            return // Whitelist literals inside precondition checks
+        }
         val isColorCall = callExpression?.calleeExpression?.text == Constants.COLOR_CALL_NAME
         val isHexColorLiteral = text.startsWith(Constants.HEX_COLOR_PREFIX, ignoreCase = true)
         if (isColorCall && isHexColorLiteral) {
             return
         }
+        val insidePrecondition =
+            generateSequence(node.psi.getParentOfType<KtCallExpression>(true)) {
+                it.getParentOfType<KtCallExpression>(true)
+            }.any { it.calleeExpression?.text in preconditionFunctions }
 
+        if (insidePrecondition) return
 
         if (text !in allowedNumbers) {
             emit(

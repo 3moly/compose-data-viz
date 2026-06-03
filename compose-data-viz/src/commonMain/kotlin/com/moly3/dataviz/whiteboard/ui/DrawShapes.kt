@@ -37,7 +37,8 @@ val corners =
         Offset(0f, 1f), // Bottom-left
         Offset(1f, 1f), // Bottom-right
     )
-const val SIZE_ROUND = 25
+private const val SIZE_ROUND = 25
+private const val CORNER_CIRCLE_RADIUS = 12
 
 @Composable
 fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
@@ -69,12 +70,9 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
             )
         val isSelected =
             remember(item.id, dragActionState.value, action) {
-                val dragAction = dragActionState.value
-                dragAction != null &&
-                    dragAction.dragType is DragType.ShapeDrag &&
-                    (dragAction.dragType as DragType.ShapeDrag).shapeId == item.id ||
-                    action is Action.ShapeAction &&
-                    action.shape.id == item.id
+                val dragType = dragActionState.value?.dragType
+                (dragType is DragType.ShapeDrag && dragType.shapeId == item.id) ||
+                    (action is Action.ShapeAction && action.shape.id == item.id)
             }
 
         onDrawBlock(
@@ -94,8 +92,6 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
         )
 
         if (isSelected) {
-            val cornerCircleSize = 12
-
             for (corner in corners) {
                 val mutli = Offset(shapeParams.size.x * corner.x, shapeParams.size.y * corner.y)
                 val cornerOffset =
@@ -105,16 +101,16 @@ fun <ShapeType : Shape<Id>, Id> BoxScope.DrawShapes(
                     modifier =
                         Modifier
                             .absoluteOffset(cornerOffset * zoom / density)
-                            .size((cornerCircleSize * zoom).dp / density)
+                            .size((CORNER_CIRCLE_RADIUS * zoom).dp / density)
                             .align(Alignment.Center)
                             .background(
                                 color = Color.White,
-                                RoundedCornerShape((cornerCircleSize * zoom).dp),
+                                RoundedCornerShape((CORNER_CIRCLE_RADIUS * zoom).dp),
                             ).border(
                                 width = (1.5f * zoom).dp / density,
                                 color = Color.Gray,
-                                shape = RoundedCornerShape((cornerCircleSize * zoom).dp),
-                            ).clip(RoundedCornerShape((cornerCircleSize * zoom).dp)),
+                                shape = RoundedCornerShape((CORNER_CIRCLE_RADIUS * zoom).dp),
+                            ).clip(RoundedCornerShape((CORNER_CIRCLE_RADIUS * zoom).dp)),
                 ) {}
             }
         }

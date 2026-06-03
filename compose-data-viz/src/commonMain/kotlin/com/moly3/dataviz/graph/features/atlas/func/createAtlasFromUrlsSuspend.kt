@@ -11,11 +11,14 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
+private const val DEFAULT_TILE_SIZE_PX = 128
+private const val DEFAULT_CONCURRENCY_LIMIT = 20
+
 suspend fun createAtlasFromUrlsSuspend(
     urls: List<String>,
     density: Density,
-    tileSizePx: Int = 128,
-    concurrencyLimit: Int = 20,
+    tileSizePx: Int = DEFAULT_TILE_SIZE_PX,
+    concurrencyLimit: Int = DEFAULT_CONCURRENCY_LIMIT,
     fallbackPainter: Painter = ColorPainter(Color.Transparent),
     imageLoader: suspend (url: String) -> Painter?,
 ): TextureAtlas =

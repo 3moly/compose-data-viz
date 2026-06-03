@@ -40,4 +40,11 @@ object Constants {
     const val CONTEXT_NAMED_ARGUMENT = " It is passed as argument '%s' to '%s()'."
     const val CONTEXT_POSITIONAL_ARGUMENT = " It is passed as positional argument #%d to '%s()'."
     const val CONTEXT_CALL = " It is passed to '%s()'."
+
+    const val PRECONDITION_REQUIRE = "require"
+    const val PRECONDITION_REQUIRE_NOT_NULL = "requireNotNull"
+    const val PRECONDITION_CHECK = "check"
+    const val PRECONDITION_CHECK_NOT_NULL = "checkNotNull"
+    const val PRECONDITION_ERROR = "error"
+    const val PRECONDITION_ASSERT = "assert"
 }

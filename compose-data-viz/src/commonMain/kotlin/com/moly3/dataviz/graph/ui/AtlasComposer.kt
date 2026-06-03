@@ -39,6 +39,14 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 
+private const val DEFAULT_IDLE_MILLIS = 150L
+private const val DEFAULT_VISIBILITY_PADDING_PX = 50f
+private const val DEFAULT_CONCURRENCY_LIMIT = 15
+private const val MOVEMENT_COMPUTE_THROTTLE_MILLIS = 100L
+private const val MAX_SCORING_NODES = 256
+private const val DEFAULT_MAX_FALLBACK_NODES = 60
+private const val DEFAULT_TILE_SIZE = 64
+
 /** How a tier picks which nodes to include. */
 sealed interface TierSelection {
     data object All : TierSelection
@@ -104,7 +112,7 @@ class MovementTracker internal constructor(
 }
 
 @Composable
-fun rememberMovementTracker(idleMillis: Long = 150L): MovementTracker {
+fun rememberMovementTracker(idleMillis: Long = DEFAULT_IDLE_MILLIS): MovementTracker {
     val scope = rememberCoroutineScope()
     return remember(scope, idleMillis) { MovementTracker(scope, idleMillis) }
 }
@@ -133,9 +141,9 @@ fun <Id, Data> rememberAtlasComposer(
     loaderKey: Any = Unit,
     staticIcons: ImmutableMap<String, Painter> = persistentMapOf(),
     staticIconKey: (Id, Data?) -> String? = { _, _ -> null },
-    visibilityPaddingPx: Float = 50f,
+    visibilityPaddingPx: Float = DEFAULT_VISIBILITY_PADDING_PX,
     isMoving: Boolean = false,
-    concurrencyLimit: Int = 15,
+    concurrencyLimit: Int = DEFAULT_CONCURRENCY_LIMIT,
 ): AtlasComposerHandle<Id, Data> {
     require(tiers.map { it.name }.toSet().size == tiers.size && tiers.none { it.name.isBlank() }) {
         "AtlasTier names must be unique and non-blank. Got: ${tiers.map { it.name }}"
@@ -175,7 +183,7 @@ fun <Id, Data> rememberAtlasComposer(
             if (!inputs.isMoving) {
                 state.recomputeVisibility()
                 lastComputeTime = now
-            } else if (now - lastComputeTime > 100L) {
+            } else if (now - lastComputeTime > MOVEMENT_COMPUTE_THROTTLE_MILLIS) {
                 state.recomputeVisibility()
                 lastComputeTime = now
             }
@@ -210,9 +218,9 @@ internal class AtlasComposerState<Id, Data>(
     var tiers by mutableStateOf<List<AtlasTier>>(emptyList())
     var staticIcons by mutableStateOf<ImmutableMap<String, Painter>>(persistentMapOf())
     var staticIconKey: (Id, Data?) -> String? = { _, _ -> null }
-    var visibilityPaddingPx: Float = 50f
     var loader: AtlasPainterLoader<Id, Data>? = null
-    var concurrencyLimit: Int = 15
+    var visibilityPaddingPx: Float = DEFAULT_VISIBILITY_PADDING_PX
+    var concurrencyLimit: Int = DEFAULT_CONCURRENCY_LIMIT
 
     var userPosition by mutableStateOf(Offset.Zero)
     var zoom by mutableStateOf(1f)
@@ -245,7 +253,7 @@ internal class AtlasComposerState<Id, Data>(
         val h = size.height.toFloat()
         val pad = visibilityPaddingPx
 
-        val scored = ArrayList<Pair<Id, Float>>(nodes.size.coerceAtMost(256))
+        val scored = ArrayList<Pair<Id, Float>>(nodes.size.coerceAtMost(MAX_SCORING_NODES))
         for (node in nodes) {
             val coord = coordinates[node.id] ?: continue
             val sx = (coord.x + userPosition.x) * zoom + w / 2f
@@ -263,10 +271,10 @@ internal class AtlasComposerState<Id, Data>(
                     (
                         tiers.maxOfOrNull {
                             when (val sel = it.selection) {
-                                TierSelection.All, TierSelection.AllVisible -> 60
+                                TierSelection.All, TierSelection.AllVisible -> DEFAULT_MAX_FALLBACK_NODES
                                 is TierSelection.TopByDistance -> sel.count
                             }
-                        } ?: 60
+                        } ?: DEFAULT_MAX_FALLBACK_NODES
                     ).coerceAtLeast(1)
                 nodes
                     .asSequence()
@@ -451,7 +459,7 @@ internal class AtlasComposerState<Id, Data>(
         val keys = staticIcons.keys.toList()
         val painters = keys.map { staticIcons.getValue(it) }
         val indexes = keys.mapIndexed { i, k -> k to i }.toMap()
-        val tileSize = tiers.maxOfOrNull { it.tileSizePx } ?: 64
+        val tileSize = tiers.maxOfOrNull { it.tileSizePx } ?: DEFAULT_TILE_SIZE
         val result = createSvgAtlas(painters, density, tileSize)
         val atlas =
             AtlasState(

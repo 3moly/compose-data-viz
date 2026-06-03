@@ -8,23 +8,13 @@ plugins {
     alias(libs.plugins.maven.publish).apply(false)
     alias(libs.plugins.android.kotlin.multiplatform.library).apply(false)
     alias(libs.plugins.ktlint).apply(false)
-//    alias(libs.plugins.detekt)
     alias(libs.plugins.jetbrains.kotlin.jvm).apply(false)
 }
-
-//detekt {
-//    enableCompilerPlugin.value(false)
-//    // Version of detekt that will be used. When unspecified the latest detekt
-//    // version found will be used. Override to stay on the same version.
-//    toolVersion = "2.0.0-alpha.3"
-//    config.setFrom("build-tools/detekt.yml")
-//}
 subprojects {
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
 
     configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
         debug.set(true)
-//        version.set("0.22.0")
         ignoreFailures.set(false)
         debug.set(true)
         verbose.set(true)
