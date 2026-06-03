@@ -1,11 +1,24 @@
----
-hide:
-  - navigation
----
 
-# 🚇 Metro
+
+# Compose Data Vizualizations
 
 # Introduction
+
+
+| feature                      |          JVM          | Android                |           JS           |          Wasm          |         Apple          |         Linux          |        Windows         |     Android Native     |
+|------------------------------|:---------------------:|------------------------|:----------------------:|:----------------------:|:----------------------:|:----------------------:|:----------------------:|:----------------------:|
+| dawdawdawafawfawf            |           ✅           | ✅                      |           ✅            |           ✅            |           ✅            |           ✅            |           ✅            |           ✅            |
+| interop-javax                |           ✅           | ✅                      |           ―            |           ―            |           ―            |           ―            |           ―            |           ―            |
+| interop-jakarta              |           ✅           | ✅                      |           ―            |           ―            |           ―            |           ―            |           ―            |           ―            |
+| interop-dagger               |           ✅           | ✅                      |           ―            |           ―            |           ―            |           ―            |           ―            |           ―            |
+| interop-guice                |           ✅           | ✅                      |           ―            |           ―            |           ―            |           ―            |           ―            |           ―            |
+| ---                          |           -           | -                      |           -            |           -            |           -            |           -            |           -            |           -            |
+| Multi-module aggregation     | ✅<br/>Kotlin `2.3.0`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.21`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ |
+| Top-level function injection | ✅<br/>Kotlin `2.3.0`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.21`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ | ✅<br/>Kotlin `2.3.20`+ |
+
+
+:material-home:
+:fontawesome-regular-face-laugh-wink:
 
 Metro is a compile-time dependency injection framework that draws heavy inspiration from [Dagger](https://github.com/google/dagger), [Anvil](https://github.com/square/anvil), and [Kotlin-Inject](https://github.com/evant/kotlin-inject). It seeks to unify their best features under one, cohesive solution while adding a few new features and implemented as a compiler plugin.
 
@@ -23,6 +36,8 @@ _I’m aware of the [XKCD comic](https://xkcd.com/927/) 🙂, I think Metro offe
 Check out the [Quick Start](quickstart.md) guide to get up and running with Metro, including installation and common patterns like the api/impl binding pattern.
 
 ## Installation
+
+![Description of the picture](media/tiles.png)
 
 Apply the gradle plugin.
 
@@ -57,23 +72,6 @@ The compiler plugin itself supports all multiplatform project types. The first-p
 
 Contribution hint generation is _not_ currently supported on native or Wasm targets until Kotlin `2.3.20-Beta1` or later. They do work within the same compilation though.
 
-## Caveats
-
-- Kotlin compiler plugins are not a stable API! Compiled outputs from this plugin _should_ be stable, but usage in newer versions of kotlinc are not guaranteed to be stable. That said, Metro will strive to make matching releases available quickly and test against Kotlin prereleases eagerly.
-
-## Acknowledgements
-
-Special thanks to the many people that helped advise and offer feedback on Metro's design and implementation.
-
-- Brian Norman
-- Ralf Wondratschek
-- Jesse Wilson
-- Dany Santiago
-- Eva Tatarka
-- Bridget Phillips
-- Bryan Stern
-- James Barr
-- and many more!
 
 License
 -------

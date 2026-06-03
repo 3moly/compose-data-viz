@@ -16,3 +16,5 @@ publish.sh
 /iosApp/Pods/
 /iosApp/Podfile.lock
 /sample/sample.podspec
+.venv/
+docs/site/site
