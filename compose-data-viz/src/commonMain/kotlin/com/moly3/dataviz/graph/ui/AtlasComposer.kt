@@ -133,6 +133,7 @@ fun rememberMovementTracker(idleMillis: Long = DEFAULT_IDLE_MILLIS): MovementTra
 fun <Id, Data> rememberAtlasComposer(
     nodes: List<GraphNode<Id, Data>>,
     tiers: List<AtlasTier>,
+    staticIconsCircular: Boolean = false,
     viewport: IntSize,
     userPosition: Offset,
     zoom: Float,
@@ -150,7 +151,13 @@ fun <Id, Data> rememberAtlasComposer(
     }
 
     val density = LocalDensity.current
-    val state = remember(density) { AtlasComposerState<Id, Data>(density) }
+    val state =
+        remember(density, staticIconsCircular) {
+            AtlasComposerState<Id, Data>(
+                density,
+                staticIconsCircular,
+            )
+        }
 
     if (state.nodes !== nodes) state.nodes = nodes
     if (state.tiers !== tiers) state.tiers = tiers
@@ -212,6 +219,7 @@ fun <Id, Data> rememberAtlasComposer(
 @Stable
 internal class AtlasComposerState<Id, Data>(
     private val density: Density,
+    private val staticIconsCircular: Boolean,
 ) {
     var nodes by mutableStateOf<List<GraphNode<Id, Data>>>(emptyList())
     var isMoving by mutableStateOf(false)
@@ -467,7 +475,7 @@ internal class AtlasComposerState<Id, Data>(
                 indexMap = indexes.toPersistentMap(),
                 columns = result.columns,
                 tileSizePx = result.tileSizePx,
-                isCircular = true,
+                isCircular = staticIconsCircular,
                 version = 0L,
             )
         cachedStaticAtlas = staticIcons to atlas

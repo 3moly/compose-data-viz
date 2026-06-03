@@ -25,10 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -47,6 +50,7 @@ import com.moly3.dataviz.graph.ui.TierSelection
 import com.moly3.dataviz.graph.ui.rememberAtlasComposer
 import com.moly3.dataviz.graph.ui.rememberMovementTracker
 import com.moly3.dataviz.sample.resources.Res
+import com.moly3.dataviz.sample.resources.atlas
 import com.moly3.dataviz.sample.resources.cat
 import com.threemoly.sample.base.graph.GraphState
 import com.threemoly.sample.base.graph.ObsidianGraphData
@@ -55,10 +59,12 @@ import com.threemoly.sample.base.io
 import com.threemoly.sample.base.uikit.SettingsPanel
 import com.threemoly.sample.base.uikit.icons.Scale
 import com.threemoly.sample.base.uikit.icons.Share
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
+import org.jetbrains.compose.resources.imageResource
 import org.jetbrains.compose.resources.painterResource
 import kotlin.random.Random
 
@@ -79,6 +85,46 @@ fun GraphSample(
     val scale: Painter = rememberVectorPainter(Scale)
     val share: Painter = rememberVectorPainter(Share)
     val catPainter = painterResource(Res.drawable.cat)
+    //this is 32x32, 320px x 320px
+    val atlasPainter = painterResource(Res.drawable.atlas)
+
+    // Load the packed sheet as a BITMAP (not a painter) so we can crop tiles.
+// 32x32 grid, 320x320px total => each tile is 10x10px.
+    val atlasBitmap: ImageBitmap = imageResource(Res.drawable.atlas)
+
+    val atlasCols = 10
+    val atlasRows = 10
+    val tilePx = atlasBitmap.width / atlasCols          // 320 / 32 = 10
+    val tileCount = atlasCols * atlasRows               // 1024
+
+// One BitmapPainter per tile. Key = "tile_<index>", row-major (index = row*cols + col).
+    val tilePainters: ImmutableMap<String, Painter> =
+        remember(atlasBitmap) {
+            buildMap {
+                for (row in 0 until atlasRows) {
+                    for (col in 0 until atlasCols) {
+                        val index = row * atlasCols + col
+                        put(
+                            "tile_$index",
+                            BitmapPainter(
+                                image = atlasBitmap,
+                                srcOffset = IntOffset(col * tilePx, row * tilePx),
+                                srcSize = IntSize(tilePx, tilePx),
+                            ),
+                        )
+                    }
+                }
+            }.toPersistentMap()
+        }
+
+// Deterministically assign every node a tile, cycling through all 1024 so the
+// sample exercises every tile in the sheet. Keyed by stable node id.
+    val nodeTileKeys: Map<String, String> =
+        remember(state.value.graphNodes) {
+            state.value.graphNodes
+                .mapIndexed { i, node -> node.id to "tile_${i % tileCount}" }
+                .toMap()
+        }
 
     val context = LocalPlatformContext.current
     val coilImageLoader = remember { ImageLoader(context) }
@@ -95,6 +141,12 @@ fun GraphSample(
 //            coilImageLoader.execute(req).image?.toBitmap()?.asImage()?.asPainter(context)
 //        }
     }
+//    val nodeTileKeys: Map<String, String> =
+//        remember(state.value.graphNodes) {
+//            state.value.graphNodes
+//                .mapIndexed { i, node -> node.id to "tile_${i % tileCount}" }
+//                .toMap()
+//        }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     val movement = rememberMovementTracker(idleMillis = 1000)
     LaunchedEffect(s.velocities) { if (s.velocities.isNotEmpty()) movement.trigger() }
@@ -105,16 +157,16 @@ fun GraphSample(
             nodes = state.value.graphNodes,
             tiers =
                 listOf(
-                    AtlasTier(
-                        name = "hq",
-                        tileSizePx = 256,
-                        selection = TierSelection.TopByDistance(3),
-                        isCircular = false,
-                        freezeOnMove = true, // <-- was false
-                    ),
+//                    AtlasTier(
+//                        name = "hq",
+//                        tileSizePx = 256,
+//                        selection = TierSelection.TopByDistance(3),
+//                        isCircular = false,
+//                        freezeOnMove = true, // <-- was false
+//                    ),
                     AtlasTier(
                         name = "lq",
-                        tileSizePx = 48,
+                        tileSizePx = 32,
                         selection = TierSelection.All,
                         isCircular = false,
                         freezeOnMove = false, // LQ can keep updating; it's cheap
@@ -126,16 +178,18 @@ fun GraphSample(
             coordinates = s.coordinates,
             loader = loader,
             loaderKey = state.value.graphNodes.size, // or any token that should invalidate
-            staticIcons =
-                persistentMapOf(
-                    KEY_FOLDER to scale,
-                    KEY_SHARE to share,
-                    KEY_CAT to catPainter,
-                ),
-            staticIconKey = { id, data ->
-                // return KEY_FOLDER / null / etc
-                null
-            },
+//            staticIcons =
+//                persistentMapOf(
+//                    KEY_FOLDER to scale,
+//                    KEY_SHARE to share,
+//                    KEY_CAT to catPainter,
+//                ),
+//            staticIconKey = { id, data ->
+//                // return KEY_FOLDER / null / etc
+//                null
+//            },
+            staticIcons = tilePainters,
+            staticIconKey = { id, _ -> nodeTileKeys[id] },
             isMoving = movement.isMoving,
         )
 // 1. Add a seed state to force group regeneration
